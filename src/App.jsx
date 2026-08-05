@@ -8,7 +8,7 @@ import {
   Plus, Printer, Bluetooth, BluetoothConnected, Search, X, Phone, ChevronRight, Download, Package, ShoppingCart, Clock as ClockIcon,
   Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard, Menu,
   Wrench, Fuel, FileText, ShieldAlert, AlertTriangle, Disc, TrendingUp, Gauge, CalendarClock,
-  Sparkles, AlertOctagon, UserCheck, Archive, Target, Radar, RefreshCw, Trash2,
+  Sparkles, AlertOctagon, UserCheck, Archive, Target, Radar, RefreshCw, Trash2, Mic, MicOff, Send, Bot,
 } from 'lucide-react';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -24,9 +24,7 @@ const fmtDateShort = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-di
 // kendi verisini gorur/degistirir.
 async function storageGet(key) {
   try {
-    const ownerEmail = currentUser.email || (await supabase.auth.getSession()).data.session?.user?.email;
-    if (!ownerEmail) return null;
-    const { data, error } = await supabase.from('app_data').select('value').eq('key', key).eq('owner_email', ownerEmail).maybeSingle();
+    const { data, error } = await supabase.from('app_data').select('value').eq('key', key).eq('owner_email', currentUser.email).maybeSingle();
     if (error) { console.error('Depolama okuma hatasi:', error); return null; }
     return data ? data.value : null;
   } catch (e) {
@@ -36,80 +34,11 @@ async function storageGet(key) {
 }
 async function storageSet(key, value) {
   try {
-    const ownerEmail = currentUser.email || (await supabase.auth.getSession()).data.session?.user?.email;
-    if (!ownerEmail) {
-      console.error('Depolama yazma hatasi: oturum e-postasi yok');
-      return false;
-    }
-    const { error } = await supabase.from('app_data').upsert(
-      { key, value, owner_email: ownerEmail, updated_at: new Date().toISOString() },
-      { onConflict: 'key,owner_email' },
-    );
-    if (error) {
-      console.error('Depolama yazma hatasi:', error);
-      return false;
-    }
-    return true;
+    const { error } = await supabase.from('app_data').upsert({ key, value, owner_email: currentUser.email, updated_at: new Date().toISOString() });
+    if (error) console.error('Depolama yazma hatasi:', error);
   } catch (e) {
     console.error('Depolama yazma hatasi:', e);
-    return false;
   }
-}
-
-/** Kasa hareketleri: manuel kayıtlar + cari ödemeler + giderler + satışlar + filo maliyetleri */
-function buildCashMovements({
-  cashEntries, payments, expenses, sales, buyers, farmers,
-  maintenance, fuel, fines, damages, insurance,
-}) {
-  const manual = cashEntries.map((e) => ({
-    date: e.date, createdAt: e.createdAt,
-    amount: e.type === 'giris' ? e.amount : -e.amount,
-    label: e.type === 'giris' ? 'Manuel giriş' : 'Manuel çıkış',
-    note: e.note,
-  }));
-  const pay = payments.map((p) => {
-    const f = farmers.find((x) => x.id === p.farmerId);
-    return {
-      date: p.date, createdAt: p.createdAt,
-      amount: -p.amount,
-      label: p.payType === 'avans' ? 'Avans' : 'Çiftçi ödemesi',
-      note: f ? f.name : '',
-    };
-  });
-  const exp = expenses.map((e) => ({
-    date: e.date, createdAt: e.createdAt, amount: -e.amount, label: 'Gider', note: e.category,
-  }));
-  const saleRows = sales.map((s) => {
-    const b = buyers.find((x) => x.id === s.buyerId);
-    const buyerLabel = b ? b.name : 'Alıcı';
-    return {
-      date: s.date, createdAt: s.createdAt,
-      amount: s.amount,
-      label: 'Satış tahsilatı',
-      note: s.grade ? `${buyerLabel} · ${s.grade}` : buyerLabel,
-    };
-  });
-  const maintRows = maintenance.filter((r) => r.cost > 0).map((r) => ({
-    date: r.date, createdAt: r.createdAt, amount: -r.cost, label: 'Araç bakımı', note: r.type || '',
-  }));
-  const fuelRows = fuel.filter((r) => r.totalCost > 0).map((r) => ({
-    date: r.date, createdAt: r.createdAt, amount: -r.totalCost, label: 'Yakıt', note: r.note || '',
-  }));
-  const fineRows = fines.filter((r) => r.paid && r.amount > 0).map((r) => ({
-    date: r.date, createdAt: r.createdAt, amount: -r.amount, label: 'Trafik cezası', note: r.description || '',
-  }));
-  const damageRows = damages.filter((r) => r.cost > 0).map((r) => ({
-    date: r.date, createdAt: r.createdAt, amount: -r.cost, label: 'Hasar onarımı', note: r.description || '',
-  }));
-  const insuranceRows = insurance.filter((r) => r.premium > 0).map((r) => ({
-    date: r.startDate || new Date(r.createdAt).toISOString().slice(0, 10),
-    createdAt: r.createdAt,
-    amount: -r.premium,
-    label: 'Sigorta primi',
-    note: r.company ? `${r.policyType || 'Poliçe'} · ${r.company}` : (r.policyType || ''),
-  }));
-  return [...manual, ...pay, ...exp, ...saleRows, ...maintRows, ...fuelRows, ...fineRows, ...damageRows, ...insuranceRows]
-    .sort((a, b) => a.createdAt - b.createdAt);
 }
 
 const COLORS = {
@@ -136,7 +65,7 @@ function GlobalStyle() {
       :root { --font-display: 'Fraunces', Georgia, serif; --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
       .zk-app { font-family: var(--font-body); color: ${COLORS.ink}; background: ${COLORS.paper}; min-height: 100vh; }
       .zk-shell { display: flex; min-height: 100vh; }
-      .zk-sidebar { width: 216px; background: ${COLORS.olive}; flex-shrink: 0; padding: 22px 12px; display: flex; flex-direction: column; gap: 3px; position: sticky; top: 0; height: 100vh; }
+      .zk-sidebar { width: 216px; background: ${COLORS.olive}; flex-shrink: 0; padding: 22px 12px; display: flex; flex-direction: column; gap: 3px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
       .zk-brand-row { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 2px; }
       .zk-brand { color: #F5F2E8; font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
       .zk-brand-sub { color: #A9B896; font-size: 10.5px; padding: 0 10px; margin-bottom: 24px; letter-spacing: 0.6px; text-transform: uppercase; }
@@ -752,7 +681,7 @@ function FarmersTab({ farmers, setFarmers, purchases, payments, setTab, setSelec
   );
 }
 
-function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, payments, setPayments, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles }) {
+function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles }) {
   const [farmerId, setFarmerId] = useState('');
   const [showAddFarmer, setShowAddFarmer] = useState(false);
   const [personnelId, setPersonnelId] = useState('');
@@ -767,7 +696,6 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, payments, s
   const [applyBagkur, setApplyBagkur] = useState(false);
   const [bagkurRate, setBagkurRate] = useState('1');
   const [lastSaved, setLastSaved] = useState(null);
-  const [payCashNow, setPayCashNow] = useState(true);
 
   const [items, setItems] = useState([]);
   const [lineVariety, setLineVariety] = useState(priceList[0]?.name || '');
@@ -915,21 +843,6 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, payments, s
     const next = [...purchases, record];
     setPurchases(next);
     await storageSet('zk:purchases', next);
-    if (payCashNow && netPayment > 0) {
-      const paymentRecord = {
-        id: uid(),
-        farmerId,
-        date,
-        amount: netPayment,
-        note: `Alım #${record.makbuzNo} nakit ödeme`,
-        payType: 'odeme',
-        purchaseId: record.id,
-        createdAt: Date.now(),
-      };
-      const nextPayments = [...payments, paymentRecord];
-      setPayments(nextPayments);
-      await storageSet('zk:payments', nextPayments);
-    }
     setLastSaved(record);
     setItems([]); setNote(''); setLineKg('');
   };
@@ -1085,11 +998,6 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, payments, s
             <label className="zk-label">Not (opsiyonel)</label>
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="serbest not..." />
           </div>
-
-          <label className="zk-checkbox-row" style={{ background: COLORS.paper, padding: '9px 12px', borderRadius: 8, marginBottom: 16 }}>
-            <input type="checkbox" checked={payCashNow} onChange={(e) => setPayCashNow(e.target.checked)} />
-            Net tutarı nakit ödendi (cari hesaba ve kasaya işle)
-          </label>
 
           <div style={{ background: COLORS.paper, borderRadius: 10, padding: 14, marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12.5 }}>
             <div>Ürün tutarı ({fmtKg(netKg)})</div><div style={{ textAlign: 'right', fontWeight: 600 }}>{fmtTL(amount)}</div>
@@ -1481,10 +1389,7 @@ function ExpensesTab({ expenses, setExpenses }) {
   );
 }
 
-function CashTab({
-  settings, setSettings, payments, expenses, cashEntries, setCashEntries, farmers,
-  sales, buyers, maintenance, fuel, fines, damages, insurance,
-}) {
+function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCashEntries, farmers }) {
   const [openingBalance, setOpeningBalance] = useState(settings.openingCashBalance ?? 0);
   const [entryType, setEntryType] = useState('giris');
   const [entryAmount, setEntryAmount] = useState('');
@@ -1506,9 +1411,27 @@ function CashTab({
     setEntryAmount(''); setEntryNote('');
   };
 
-  const movements = useMemo(() => buildCashMovements({
-    cashEntries, payments, expenses, sales, buyers, farmers, maintenance, fuel, fines, damages, insurance,
-  }), [cashEntries, payments, expenses, sales, buyers, farmers, maintenance, fuel, fines, damages, insurance]);
+  const movements = useMemo(() => {
+    const manual = cashEntries.map((e) => ({
+      date: e.date, createdAt: e.createdAt,
+      amount: e.type === 'giris' ? e.amount : -e.amount,
+      label: e.type === 'giris' ? 'Manuel giriş' : 'Manuel çıkış',
+      note: e.note,
+    }));
+    const pay = payments.map((p) => {
+      const f = farmers.find((x) => x.id === p.farmerId);
+      return {
+        date: p.date, createdAt: p.createdAt,
+        amount: -p.amount,
+        label: p.payType === 'avans' ? 'Avans' : 'Çiftçi ödemesi',
+        note: f ? f.name : '',
+      };
+    });
+    const exp = expenses.map((e) => ({
+      date: e.date, createdAt: e.createdAt, amount: -e.amount, label: 'Gider', note: e.category,
+    }));
+    return [...manual, ...pay, ...exp].sort((a, b) => a.createdAt - b.createdAt);
+  }, [cashEntries, payments, expenses, farmers]);
 
   const opening = settings.openingCashBalance ?? 0;
   let running = opening;
@@ -1524,7 +1447,7 @@ function CashTab({
   return (
     <div>
       <div className="zk-h1">Kasa</div>
-      <div className="zk-h1-sub">Satış tahsilatları, çiftçi ödemeleri, giderler ve filo maliyetleri otomatik yansır</div>
+      <div className="zk-h1-sub">Nakit takibi — çiftçi ödemeleri/avanslar ve giderler otomatik düşülür</div>
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
         <StatCard label="Güncel kasa bakiyesi" value={fmtTL(currentBalance)} tone={currentBalance < 0 ? COLORS.red : COLORS.olive} />
@@ -3742,6 +3665,232 @@ function PrintArea({ purchase, farmer, settings }) {
   );
 }
 
+// ---------- Sesli komut asistanı ----------
+
+function parsePurchaseCommand(text, farmers, priceList) {
+  const lower = text.toLowerCase().replace(/İ/g, 'i').replace(/I/g, 'ı');
+
+  const kgMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:kilo|kg)/);
+  const kg = kgMatch ? parseFloat(kgMatch[1].replace(',', '.')) : null;
+
+  const priceMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*lira/);
+  let price = priceMatch ? parseFloat(priceMatch[1].replace(',', '.')) : null;
+
+  let farmer = farmers.find((f) => lower.includes(f.name.toLowerCase()));
+  if (!farmer) {
+    farmer = farmers.find((f) => {
+      const first = f.name.toLowerCase().split(' ')[0];
+      return first.length > 2 && lower.includes(first);
+    });
+  }
+
+  let varietyLabel = null, matchedPrice = null;
+  for (const v of priceList) {
+    if (lower.includes(v.name.toLowerCase())) {
+      if (v.hasGrades && v.grades.length > 0) {
+        const g = v.grades.find((gr) => lower.includes(gr.name.toLowerCase()));
+        if (g) { varietyLabel = `${v.name} · ${g.name}`; matchedPrice = g.price; }
+        else { varietyLabel = `${v.name} · ${v.grades[0].name}`; matchedPrice = v.grades[0].price; }
+      } else {
+        varietyLabel = v.name; matchedPrice = v.singlePrice;
+      }
+      break;
+    }
+  }
+  if (!price && matchedPrice) price = matchedPrice;
+
+  if (!farmer) return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al".' };
+  if (!kg) return { ok: false, message: `${farmer.name} anladım ama kilo miktarını anlayamadım. "50 kilo" gibi net söyleyin.` };
+  if (!varietyLabel) return { ok: false, message: 'Zeytin türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
+  if (!price) return { ok: false, message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
+
+  return { ok: true, farmer, kg, price, varietyLabel };
+}
+
+function VoiceAssistant({ farmers, priceList, purchases, setPurchases }) {
+  const [open, setOpen] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [messages, setMessages] = useState([
+    { role: 'assistant', text: 'Merhaba! Mikrofona basıp "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al" gibi bir alım komutu söyleyebilirsiniz.' },
+  ]);
+  const [pending, setPending] = useState(null);
+  const [typedText, setTypedText] = useState('');
+  const recognitionRef = useRef(null);
+  const logEndRef = useRef(null);
+
+  const speechSupported = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  useEffect(() => {
+    if (logEndRef.current) logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, open]);
+
+  const handleCommand = (text) => {
+    if (!text.trim()) return;
+    setMessages((m) => [...m, { role: 'user', text }]);
+    const result = parsePurchaseCommand(text, farmers, priceList);
+    if (result.ok) {
+      setPending(result);
+      setMessages((m) => [...m, {
+        role: 'assistant',
+        text: `Anladığım: ${result.farmer.name} — ${result.varietyLabel} — ${fmtKg(result.kg)} — ${fmtTL(result.price)}/kg. Toplam ${fmtTL(result.kg * result.price)}. Kaydedeyim mi?`,
+      }]);
+    } else {
+      setPending(null);
+      setMessages((m) => [...m, { role: 'assistant', text: result.message }]);
+    }
+  };
+
+  const startListening = () => {
+    if (!speechSupported) {
+      setMessages((m) => [...m, { role: 'assistant', text: 'Tarayıcınız sesli komutu desteklemiyor. Masaüstü Chrome veya Edge kullanın, ya da aşağıya yazabilirsiniz.' }]);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SR();
+    recognition.lang = 'tr-TR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      handleCommand(text);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    setListening(false);
+  };
+
+  const confirmSave = async () => {
+    if (!pending) return;
+    const amount = pending.kg * pending.price;
+    const record = {
+      id: uid(),
+      makbuzNo: purchases.length + 1,
+      farmerId: pending.farmer.id,
+      date: todayStr(),
+      time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+      personnelId: null, personnelName: '',
+      vehicleId: null, vehiclePlaka: '',
+      items: [{ id: uid(), grade: pending.varietyLabel, kg: pending.kg, pricePerKg: pending.price, amount }],
+      netKg: pending.kg,
+      noDeduction: true,
+      commissionRate: 0, commissionAmount: 0,
+      borsaTescilli: false, stopajOrani: 0, stopajTutari: 0,
+      applyBagkur: false, bagkurRate: 0, bagkurTutari: 0,
+      amount, netPayment: amount,
+      note: 'Sesli komutla eklendi',
+      createdAt: Date.now(),
+    };
+    const next = [...purchases, record];
+    setPurchases(next);
+    await storageSet('zk:purchases', next);
+    setMessages((m) => [...m, { role: 'assistant', text: `Kaydedildi ✓ (Makbuz #${record.makbuzNo})` }]);
+    setPending(null);
+  };
+
+  const cancelPending = () => {
+    setPending(null);
+    setMessages((m) => [...m, { role: 'assistant', text: 'İptal edildi.' }]);
+  };
+
+  const submitTyped = () => {
+    handleCommand(typedText);
+    setTypedText('');
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          position: 'fixed', bottom: 20, right: 20, zIndex: 150,
+          width: 56, height: 56, borderRadius: '50%', border: 'none',
+          background: COLORS.olive, color: '#fff', cursor: 'pointer',
+          boxShadow: '0 4px 16px rgba(43,42,37,0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+        aria-label="Sesli asistan"
+      >
+        {open ? <X size={22} /> : <Bot size={24} />}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'fixed', bottom: 86, right: 20, zIndex: 150,
+          width: 340, maxWidth: 'calc(100vw - 40px)', maxHeight: '65vh',
+          background: '#fff', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden', border: `1px solid ${COLORS.border}`,
+        }}>
+          <div style={{ background: COLORS.olive, color: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Bot size={16} />
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Sesli Alım Asistanı</div>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: COLORS.paper }}>
+            {messages.map((m, i) => (
+              <div key={i} style={{
+                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                background: m.role === 'user' ? COLORS.oliveSoft : '#fff',
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 10, padding: '8px 11px', fontSize: 12.5, maxWidth: '88%', lineHeight: 1.4,
+              }}>
+                {m.text}
+              </div>
+            ))}
+            {pending && (
+              <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start' }}>
+                <button className="zk-btn zk-btn-primary" style={{ fontSize: 11.5, padding: '6px 10px' }} onClick={confirmSave}>Evet, kaydet</button>
+                <button className="zk-btn zk-btn-secondary" style={{ fontSize: 11.5, padding: '6px 10px' }} onClick={cancelPending}>İptal</button>
+              </div>
+            )}
+            <div ref={logEndRef} />
+          </div>
+
+          <div style={{ padding: 10, borderTop: `1px solid ${COLORS.border}`, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={listening ? stopListening : startListening}
+              style={{
+                width: 38, height: 38, borderRadius: '50%', border: 'none', flexShrink: 0,
+                background: listening ? COLORS.red : COLORS.gold, color: '#fff', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              aria-label={listening ? 'Dinlemeyi durdur' : 'Konuşmaya başla'}
+            >
+              {listening ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
+            <input
+              className="zk-input"
+              style={{ minHeight: 38, fontSize: 12.5, padding: '8px 10px' }}
+              placeholder={listening ? 'Dinliyorum...' : 'Ya da buraya yazın...'}
+              value={typedText}
+              onChange={(e) => setTypedText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitTyped(); }}
+            />
+            <button
+              onClick={submitTyped}
+              style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', flexShrink: 0, background: COLORS.olive, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              aria-label="Gönder"
+            >
+              <Send size={15} />
+            </button>
+          </div>
+          {!speechSupported && (
+            <div style={{ fontSize: 10.5, color: COLORS.inkSoft, padding: '0 12px 10px', textAlign: 'center' }}>
+              Sesli komut için masaüstü Chrome/Edge gerekir — burada yazarak da komut verebilirsiniz.
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function ZeytinDefteri() {
   const [tab, setTab] = useState('dashboard');
   const [userEmail, setUserEmail] = useState(currentUser.email || '');
@@ -3928,19 +4077,20 @@ export default function ZeytinDefteri() {
         <div className="zk-main">
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
           {tab === 'farmers' && <FarmersTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setTab={setTab} setSelectedFarmerId={setSelectedFarmerId} />}
-          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
+          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'warehouse' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
           {tab === 'fleet' && <FleetTab vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} />}
           {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
           {tab === 'ledger' && <LedgerTab farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'expenses' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} />}
-          {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} sales={sales} buyers={buyers} maintenance={maintenance} fuel={fuel} fines={fines} damages={damages} insurance={insurance} />}
+          {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
           {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} />}
           {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} />}
         </div>
       </div>
       {printTarget && <PrintArea purchase={printTarget.purchase} farmer={printTarget.farmer} settings={settings} />}
+      <VoiceAssistant farmers={farmers} priceList={priceList} purchases={purchases} setPurchases={setPurchases} />
     </div>
   );
 }
