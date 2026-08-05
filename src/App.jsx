@@ -24,7 +24,9 @@ const fmtDateShort = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-di
 // kendi verisini gorur/degistirir.
 async function storageGet(key) {
   try {
-    const { data, error } = await supabase.from('app_data').select('value').eq('key', key).eq('owner_email', currentUser.email).maybeSingle();
+    const ownerEmail = currentUser.email || (await supabase.auth.getSession()).data.session?.user?.email;
+    if (!ownerEmail) return null;
+    const { data, error } = await supabase.from('app_data').select('value').eq('key', key).eq('owner_email', ownerEmail).maybeSingle();
     if (error) { console.error('Depolama okuma hatasi:', error); return null; }
     return data ? data.value : null;
   } catch (e) {
@@ -34,11 +36,80 @@ async function storageGet(key) {
 }
 async function storageSet(key, value) {
   try {
-    const { error } = await supabase.from('app_data').upsert({ key, value, owner_email: currentUser.email, updated_at: new Date().toISOString() });
-    if (error) console.error('Depolama yazma hatasi:', error);
+    const ownerEmail = currentUser.email || (await supabase.auth.getSession()).data.session?.user?.email;
+    if (!ownerEmail) {
+      console.error('Depolama yazma hatasi: oturum e-postasi yok');
+      return false;
+    }
+    const { error } = await supabase.from('app_data').upsert(
+      { key, value, owner_email: ownerEmail, updated_at: new Date().toISOString() },
+      { onConflict: 'key,owner_email' },
+    );
+    if (error) {
+      console.error('Depolama yazma hatasi:', error);
+      return false;
+    }
+    return true;
   } catch (e) {
     console.error('Depolama yazma hatasi:', e);
+    return false;
   }
+}
+
+/** Kasa hareketleri: manuel kayıtlar + cari ödemeler + giderler + satışlar + filo maliyetleri */
+function buildCashMovements({
+  cashEntries, payments, expenses, sales, buyers, farmers,
+  maintenance, fuel, fines, damages, insurance,
+}) {
+  const manual = cashEntries.map((e) => ({
+    date: e.date, createdAt: e.createdAt,
+    amount: e.type === 'giris' ? e.amount : -e.amount,
+    label: e.type === 'giris' ? 'Manuel giriş' : 'Manuel çıkış',
+    note: e.note,
+  }));
+  const pay = payments.map((p) => {
+    const f = farmers.find((x) => x.id === p.farmerId);
+    return {
+      date: p.date, createdAt: p.createdAt,
+      amount: -p.amount,
+      label: p.payType === 'avans' ? 'Avans' : 'Çiftçi ödemesi',
+      note: f ? f.name : '',
+    };
+  });
+  const exp = expenses.map((e) => ({
+    date: e.date, createdAt: e.createdAt, amount: -e.amount, label: 'Gider', note: e.category,
+  }));
+  const saleRows = sales.map((s) => {
+    const b = buyers.find((x) => x.id === s.buyerId);
+    const buyerLabel = b ? b.name : 'Alıcı';
+    return {
+      date: s.date, createdAt: s.createdAt,
+      amount: s.amount,
+      label: 'Satış tahsilatı',
+      note: s.grade ? `${buyerLabel} · ${s.grade}` : buyerLabel,
+    };
+  });
+  const maintRows = maintenance.filter((r) => r.cost > 0).map((r) => ({
+    date: r.date, createdAt: r.createdAt, amount: -r.cost, label: 'Araç bakımı', note: r.type || '',
+  }));
+  const fuelRows = fuel.filter((r) => r.totalCost > 0).map((r) => ({
+    date: r.date, createdAt: r.createdAt, amount: -r.totalCost, label: 'Yakıt', note: r.note || '',
+  }));
+  const fineRows = fines.filter((r) => r.paid && r.amount > 0).map((r) => ({
+    date: r.date, createdAt: r.createdAt, amount: -r.amount, label: 'Trafik cezası', note: r.description || '',
+  }));
+  const damageRows = damages.filter((r) => r.cost > 0).map((r) => ({
+    date: r.date, createdAt: r.createdAt, amount: -r.cost, label: 'Hasar onarımı', note: r.description || '',
+  }));
+  const insuranceRows = insurance.filter((r) => r.premium > 0).map((r) => ({
+    date: r.startDate || new Date(r.createdAt).toISOString().slice(0, 10),
+    createdAt: r.createdAt,
+    amount: -r.premium,
+    label: 'Sigorta primi',
+    note: r.company ? `${r.policyType || 'Poliçe'} · ${r.company}` : (r.policyType || ''),
+  }));
+  return [...manual, ...pay, ...exp, ...saleRows, ...maintRows, ...fuelRows, ...fineRows, ...damageRows, ...insuranceRows]
+    .sort((a, b) => a.createdAt - b.createdAt);
 }
 
 const COLORS = {
@@ -681,7 +752,7 @@ function FarmersTab({ farmers, setFarmers, purchases, payments, setTab, setSelec
   );
 }
 
-function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles }) {
+function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, payments, setPayments, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles }) {
   const [farmerId, setFarmerId] = useState('');
   const [showAddFarmer, setShowAddFarmer] = useState(false);
   const [personnelId, setPersonnelId] = useState('');
@@ -696,6 +767,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
   const [applyBagkur, setApplyBagkur] = useState(false);
   const [bagkurRate, setBagkurRate] = useState('1');
   const [lastSaved, setLastSaved] = useState(null);
+  const [payCashNow, setPayCashNow] = useState(true);
 
   const [items, setItems] = useState([]);
   const [lineVariety, setLineVariety] = useState(priceList[0]?.name || '');
@@ -843,6 +915,21 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     const next = [...purchases, record];
     setPurchases(next);
     await storageSet('zk:purchases', next);
+    if (payCashNow && netPayment > 0) {
+      const paymentRecord = {
+        id: uid(),
+        farmerId,
+        date,
+        amount: netPayment,
+        note: `Alım #${record.makbuzNo} nakit ödeme`,
+        payType: 'odeme',
+        purchaseId: record.id,
+        createdAt: Date.now(),
+      };
+      const nextPayments = [...payments, paymentRecord];
+      setPayments(nextPayments);
+      await storageSet('zk:payments', nextPayments);
+    }
     setLastSaved(record);
     setItems([]); setNote(''); setLineKg('');
   };
@@ -998,6 +1085,11 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
             <label className="zk-label">Not (opsiyonel)</label>
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="serbest not..." />
           </div>
+
+          <label className="zk-checkbox-row" style={{ background: COLORS.paper, padding: '9px 12px', borderRadius: 8, marginBottom: 16 }}>
+            <input type="checkbox" checked={payCashNow} onChange={(e) => setPayCashNow(e.target.checked)} />
+            Net tutarı nakit ödendi (cari hesaba ve kasaya işle)
+          </label>
 
           <div style={{ background: COLORS.paper, borderRadius: 10, padding: 14, marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12.5 }}>
             <div>Ürün tutarı ({fmtKg(netKg)})</div><div style={{ textAlign: 'right', fontWeight: 600 }}>{fmtTL(amount)}</div>
@@ -1389,7 +1481,10 @@ function ExpensesTab({ expenses, setExpenses }) {
   );
 }
 
-function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCashEntries, farmers }) {
+function CashTab({
+  settings, setSettings, payments, expenses, cashEntries, setCashEntries, farmers,
+  sales, buyers, maintenance, fuel, fines, damages, insurance,
+}) {
   const [openingBalance, setOpeningBalance] = useState(settings.openingCashBalance ?? 0);
   const [entryType, setEntryType] = useState('giris');
   const [entryAmount, setEntryAmount] = useState('');
@@ -1411,27 +1506,9 @@ function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCa
     setEntryAmount(''); setEntryNote('');
   };
 
-  const movements = useMemo(() => {
-    const manual = cashEntries.map((e) => ({
-      date: e.date, createdAt: e.createdAt,
-      amount: e.type === 'giris' ? e.amount : -e.amount,
-      label: e.type === 'giris' ? 'Manuel giriş' : 'Manuel çıkış',
-      note: e.note,
-    }));
-    const pay = payments.map((p) => {
-      const f = farmers.find((x) => x.id === p.farmerId);
-      return {
-        date: p.date, createdAt: p.createdAt,
-        amount: -p.amount,
-        label: p.payType === 'avans' ? 'Avans' : 'Çiftçi ödemesi',
-        note: f ? f.name : '',
-      };
-    });
-    const exp = expenses.map((e) => ({
-      date: e.date, createdAt: e.createdAt, amount: -e.amount, label: 'Gider', note: e.category,
-    }));
-    return [...manual, ...pay, ...exp].sort((a, b) => a.createdAt - b.createdAt);
-  }, [cashEntries, payments, expenses, farmers]);
+  const movements = useMemo(() => buildCashMovements({
+    cashEntries, payments, expenses, sales, buyers, farmers, maintenance, fuel, fines, damages, insurance,
+  }), [cashEntries, payments, expenses, sales, buyers, farmers, maintenance, fuel, fines, damages, insurance]);
 
   const opening = settings.openingCashBalance ?? 0;
   let running = opening;
@@ -1447,7 +1524,7 @@ function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCa
   return (
     <div>
       <div className="zk-h1">Kasa</div>
-      <div className="zk-h1-sub">Nakit takibi — çiftçi ödemeleri/avanslar ve giderler otomatik düşülür</div>
+      <div className="zk-h1-sub">Satış tahsilatları, çiftçi ödemeleri, giderler ve filo maliyetleri otomatik yansır</div>
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
         <StatCard label="Güncel kasa bakiyesi" value={fmtTL(currentBalance)} tone={currentBalance < 0 ? COLORS.red : COLORS.olive} />
@@ -3851,14 +3928,14 @@ export default function ZeytinDefteri() {
         <div className="zk-main">
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
           {tab === 'farmers' && <FarmersTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setTab={setTab} setSelectedFarmerId={setSelectedFarmerId} />}
-          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
+          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'warehouse' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
           {tab === 'fleet' && <FleetTab vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} />}
           {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
           {tab === 'ledger' && <LedgerTab farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'expenses' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} />}
-          {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
+          {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} sales={sales} buyers={buyers} maintenance={maintenance} fuel={fuel} fines={fines} damages={damages} insurance={insurance} />}
           {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} />}
           {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} />}
         </div>
