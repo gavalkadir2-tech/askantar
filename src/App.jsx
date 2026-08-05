@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { supabase } from './supabaseClient.js';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   LayoutDashboard, Users, Scale as ScaleIcon, Wallet, FileBarChart, Warehouse, Settings as SettingsIcon,
   Plus, Printer, Bluetooth, BluetoothConnected, Search, X, Phone, ChevronRight, Download, Package, ShoppingCart, Clock as ClockIcon,
   Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard, Menu,
+  Wrench, Fuel, FileText, ShieldAlert, AlertTriangle, Disc, TrendingUp, Gauge, CalendarClock,
+  Sparkles, AlertOctagon, UserCheck, Archive, Target, Radar, RefreshCw, Trash2,
 } from 'lucide-react';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -14,19 +17,24 @@ const fmtKg = (n) => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionD
 const fmtDate = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const fmtDateShort = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
 
+// Bu proje bagimsiz calistigi icin Claude artifact ortamindaki window.storage
+// yerine Supabase (gercek Postgres veritabani) kullanir.
 async function storageGet(key) {
   try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
+    const { data, error } = await supabase.from('app_data').select('value').eq('key', key).maybeSingle();
+    if (error) { console.error('Depolama okuma hatasi:', error); return null; }
+    return data ? data.value : null;
   } catch (e) {
+    console.error('Depolama okuma hatasi:', e);
     return null;
   }
 }
 async function storageSet(key, value) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    const { error } = await supabase.from('app_data').upsert({ key, value, updated_at: new Date().toISOString() });
+    if (error) console.error('Depolama yazma hatasi:', error);
   } catch (e) {
-    console.error('Depolama hatasi:', e);
+    console.error('Depolama yazma hatasi:', e);
   }
 }
 
@@ -54,7 +62,7 @@ function GlobalStyle() {
       :root { --font-display: 'Fraunces', Georgia, serif; --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
       .zk-app { font-family: var(--font-body); color: ${COLORS.ink}; background: ${COLORS.paper}; min-height: 100vh; }
       .zk-shell { display: flex; min-height: 100vh; }
-      .zk-sidebar { width: 216px; background: ${COLORS.olive}; flex-shrink: 0; padding: 22px 12px; display: flex; flex-direction: column; gap: 3px; position: relative; }
+      .zk-sidebar { width: 216px; background: ${COLORS.olive}; flex-shrink: 0; padding: 22px 12px; display: flex; flex-direction: column; gap: 3px; position: relative; height: 100vh; position: sticky; top: 0; }
       .zk-brand-row { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 2px; }
       .zk-brand { color: #F5F2E8; font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
       .zk-brand-sub { color: #A9B896; font-size: 10.5px; padding: 0 10px; margin-bottom: 24px; letter-spacing: 0.6px; text-transform: uppercase; }
@@ -1575,9 +1583,1168 @@ function AllPurchasesTab({ farmers, purchases, personnel, onPrintReceipt, settin
   );
 }
 
-function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers }) {
+const MAINTENANCE_TYPES = ['Periyodik Bakım', 'Yağ Değişimi', 'Fren', 'Akü', 'Triger/Kayış', 'Klima', 'Diğer'];
+const DOC_TYPES = ['Ruhsat', 'Muayene', 'Egzoz Pulu', 'K Belgesi', 'SRC Belgesi', 'Diğer'];
+const TIRE_POSITIONS = ['Ön Sol', 'Ön Sağ', 'Arka Sol', 'Arka Sağ', 'Yedek'];
+const TIRE_STATUSES = ['Yeni', 'İyi', 'Orta', 'Değişmeli'];
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr) - new Date(todayStr());
+  return Math.round(diff / (1000 * 60 * 60 * 24));
+}
+
+function ExpiryBadge({ dateStr }) {
+  const d = daysUntil(dateStr);
+  if (d === null) return <span className="zk-badge" style={{ background: '#EEE', color: COLORS.inkSoft }}>Tarih yok</span>;
+  if (d < 0) return <span className="zk-badge zk-badge-red">{Math.abs(d)} gün önce doldu</span>;
+  if (d <= 30) return <span className="zk-badge zk-badge-gold">{d} gün kaldı</span>;
+  return <span className="zk-badge zk-badge-olive">{d} gün kaldı</span>;
+}
+
+function MaintenanceSection({ vehicleId, records, setRecords }) {
+  const [date, setDate] = useState(todayStr());
+  const [km, setKm] = useState('');
+  const [type, setType] = useState(MAINTENANCE_TYPES[0]);
+  const [cost, setCost] = useState('');
+  const [note, setNote] = useState('');
+
+  const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
+  const total = vehicleRecords.reduce((s, r) => s + r.cost, 0);
+
+  const save = async () => {
+    const c = parseFloat(cost);
+    if (!c || c <= 0) return;
+    const record = { id: uid(), vehicleId, date, km: parseFloat(km) || 0, type, cost: c, note, createdAt: Date.now() };
+    const next = [...records, record];
+    setRecords(next);
+    await storageSet('zk:vehicleMaintenance', next);
+    setKm(''); setCost(''); setNote('');
+  };
+
+  const remove = async (id) => {
+    const next = records.filter((r) => r.id !== id);
+    setRecords(next);
+    await storageSet('zk:vehicleMaintenance', next);
+  };
+
+  return (
+    <div>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Toplam bakım maliyeti" value={fmtTL(total)} tone={COLORS.red} />
+        <StatCard label="Bakım sayısı" value={vehicleRecords.length} />
+      </div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni bakım kaydı</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <select className="zk-select" style={{ flex: '1 1 160px' }} value={type} onChange={(e) => setType(e.target.value)}>
+            {MAINTENANCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <input className="zk-input" type="date" style={{ flex: '1 1 140px' }} value={date} onChange={(e) => setDate(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Km" style={{ flex: '1 1 110px' }} value={km} onChange={(e) => setKm(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Maliyet (TL)" style={{ flex: '1 1 130px' }} value={cost} onChange={(e) => setCost(e.target.value)} />
+          <input className="zk-input" placeholder="Not" style={{ flex: '2 1 180px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+        </div>
+      </div>
+      <div className="zk-card">
+        {vehicleRecords.length === 0 ? (
+          <div className="zk-empty">Bakım kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>Km</th><th>Tür</th><th>Maliyet</th><th>Not</th><th></th></tr></thead>
+            <tbody>
+              {vehicleRecords.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtDate(r.date)}</td>
+                  <td>{r.km ? fmtKg(r.km).replace('kg', 'km') : '—'}</td>
+                  <td><span className="zk-badge zk-badge-blue">{r.type}</span></td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(r.cost)}</td>
+                  <td style={{ color: COLORS.inkSoft }}>{r.note || '—'}</td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FuelSection({ vehicleId, records, setRecords }) {
+  const [date, setDate] = useState(todayStr());
+  const [km, setKm] = useState('');
+  const [liters, setLiters] = useState('');
+  const [pricePerLiter, setPricePerLiter] = useState('');
+  const [note, setNote] = useState('');
+
+  const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => (a.km || 0) - (b.km || 0));
+  const totalCost = vehicleRecords.reduce((s, r) => s + r.totalCost, 0);
+  const totalLiters = vehicleRecords.reduce((s, r) => s + r.liters, 0);
+
+  const efficiency = useMemo(() => {
+    const withKm = vehicleRecords.filter((r) => r.km > 0);
+    if (withKm.length < 2) return null;
+    const first = withKm[0], last = withKm[withKm.length - 1];
+    const kmDiff = last.km - first.km;
+    const litersUsed = withKm.slice(1).reduce((s, r) => s + r.liters, 0);
+    if (kmDiff <= 0 || litersUsed <= 0) return null;
+    return { kmDiff, litersUsed, per100km: (litersUsed / kmDiff) * 100 };
+  }, [vehicleRecords]);
+
+  const save = async () => {
+    const l = parseFloat(liters), p = parseFloat(pricePerLiter);
+    if (!l || l <= 0 || !p || p <= 0) return;
+    const record = { id: uid(), vehicleId, date, km: parseFloat(km) || 0, liters: l, pricePerLiter: p, totalCost: l * p, note, createdAt: Date.now() };
+    const next = [...records, record];
+    setRecords(next);
+    await storageSet('zk:vehicleFuel', next);
+    setKm(''); setLiters(''); setPricePerLiter(''); setNote('');
+  };
+
+  const remove = async (id) => {
+    const next = records.filter((r) => r.id !== id);
+    setRecords(next);
+    await storageSet('zk:vehicleFuel', next);
+  };
+
+  return (
+    <div>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Toplam yakıt maliyeti" value={fmtTL(totalCost)} tone={COLORS.red} />
+        <StatCard label="Toplam litre" value={totalLiters.toFixed(1) + ' L'} />
+        <StatCard label="Ortalama tüketim" value={efficiency ? `${efficiency.per100km.toFixed(1)} L/100km` : '—'} tone={COLORS.blue} icon={TrendingUp} />
+      </div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni yakıt kaydı</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <input className="zk-input" type="date" style={{ flex: '1 1 140px' }} value={date} onChange={(e) => setDate(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Kilometre (gösterge)" style={{ flex: '1 1 160px' }} value={km} onChange={(e) => setKm(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Litre" style={{ flex: '1 1 100px' }} value={liters} onChange={(e) => setLiters(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Litre fiyatı" style={{ flex: '1 1 110px' }} value={pricePerLiter} onChange={(e) => setPricePerLiter(e.target.value)} />
+          <input className="zk-input" placeholder="Not" style={{ flex: '2 1 160px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+        </div>
+      </div>
+      <div className="zk-card">
+        {vehicleRecords.length === 0 ? (
+          <div className="zk-empty">Yakıt kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>Km</th><th>Litre</th><th>Litre fiyatı</th><th>Tutar</th><th></th></tr></thead>
+            <tbody>
+              {[...vehicleRecords].reverse().map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtDate(r.date)}</td>
+                  <td>{r.km || '—'}</td>
+                  <td>{r.liters.toFixed(1)} L</td>
+                  <td>{fmtTL(r.pricePerLiter)}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(r.totalCost)}</td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DocumentsSection({ vehicleId, records, setRecords }) {
+  const [docType, setDocType] = useState(DOC_TYPES[0]);
+  const [issueDate, setIssueDate] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [note, setNote] = useState('');
+
+  const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => (daysUntil(a.expiryDate) ?? 9999) - (daysUntil(b.expiryDate) ?? 9999));
+
+  const save = async () => {
+    if (!expiryDate) return;
+    const record = { id: uid(), vehicleId, docType, issueDate, expiryDate, note, createdAt: Date.now() };
+    const next = [...records, record];
+    setRecords(next);
+    await storageSet('zk:vehicleDocuments', next);
+    setIssueDate(''); setExpiryDate(''); setNote('');
+  };
+
+  const remove = async (id) => {
+    const next = records.filter((r) => r.id !== id);
+    setRecords(next);
+    await storageSet('zk:vehicleDocuments', next);
+  };
+
+  return (
+    <div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni evrak kaydı</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <select className="zk-select" style={{ flex: '1 1 150px' }} value={docType} onChange={(e) => setDocType(e.target.value)}>
+            {DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <div style={{ flex: '1 1 140px' }}>
+            <label className="zk-label">Düzenleme tarihi</label>
+            <input className="zk-input" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+          </div>
+          <div style={{ flex: '1 1 140px' }}>
+            <label className="zk-label">Geçerlilik bitiş</label>
+            <input className="zk-input" type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+          </div>
+          <div style={{ flex: '2 1 160px' }}>
+            <label className="zk-label">Not</label>
+            <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+          <button className="zk-btn zk-btn-gold" style={{ alignSelf: 'flex-end' }} onClick={save}><Plus size={14} /> Ekle</button>
+        </div>
+      </div>
+      <div className="zk-card">
+        {vehicleRecords.length === 0 ? (
+          <div className="zk-empty">Evrak kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Belge</th><th>Düzenleme</th><th>Bitiş</th><th>Durum</th><th>Not</th><th></th></tr></thead>
+            <tbody>
+              {vehicleRecords.map((r) => (
+                <tr key={r.id}>
+                  <td><span className="zk-badge zk-badge-blue">{r.docType}</span></td>
+                  <td>{r.issueDate ? fmtDate(r.issueDate) : '—'}</td>
+                  <td>{fmtDate(r.expiryDate)}</td>
+                  <td><ExpiryBadge dateStr={r.expiryDate} /></td>
+                  <td style={{ color: COLORS.inkSoft }}>{r.note || '—'}</td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, setDamages }) {
+  const [policyType, setPolicyType] = useState('Trafik');
+  const [company, setCompany] = useState('');
+  const [policyNo, setPolicyNo] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [premium, setPremium] = useState('');
+
+  const [damageDate, setDamageDate] = useState(todayStr());
+  const [damageDesc, setDamageDesc] = useState('');
+  const [damageCost, setDamageCost] = useState('');
+  const [damageStatus, setDamageStatus] = useState('Bekliyor');
+
+  const vehiclePolicies = insurance.filter((r) => r.vehicleId === vehicleId).sort((a, b) => (daysUntil(a.endDate) ?? 9999) - (daysUntil(b.endDate) ?? 9999));
+  const vehicleDamages = damages.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
+  const totalDamageCost = vehicleDamages.reduce((s, r) => s + r.cost, 0);
+
+  const savePolicy = async () => {
+    if (!company.trim() || !endDate) return;
+    const record = { id: uid(), vehicleId, policyType, company: company.trim(), policyNo, startDate, endDate, premium: parseFloat(premium) || 0, createdAt: Date.now() };
+    const next = [...insurance, record];
+    setInsurance(next);
+    await storageSet('zk:vehicleInsurance', next);
+    setCompany(''); setPolicyNo(''); setStartDate(''); setEndDate(''); setPremium('');
+  };
+
+  const removePolicy = async (id) => {
+    const next = insurance.filter((r) => r.id !== id);
+    setInsurance(next);
+    await storageSet('zk:vehicleInsurance', next);
+  };
+
+  const saveDamage = async () => {
+    const c = parseFloat(damageCost);
+    if (!damageDesc.trim()) return;
+    const record = { id: uid(), vehicleId, date: damageDate, description: damageDesc.trim(), cost: c || 0, status: damageStatus, createdAt: Date.now() };
+    const next = [...damages, record];
+    setDamages(next);
+    await storageSet('zk:vehicleDamage', next);
+    setDamageDesc(''); setDamageCost('');
+  };
+
+  const removeDamage = async (id) => {
+    const next = damages.filter((r) => r.id !== id);
+    setDamages(next);
+    await storageSet('zk:vehicleDamage', next);
+  };
+
+  return (
+    <div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni poliçe ekle</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+          <select className="zk-select" style={{ flex: '1 1 110px' }} value={policyType} onChange={(e) => setPolicyType(e.target.value)}>
+            <option value="Trafik">Trafik</option>
+            <option value="Kasko">Kasko</option>
+          </select>
+          <input className="zk-input" placeholder="Sigorta şirketi" style={{ flex: '1 1 150px' }} value={company} onChange={(e) => setCompany(e.target.value)} />
+          <input className="zk-input" placeholder="Poliçe no" style={{ flex: '1 1 120px' }} value={policyNo} onChange={(e) => setPolicyNo(e.target.value)} />
+          <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Prim (TL)" style={{ flex: '1 1 110px' }} value={premium} onChange={(e) => setPremium(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={savePolicy}><Plus size={14} /> Ekle</button>
+        </div>
+        {vehiclePolicies.length === 0 ? (
+          <div className="zk-empty">Poliçe kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tür</th><th>Şirket</th><th>Bitiş</th><th>Durum</th><th>Prim</th><th></th></tr></thead>
+            <tbody>
+              {vehiclePolicies.map((r) => (
+                <tr key={r.id}>
+                  <td><span className="zk-badge zk-badge-blue">{r.policyType}</span></td>
+                  <td>{r.company}</td>
+                  <td>{fmtDate(r.endDate)}</td>
+                  <td><ExpiryBadge dateStr={r.endDate} /></td>
+                  <td>{fmtTL(r.premium)}</td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removePolicy(r.id)}><X size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Toplam hasar maliyeti" value={fmtTL(totalDamageCost)} tone={COLORS.red} />
+        <StatCard label="Hasar sayısı" value={vehicleDamages.length} />
+      </div>
+
+      <div className="zk-card">
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni hasar kaydı</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+          <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={damageDate} onChange={(e) => setDamageDate(e.target.value)} />
+          <input className="zk-input" placeholder="Açıklama" style={{ flex: '2 1 200px' }} value={damageDesc} onChange={(e) => setDamageDesc(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Onarım maliyeti" style={{ flex: '1 1 130px' }} value={damageCost} onChange={(e) => setDamageCost(e.target.value)} />
+          <select className="zk-select" style={{ flex: '1 1 120px' }} value={damageStatus} onChange={(e) => setDamageStatus(e.target.value)}>
+            <option value="Bekliyor">Bekliyor</option>
+            <option value="Onarımda">Onarımda</option>
+            <option value="Onarıldı">Onarıldı</option>
+          </select>
+          <button className="zk-btn zk-btn-gold" onClick={saveDamage}><Plus size={14} /> Ekle</button>
+        </div>
+        {vehicleDamages.length === 0 ? (
+          <div className="zk-empty">Hasar kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>Açıklama</th><th>Maliyet</th><th>Durum</th><th></th></tr></thead>
+            <tbody>
+              {vehicleDamages.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtDate(r.date)}</td>
+                  <td>{r.description}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(r.cost)}</td>
+                  <td>
+                    <span className={`zk-badge ${r.status === 'Onarıldı' ? 'zk-badge-olive' : r.status === 'Onarımda' ? 'zk-badge-gold' : 'zk-badge-red'}`}>{r.status}</span>
+                  </td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removeDamage(r.id)}><X size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FinesSection({ vehicleId, records, setRecords }) {
+  const [date, setDate] = useState(todayStr());
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [dueDate, setDueDate] = useState('');
+
+  const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
+  const totalAmount = vehicleRecords.reduce((s, r) => s + r.amount, 0);
+  const unpaidAmount = vehicleRecords.filter((r) => !r.paid).reduce((s, r) => s + r.amount, 0);
+
+  const save = async () => {
+    const a = parseFloat(amount);
+    if (!description.trim() || !a || a <= 0) return;
+    const record = { id: uid(), vehicleId, date, description: description.trim(), amount: a, dueDate, paid: false, createdAt: Date.now() };
+    const next = [...records, record];
+    setRecords(next);
+    await storageSet('zk:vehicleFines', next);
+    setDescription(''); setAmount(''); setDueDate('');
+  };
+
+  const togglePaid = async (id) => {
+    const next = records.map((r) => (r.id === id ? { ...r, paid: !r.paid } : r));
+    setRecords(next);
+    await storageSet('zk:vehicleFines', next);
+  };
+
+  const remove = async (id) => {
+    const next = records.filter((r) => r.id !== id);
+    setRecords(next);
+    await storageSet('zk:vehicleFines', next);
+  };
+
+  return (
+    <div>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Toplam ceza" value={fmtTL(totalAmount)} tone={COLORS.red} />
+        <StatCard label="Ödenmemiş" value={fmtTL(unpaidAmount)} tone={unpaidAmount > 0 ? COLORS.red : COLORS.olive} />
+      </div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni ceza kaydı</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
+          <input className="zk-input" placeholder="Açıklama (örn. hız ihlali)" style={{ flex: '2 1 200px' }} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 110px' }} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="zk-input" type="date" placeholder="Son ödeme" style={{ flex: '1 1 130px' }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+        </div>
+      </div>
+      <div className="zk-card">
+        {vehicleRecords.length === 0 ? (
+          <div className="zk-empty">Ceza kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>Açıklama</th><th>Tutar</th><th>Son ödeme</th><th>Durum</th><th></th></tr></thead>
+            <tbody>
+              {vehicleRecords.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtDate(r.date)}</td>
+                  <td>{r.description}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(r.amount)}</td>
+                  <td>{r.dueDate ? fmtDate(r.dueDate) : '—'}</td>
+                  <td>
+                    <button className={`zk-badge ${r.paid ? 'zk-badge-olive' : 'zk-badge-red'}`} style={{ border: 'none', cursor: 'pointer' }} onClick={() => togglePaid(r.id)}>
+                      {r.paid ? 'Ödendi' : 'Ödenmedi'}
+                    </button>
+                  </td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TiresSection({ vehicleId, records, setRecords }) {
+  const [position, setPosition] = useState(TIRE_POSITIONS[0]);
+  const [brand, setBrand] = useState('');
+  const [installDate, setInstallDate] = useState(todayStr());
+  const [installKm, setInstallKm] = useState('');
+  const [status, setStatus] = useState('Yeni');
+  const [note, setNote] = useState('');
+
+  const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
+
+  const save = async () => {
+    if (!brand.trim()) return;
+    const record = { id: uid(), vehicleId, position, brand: brand.trim(), installDate, installKm: parseFloat(installKm) || 0, status, note, createdAt: Date.now() };
+    const next = [...records, record];
+    setRecords(next);
+    await storageSet('zk:vehicleTires', next);
+    setBrand(''); setInstallKm(''); setNote('');
+  };
+
+  const remove = async (id) => {
+    const next = records.filter((r) => r.id !== id);
+    setRecords(next);
+    await storageSet('zk:vehicleTires', next);
+  };
+
+  return (
+    <div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni lastik kaydı</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <select className="zk-select" style={{ flex: '1 1 110px' }} value={position} onChange={(e) => setPosition(e.target.value)}>
+            {TIRE_POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <input className="zk-input" placeholder="Marka" style={{ flex: '1 1 130px' }} value={brand} onChange={(e) => setBrand(e.target.value)} />
+          <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={installDate} onChange={(e) => setInstallDate(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Takılan km" style={{ flex: '1 1 110px' }} value={installKm} onChange={(e) => setInstallKm(e.target.value)} />
+          <select className="zk-select" style={{ flex: '1 1 100px' }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            {TIRE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <input className="zk-input" placeholder="Not" style={{ flex: '1 1 120px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+        </div>
+      </div>
+      <div className="zk-card">
+        {vehicleRecords.length === 0 ? (
+          <div className="zk-empty">Lastik kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Konum</th><th>Marka</th><th>Takılma</th><th>Km</th><th>Durum</th><th>Not</th><th></th></tr></thead>
+            <tbody>
+              {vehicleRecords.map((r) => (
+                <tr key={r.id}>
+                  <td><span className="zk-badge zk-badge-blue">{r.position}</span></td>
+                  <td>{r.brand}</td>
+                  <td>{fmtDate(r.installDate)}</td>
+                  <td>{r.installKm || '—'}</td>
+                  <td>
+                    <span className={`zk-badge ${r.status === 'Değişmeli' ? 'zk-badge-red' : r.status === 'Orta' ? 'zk-badge-gold' : 'zk-badge-olive'}`}>{r.status}</span>
+                  </td>
+                  <td style={{ color: COLORS.inkSoft }}>{r.note || '—'}</td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CostAnalysisSection({ vehicleId, maintenance, fuel, fines, insurance, damages, vehiclePickups, vehicleDeliveries }) {
+  const maintCost = maintenance.filter((r) => r.vehicleId === vehicleId).reduce((s, r) => s + r.cost, 0);
+  const fuelCost = fuel.filter((r) => r.vehicleId === vehicleId).reduce((s, r) => s + r.totalCost, 0);
+  const fineCost = fines.filter((r) => r.vehicleId === vehicleId).reduce((s, r) => s + r.amount, 0);
+  const insuranceCost = insurance.filter((r) => r.vehicleId === vehicleId).reduce((s, r) => s + r.premium, 0);
+  const damageCost = damages.filter((r) => r.vehicleId === vehicleId).reduce((s, r) => s + r.cost, 0);
+  const totalCost = maintCost + fuelCost + fineCost + insuranceCost + damageCost;
+
+  const fuelRecords = fuel.filter((r) => r.vehicleId === vehicleId && r.km > 0).sort((a, b) => a.km - b.km);
+  const totalKm = fuelRecords.length >= 2 ? fuelRecords[fuelRecords.length - 1].km - fuelRecords[0].km : 0;
+  const costPerKm = totalKm > 0 ? totalCost / totalKm : null;
+
+  const totalPickupKg = vehiclePickups.reduce((s, p) => s + p.netKg, 0);
+
+  const chartData = [
+    { name: 'Yakıt', tutar: fuelCost },
+    { name: 'Bakım', tutar: maintCost },
+    { name: 'Ceza', tutar: fineCost },
+    { name: 'Sigorta', tutar: insuranceCost },
+    { name: 'Hasar', tutar: damageCost },
+  ].filter((d) => d.tutar > 0);
+
+  return (
+    <div>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Toplam maliyet" value={fmtTL(totalCost)} tone={COLORS.red} />
+        <StatCard label="Km başına maliyet" value={costPerKm ? fmtTL(costPerKm) : '—'} tone={COLORS.blue} icon={Gauge} />
+        <StatCard label="Taşınan zeytin" value={fmtKg(totalPickupKg)} tone={COLORS.olive} />
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Maliyet dağılımı</div>
+        {chartData.length === 0 ? (
+          <div className="zk-empty">Henüz maliyet kaydı yok.</div>
+        ) : (
+          <div style={{ width: '100%', height: 200 }}>
+            <ResponsiveContainer>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#EFEBDD" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: COLORS.inkSoft }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: COLORS.inkSoft }} width={60} />
+                <Tooltip formatter={(v) => [fmtTL(v), 'Tutar']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Bar dataKey="tutar" fill={COLORS.red} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="zk-card">
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Kalem bazında özet</div>
+        <table className="zk-table">
+          <thead><tr><th>Kalem</th><th>Tutar</th></tr></thead>
+          <tbody>
+            <tr><td>Yakıt</td><td style={{ fontWeight: 600 }}>{fmtTL(fuelCost)}</td></tr>
+            <tr><td>Bakım</td><td style={{ fontWeight: 600 }}>{fmtTL(maintCost)}</td></tr>
+            <tr><td>Trafik cezaları</td><td style={{ fontWeight: 600 }}>{fmtTL(fineCost)}</td></tr>
+            <tr><td>Sigorta primleri</td><td style={{ fontWeight: 600 }}>{fmtTL(insuranceCost)}</td></tr>
+            <tr><td>Hasar onarımı</td><td style={{ fontWeight: 600 }}>{fmtTL(damageCost)}</td></tr>
+            <tr style={{ borderTop: `2px solid ${COLORS.border}` }}><td style={{ fontWeight: 700 }}>Toplam</td><td style={{ fontWeight: 700, color: COLORS.red }}>{fmtTL(totalCost)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ---------- AI Asistan: kural/istatistik tabanlı analiz motoru (ücretsiz, API gerektirmez) ----------
+
+function mean(arr) { return arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0; }
+function stdDev(arr) {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return Math.sqrt(mean(arr.map((x) => (x - m) ** 2)));
+}
+function linearTrend(points) {
+  // points: [{x, y}] -> en küçük kareler ile eğim/kesişim
+  const n = points.length;
+  if (n < 2) return null;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumXX = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+function monthKey(dateStr) { return dateStr.slice(0, 7); }
+function lastNMonthKeys(n) {
+  const keys = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return keys;
+}
+
+function AiSectionShell({ title, subtitle, icon: Icon, children }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        {Icon && <Icon size={18} color={COLORS.gold} />}
+        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-display)' }}>{title}</div>
+      </div>
+      {subtitle && <div style={{ fontSize: 12, color: COLORS.inkSoft, marginBottom: 16 }}>{subtitle}</div>}
+      {children}
+    </div>
+  );
+}
+
+function ExecutiveSummarySection({ farmers, purchases, sales, expenses, payments, vehicles, documents, insurance }) {
+  const now = new Date();
+  const thisMonthPurchases = purchases.filter((p) => monthKey(p.date) === monthKey(todayStr()));
+  const thisMonthSales = sales.filter((s) => monthKey(s.date) === monthKey(todayStr()));
+  const thisMonthExpenses = expenses.filter((e) => monthKey(e.date) === monthKey(todayStr()));
+
+  const totalKg = thisMonthPurchases.reduce((s, p) => s + p.netKg, 0);
+  const totalPaid = thisMonthPurchases.reduce((s, p) => s + p.netPayment, 0);
+  const totalCommission = thisMonthPurchases.reduce((s, p) => s + p.commissionAmount, 0);
+  const totalSalesAmount = thisMonthSales.reduce((s, s2) => s + s2.amount, 0);
+  const totalExpenseAmount = thisMonthExpenses.reduce((s, e) => s + e.amount, 0);
+  const estProfit = totalCommission + totalSalesAmount - totalExpenseAmount;
+
+  const farmerVolume = {};
+  thisMonthPurchases.forEach((p) => { farmerVolume[p.farmerId] = (farmerVolume[p.farmerId] || 0) + p.netKg; });
+  const topFarmerId = Object.entries(farmerVolume).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const topFarmer = farmers.find((f) => f.id === topFarmerId);
+
+  const balances = {};
+  farmers.forEach((f) => { balances[f.id] = 0; });
+  purchases.forEach((p) => { balances[p.farmerId] = (balances[p.farmerId] || 0) + p.netPayment; });
+  payments.forEach((pay) => { balances[pay.farmerId] = (balances[pay.farmerId] || 0) - pay.amount; });
+  const totalOutstanding = Object.values(balances).reduce((s, v) => s + Math.max(v, 0), 0);
+
+  const expiringDocs = documents.filter((d) => { const days = daysUntil(d.expiryDate); return days !== null && days <= 30; }).length
+    + insurance.filter((i) => { const days = daysUntil(i.endDate); return days !== null && days <= 30; }).length;
+
+  const [savedNote, setSavedNote] = useState('');
+
+  const saveToArchive = async () => {
+    const existing = (await storageGet('zk:aiReports')) || [];
+    const report = {
+      id: uid(),
+      type: 'Yönetici Özeti',
+      createdAt: Date.now(),
+      date: todayStr(),
+      summary: {
+        totalKg, totalPaid, totalCommission, totalSalesAmount, totalExpenseAmount, estProfit,
+        topFarmer: topFarmer?.name || null, totalOutstanding, expiringDocs, vehicleCount: vehicles.length,
+      },
+    };
+    const next = [report, ...existing].slice(0, 200);
+    await storageSet('zk:aiReports', next);
+    setSavedNote('Özet arşive kaydedildi.');
+    setTimeout(() => setSavedNote(''), 2500);
+  };
+
+  return (
+    <AiSectionShell title="Yönetici Özeti" subtitle="Bu ayın verilerinden otomatik oluşturulan özet" icon={Sparkles}>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Bu ay alınan" value={fmtKg(totalKg)} />
+        <StatCard label="Çiftçilere ödenen" value={fmtTL(totalPaid)} tone={COLORS.olive} />
+        <StatCard label="Tahmini kâr" value={fmtTL(estProfit)} tone={estProfit >= 0 ? COLORS.olive : COLORS.red} />
+        <StatCard label="Açık bakiye toplamı" value={fmtTL(totalOutstanding)} tone={totalOutstanding > 0 ? COLORS.red : COLORS.olive} />
+      </div>
+      <div className="zk-card" style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 14, lineHeight: 1.8, color: COLORS.ink }}>
+          Bu ay <strong>{fmtKg(totalKg)}</strong> zeytin alındı, çiftçilere toplam <strong>{fmtTL(totalPaid)}</strong> ödendi
+          {topFarmer && <> — en çok çalışılan çiftçi <strong>{topFarmer.name}</strong> oldu</>}.
+          Satışlardan <strong>{fmtTL(totalSalesAmount)}</strong> gelir elde edildi, giderler <strong>{fmtTL(totalExpenseAmount)}</strong> olarak gerçekleşti.
+          Tahmini net kâr <strong style={{ color: estProfit >= 0 ? COLORS.olive : COLORS.red }}>{fmtTL(estProfit)}</strong>.{' '}
+          {totalOutstanding > 0 && <>Çiftçilere ödenmemiş <strong style={{ color: COLORS.red }}>{fmtTL(totalOutstanding)}</strong> bakiye bulunuyor.{' '}</>}
+          {expiringDocs > 0 && <>Filoda <strong style={{ color: COLORS.gold }}>{expiringDocs}</strong> belge/poliçe 30 gün içinde sona eriyor, kontrol edin.</>}
+          {expiringDocs === 0 && vehicles.length > 0 && <>Filodaki tüm evrak ve poliçeler güncel görünüyor.</>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button className="zk-btn zk-btn-gold" onClick={saveToArchive}><Archive size={13} /> Arşive kaydet</button>
+        {savedNote && <span style={{ fontSize: 12, color: COLORS.olive }}>{savedNote}</span>}
+      </div>
+    </AiSectionShell>
+  );
+}
+
+function AnomalySection({ purchases, farmers }) {
+  const anomalies = useMemo(() => {
+    const byGrade = {};
+    purchases.forEach((p) => {
+      (p.items || []).forEach((it) => {
+        if (!byGrade[it.grade]) byGrade[it.grade] = [];
+        byGrade[it.grade].push({ price: it.pricePerKg, purchaseId: p.id, date: p.date, farmerId: p.farmerId, kg: it.kg, grade: it.grade });
+      });
+    });
+    const results = [];
+    Object.values(byGrade).forEach((items) => {
+      if (items.length < 3) return;
+      const prices = items.map((i) => i.price);
+      const m = mean(prices), sd = stdDev(prices);
+      if (sd === 0) return;
+      items.forEach((it) => {
+        const z = (it.price - m) / sd;
+        if (Math.abs(z) >= 2) results.push({ ...it, avg: m, z });
+      });
+    });
+    return results.sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+  }, [purchases]);
+
+  return (
+    <AiSectionShell title="Anomali Tespiti" subtitle="Sınıf ortalamasından belirgin sapan fiyatlar (istatistiksel aykırı değer analizi)" icon={AlertOctagon}>
+      <div className="zk-card">
+        {anomalies.length === 0 ? (
+          <div className="zk-empty"><AlertOctagon size={26} className="zk-empty-icon" /><br/>Belirgin bir anomali tespit edilmedi.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>Çiftçi</th><th>Sınıf</th><th>Fiyat</th><th>Sınıf ortalaması</th><th>Sapma</th></tr></thead>
+            <tbody>
+              {anomalies.slice(0, 30).map((a, i) => {
+                const f = farmers.find((x) => x.id === a.farmerId);
+                return (
+                  <tr key={i}>
+                    <td>{fmtDate(a.date)}</td>
+                    <td>{f ? f.name : '—'}</td>
+                    <td><span className="zk-badge zk-badge-blue">{a.grade}</span></td>
+                    <td style={{ fontWeight: 600 }}>{fmtTL(a.price)}/kg</td>
+                    <td style={{ color: COLORS.inkSoft }}>{fmtTL(a.avg)}/kg</td>
+                    <td><span className={`zk-badge ${a.z > 0 ? 'zk-badge-gold' : 'zk-badge-red'}`}>{a.z > 0 ? '+' : ''}{a.z.toFixed(1)}σ</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </AiSectionShell>
+  );
+}
+
+function CariRiskSection({ farmers, purchases, payments }) {
+  const riskList = useMemo(() => {
+    return farmers.map((f) => {
+      const farmerPurchases = purchases.filter((p) => p.farmerId === f.id);
+      const farmerPayments = payments.filter((p) => p.farmerId === f.id);
+      const balance = farmerPurchases.reduce((s, p) => s + p.netPayment, 0) - farmerPayments.reduce((s, p) => s + p.amount, 0);
+      const lastActivity = [...farmerPurchases, ...farmerPayments].sort((a, b) => b.createdAt - a.createdAt)[0];
+      const daysSince = lastActivity ? Math.round((Date.now() - lastActivity.createdAt) / (1000 * 60 * 60 * 24)) : null;
+      let risk = 'Düşük';
+      if (balance > 0 && daysSince !== null && daysSince > 45) risk = 'Yüksek';
+      else if (balance > 0 && daysSince !== null && daysSince > 20) risk = 'Orta';
+      else if (balance <= 0) risk = 'Yok';
+      return { farmer: f, balance, daysSince, risk };
+    }).filter((r) => r.balance > 0).sort((a, b) => b.balance - a.balance);
+  }, [farmers, purchases, payments]);
+
+  const badgeClass = { 'Yüksek': 'zk-badge-red', 'Orta': 'zk-badge-gold', 'Düşük': 'zk-badge-olive', 'Yok': 'zk-badge-olive' };
+
+  return (
+    <AiSectionShell title="Cari Risk Analizi" subtitle="Ödenmemiş bakiyesi olan çiftçiler, son hareketten geçen süreye göre risk seviyesi" icon={ShieldAlert}>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Açık bakiyesi olan çiftçi" value={riskList.length} />
+        <StatCard label="Yüksek risk" value={riskList.filter((r) => r.risk === 'Yüksek').length} tone={COLORS.red} />
+        <StatCard label="Toplam açık bakiye" value={fmtTL(riskList.reduce((s, r) => s + r.balance, 0))} tone={COLORS.red} />
+      </div>
+      <div className="zk-card">
+        {riskList.length === 0 ? (
+          <div className="zk-empty">Açık bakiyesi olan çiftçi yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Çiftçi</th><th>Bakiye</th><th>Son hareket</th><th>Risk</th></tr></thead>
+            <tbody>
+              {riskList.map((r) => (
+                <tr key={r.farmer.id}>
+                  <td>{r.farmer.name}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(r.balance)}</td>
+                  <td style={{ color: COLORS.inkSoft }}>{r.daysSince !== null ? `${r.daysSince} gün önce` : '—'}</td>
+                  <td><span className={`zk-badge ${badgeClass[r.risk]}`}>{r.risk}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </AiSectionShell>
+  );
+}
+
+function MaintenancePredictionSection({ vehicles, maintenance, fuel }) {
+  const predictions = useMemo(() => {
+    return vehicles.map((v) => {
+      const records = maintenance.filter((m) => m.vehicleId === v.id && m.km > 0).sort((a, b) => a.km - b.km);
+      const fuelRecords = fuel.filter((f) => f.vehicleId === v.id && f.km > 0).sort((a, b) => b.km - a.km);
+      const currentKm = fuelRecords[0]?.km || records[records.length - 1]?.km || 0;
+      if (records.length < 2) return { vehicle: v, status: 'insufficient', currentKm };
+      const intervals = [];
+      for (let i = 1; i < records.length; i++) intervals.push(records[i].km - records[i - 1].km);
+      const avgInterval = mean(intervals);
+      const lastKm = records[records.length - 1].km;
+      const remaining = avgInterval - (currentKm - lastKm);
+      return { vehicle: v, status: 'ok', currentKm, avgInterval, lastKm, remaining };
+    });
+  }, [vehicles, maintenance, fuel]);
+
+  return (
+    <AiSectionShell title="Arıza / Bakım Tahmini" subtitle="Geçmiş bakım aralıklarına göre bir sonraki bakımın ne zaman gerekeceği tahmini" icon={Wrench}>
+      {vehicles.length === 0 ? (
+        <div className="zk-empty">Henüz araç eklenmedi.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {predictions.map((p) => (
+            <div key={p.vehicle.id} className="zk-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{p.vehicle.plaka}</div>
+                  <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{p.vehicle.marka || ''}</div>
+                </div>
+                {p.status === 'insufficient' ? (
+                  <span className="zk-badge" style={{ background: '#EEE', color: COLORS.inkSoft }}>Tahmin için yetersiz veri (en az 2 bakım kaydı gerekli)</span>
+                ) : p.remaining < 0 ? (
+                  <span className="zk-badge zk-badge-red">Bakım süresi geçmiş olabilir (~{Math.abs(Math.round(p.remaining))} km aşıldı)</span>
+                ) : p.remaining < 500 ? (
+                  <span className="zk-badge zk-badge-gold">Yaklaşıyor — tahmini {Math.round(p.remaining)} km kaldı</span>
+                ) : (
+                  <span className="zk-badge zk-badge-olive">Normal — tahmini {Math.round(p.remaining)} km kaldı</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </AiSectionShell>
+  );
+}
+
+function BusinessCostSection({ expenses, vehicles, maintenance, fuel, fines, insurance, damages }) {
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalMaint = maintenance.reduce((s, r) => s + r.cost, 0);
+  const totalFuel = fuel.reduce((s, r) => s + r.totalCost, 0);
+  const totalFines = fines.reduce((s, r) => s + r.amount, 0);
+  const totalInsurance = insurance.reduce((s, r) => s + r.premium, 0);
+  const totalDamage = damages.reduce((s, r) => s + r.cost, 0);
+  const grandTotal = totalExpenses + totalMaint + totalFuel + totalFines + totalInsurance + totalDamage;
+
+  const chartData = [
+    { name: 'İşletme gideri', tutar: totalExpenses },
+    { name: 'Yakıt', tutar: totalFuel },
+    { name: 'Bakım', tutar: totalMaint },
+    { name: 'Sigorta', tutar: totalInsurance },
+    { name: 'Ceza', tutar: totalFines },
+    { name: 'Hasar', tutar: totalDamage },
+  ].filter((d) => d.tutar > 0);
+
+  return (
+    <AiSectionShell title="Maliyet Analizi" subtitle="İşletme giderleri ve tüm filo maliyetlerinin birleşik görünümü" icon={Banknote}>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Toplam işletme maliyeti" value={fmtTL(grandTotal)} tone={COLORS.red} />
+        <StatCard label="Araç maliyetleri" value={fmtTL(totalMaint + totalFuel + totalFines + totalInsurance + totalDamage)} />
+        <StatCard label="Genel giderler" value={fmtTL(totalExpenses)} />
+      </div>
+      <div className="zk-card">
+        {chartData.length === 0 ? (
+          <div className="zk-empty">Henüz maliyet kaydı yok.</div>
+        ) : (
+          <div style={{ width: '100%', height: 220 }}>
+            <ResponsiveContainer>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#EFEBDD" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: COLORS.inkSoft }} />
+                <YAxis tick={{ fontSize: 10, fill: COLORS.inkSoft }} width={50} />
+                <Tooltip formatter={(v) => [fmtTL(v), 'Tutar']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Bar dataKey="tutar" fill={COLORS.red} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    </AiSectionShell>
+  );
+}
+
+function PriceOptimizationSection({ purchases, sales }) {
+  const gradeMargins = useMemo(() => {
+    const purchasePrices = {};
+    purchases.forEach((p) => {
+      (p.items || []).forEach((it) => {
+        if (!purchasePrices[it.grade]) purchasePrices[it.grade] = [];
+        purchasePrices[it.grade].push(it.pricePerKg);
+      });
+    });
+    const salePrices = {};
+    sales.forEach((s) => {
+      if (!salePrices[s.grade]) salePrices[s.grade] = [];
+      salePrices[s.grade].push(s.pricePerKg);
+    });
+    const grades = new Set([...Object.keys(purchasePrices), ...Object.keys(salePrices)]);
+    return Array.from(grades).map((g) => {
+      const avgBuy = purchasePrices[g] ? mean(purchasePrices[g]) : null;
+      const avgSell = salePrices[g] ? mean(salePrices[g]) : null;
+      const margin = (avgBuy !== null && avgSell !== null) ? avgSell - avgBuy : null;
+      const marginPct = (margin !== null && avgBuy > 0) ? (margin / avgBuy) * 100 : null;
+      return { grade: g, avgBuy, avgSell, margin, marginPct };
+    }).sort((a, b) => (b.marginPct ?? -999) - (a.marginPct ?? -999));
+  }, [purchases, sales]);
+
+  return (
+    <AiSectionShell title="Fiyat Optimizasyonu" subtitle="Sınıf bazında alım ve satış fiyatlarının karşılaştırması — hangi sınıf daha kârlı" icon={Target}>
+      <div className="zk-card">
+        {gradeMargins.length === 0 ? (
+          <div className="zk-empty">Henüz karşılaştırılacak veri yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Sınıf</th><th>Ort. alım fiyatı</th><th>Ort. satış fiyatı</th><th>Marj</th><th>Marj %</th></tr></thead>
+            <tbody>
+              {gradeMargins.map((g) => (
+                <tr key={g.grade}>
+                  <td><span className="zk-badge zk-badge-blue">{g.grade}</span></td>
+                  <td>{g.avgBuy !== null ? fmtTL(g.avgBuy) : '—'}</td>
+                  <td>{g.avgSell !== null ? fmtTL(g.avgSell) : '—'}</td>
+                  <td style={{ fontWeight: 600, color: g.margin > 0 ? COLORS.olive : g.margin < 0 ? COLORS.red : COLORS.inkSoft }}>
+                    {g.margin !== null ? fmtTL(g.margin) : 'Satış verisi yok'}
+                  </td>
+                  <td>
+                    {g.marginPct !== null && (
+                      <span className={`zk-badge ${g.marginPct > 10 ? 'zk-badge-olive' : g.marginPct > 0 ? 'zk-badge-gold' : 'zk-badge-red'}`}>
+                        {g.marginPct > 0 ? '+' : ''}{g.marginPct.toFixed(1)}%
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </AiSectionShell>
+  );
+}
+
+function DemandForecastSection({ purchases, sales }) {
+  const months = lastNMonthKeys(6);
+
+  const buildSeries = (records, dateField, valueField) => {
+    return months.map((mk, i) => {
+      const monthRecords = records.filter((r) => monthKey(r[dateField]) === mk);
+      const total = monthRecords.reduce((s, r) => s + r[valueField], 0);
+      return { x: i, month: mk, y: total };
+    });
+  };
+
+  const purchaseSeries = buildSeries(purchases, 'date', 'netKg');
+  const salesSeries = buildSeries(sales, 'date', 'kg');
+
+  const purchaseTrend = linearTrend(purchaseSeries.map((p) => ({ x: p.x, y: p.y })));
+  const salesTrend = linearTrend(salesSeries.map((p) => ({ x: p.x, y: p.y })));
+
+  const nextPurchaseForecast = purchaseTrend ? Math.max(0, purchaseTrend.slope * months.length + purchaseTrend.intercept) : null;
+  const nextSalesForecast = salesTrend ? Math.max(0, salesTrend.slope * months.length + salesTrend.intercept) : null;
+
+  const chartData = months.map((mk, i) => ({
+    ay: mk.slice(5) + '.' + mk.slice(2, 4),
+    alım: Math.round(purchaseSeries[i].y),
+    satış: Math.round(salesSeries[i].y),
+  }));
+
+  return (
+    <AiSectionShell title="Talep Tahmini" subtitle="Son 6 ayın alım/satış trendine göre basit doğrusal projeksiyon" icon={Radar}>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Gelecek ay tahmini alım" value={nextPurchaseForecast !== null ? fmtKg(nextPurchaseForecast) : 'Yetersiz veri'} tone={COLORS.olive} />
+        <StatCard label="Gelecek ay tahmini satış" value={nextSalesForecast !== null ? fmtKg(nextSalesForecast) : 'Yetersiz veri'} tone={COLORS.blue} />
+      </div>
+      <div className="zk-card">
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Son 6 ay trendi</div>
+        <div style={{ width: '100%', height: 220 }}>
+          <ResponsiveContainer>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#EFEBDD" />
+              <XAxis dataKey="ay" tick={{ fontSize: 10, fill: COLORS.inkSoft }} />
+              <YAxis tick={{ fontSize: 10, fill: COLORS.inkSoft }} width={50} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Line type="monotone" dataKey="alım" stroke={COLORS.olive} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="satış" stroke={COLORS.blue} strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 8 }}>
+          Bu basit bir eğilim projeksiyonudur, mevsimsellik (hasat dönemi vb.) hesaba katmaz.
+        </div>
+      </div>
+    </AiSectionShell>
+  );
+}
+
+function CustomerBehaviorSection({ buyers, sales }) {
+  const buyerStats = useMemo(() => {
+    return buyers.map((b) => {
+      const buyerSales = sales.filter((s) => s.buyerId === b.id).sort((a, b2) => a.createdAt - b2.createdAt);
+      const totalKg = buyerSales.reduce((s, r) => s + r.kg, 0);
+      const totalAmount = buyerSales.reduce((s, r) => s + r.amount, 0);
+      const avgPrice = buyerSales.length ? mean(buyerSales.map((r) => r.pricePerKg)) : 0;
+      const gradeCounts = {};
+      buyerSales.forEach((r) => { gradeCounts[r.grade] = (gradeCounts[r.grade] || 0) + r.kg; });
+      const favoriteGrade = Object.entries(gradeCounts).sort((a, b2) => b2[1] - a[1])[0]?.[0];
+      let avgGapDays = null;
+      if (buyerSales.length >= 2) {
+        const gaps = [];
+        for (let i = 1; i < buyerSales.length; i++) gaps.push((buyerSales[i].createdAt - buyerSales[i - 1].createdAt) / (1000 * 60 * 60 * 24));
+        avgGapDays = mean(gaps);
+      }
+      return { buyer: b, count: buyerSales.length, totalKg, totalAmount, avgPrice, favoriteGrade, avgGapDays };
+    }).filter((r) => r.count > 0).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [buyers, sales]);
+
+  return (
+    <AiSectionShell title="Müşteri (Alıcı) Davranışı" subtitle="Alıcıların satın alma sıklığı, tercih ettiği sınıf ve toplam hacmi" icon={UserCheck}>
+      <div className="zk-card">
+        {buyerStats.length === 0 ? (
+          <div className="zk-empty">Henüz satış kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Alıcı</th><th>Alım sayısı</th><th>Toplam kg</th><th>Toplam tutar</th><th>Ort. fiyat</th><th>Sık tercih</th><th>Ort. sıklık</th></tr></thead>
+            <tbody>
+              {buyerStats.map((r) => (
+                <tr key={r.buyer.id}>
+                  <td>{r.buyer.name}</td>
+                  <td>{r.count}</td>
+                  <td>{fmtKg(r.totalKg)}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(r.totalAmount)}</td>
+                  <td>{fmtTL(r.avgPrice)}/kg</td>
+                  <td>{r.favoriteGrade ? <span className="zk-badge zk-badge-blue">{r.favoriteGrade}</span> : '—'}</td>
+                  <td style={{ color: COLORS.inkSoft }}>{r.avgGapDays !== null ? `~${Math.round(r.avgGapDays)} günde bir` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </AiSectionShell>
+  );
+}
+
+function ReportArchiveSection({ reports, setReports }) {
+  const remove = async (id) => {
+    const next = reports.filter((r) => r.id !== id);
+    setReports(next);
+    await storageSet('zk:aiReports', next);
+  };
+  const clearAll = async () => {
+    setReports([]);
+    await storageSet('zk:aiReports', []);
+  };
+
+  return (
+    <AiSectionShell title="Rapor Arşivi" subtitle="Yönetici özeti gibi kaydedilen anlık görüntülerin geçmişi" icon={Archive}>
+      {reports.length === 0 ? (
+        <div className="zk-card"><div className="zk-empty"><Archive size={26} className="zk-empty-icon" /><br/>Henüz arşivlenmiş rapor yok. Yönetici Özeti sekmesinden "Arşive kaydet" ile ekleyebilirsiniz.</div></div>
+      ) : (
+        <>
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="zk-btn zk-btn-secondary" onClick={clearAll}><Trash2 size={13} /> Tümünü temizle</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {reports.map((r) => (
+              <div key={r.id} className="zk-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{r.type}</div>
+                    <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{fmtDate(r.date)} · {new Date(r.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div>
+                  </div>
+                  <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))', gap: 8, fontSize: 12 }}>
+                  <div><span style={{ color: COLORS.inkSoft }}>Alınan: </span><strong>{fmtKg(r.summary.totalKg)}</strong></div>
+                  <div><span style={{ color: COLORS.inkSoft }}>Ödenen: </span><strong>{fmtTL(r.summary.totalPaid)}</strong></div>
+                  <div><span style={{ color: COLORS.inkSoft }}>Tahmini kâr: </span><strong>{fmtTL(r.summary.estProfit)}</strong></div>
+                  <div><span style={{ color: COLORS.inkSoft }}>Açık bakiye: </span><strong>{fmtTL(r.summary.totalOutstanding)}</strong></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </AiSectionShell>
+  );
+}
+
+function AiAssistantTab({ farmers, purchases, sales, expenses, payments, buyers, vehicles, maintenance, fuel, documents, insurance, damages, fines }) {
+  const [section, setSection] = useState('summary');
+  const [reports, setReports] = useState([]);
+  const [loadedReports, setLoadedReports] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const r = await storageGet('zk:aiReports');
+      setReports(r || []);
+      setLoadedReports(true);
+    })();
+  }, []);
+
+  const sections = [
+    { key: 'summary', label: 'Yönetici Özeti', icon: Sparkles },
+    { key: 'maintenance', label: 'Arıza Tahmini', icon: Wrench },
+    { key: 'cost', label: 'Maliyet Analizi', icon: Banknote },
+    { key: 'price', label: 'Fiyat Optimizasyonu', icon: Target },
+    { key: 'demand', label: 'Talep Tahmini', icon: Radar },
+    { key: 'customer', label: 'Müşteri Davranışı', icon: UserCheck },
+    { key: 'anomaly', label: 'Anomali Tespiti', icon: AlertOctagon },
+    { key: 'risk', label: 'Cari Risk Analizi', icon: ShieldAlert },
+    { key: 'archive', label: 'Rapor Arşivi', icon: Archive },
+  ];
+
+  return (
+    <div>
+      <div className="zk-h1">💬 AI Asistan</div>
+      <div className="zk-h1-sub">Verilerinizden otomatik üretilen kural tabanlı analiz ve içgörüler — dış API kullanılmaz, tüm hesaplama tarayıcınızda yapılır</div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+        {sections.map((s) => (
+          <button
+            key={s.key}
+            className={`zk-btn ${section === s.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`}
+            style={{ fontSize: 12 }}
+            onClick={() => setSection(s.key)}
+          >
+            <s.icon size={13} /> {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'summary' && <ExecutiveSummarySection farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} vehicles={vehicles} documents={documents} insurance={insurance} />}
+      {section === 'maintenance' && <MaintenancePredictionSection vehicles={vehicles} maintenance={maintenance} fuel={fuel} />}
+      {section === 'cost' && <BusinessCostSection expenses={expenses} vehicles={vehicles} maintenance={maintenance} fuel={fuel} fines={fines} insurance={insurance} damages={damages} />}
+      {section === 'price' && <PriceOptimizationSection purchases={purchases} sales={sales} />}
+      {section === 'demand' && <DemandForecastSection purchases={purchases} sales={sales} />}
+      {section === 'customer' && <CustomerBehaviorSection buyers={buyers} sales={sales} />}
+      {section === 'anomaly' && <AnomalySection purchases={purchases} farmers={farmers} />}
+      {section === 'risk' && <CariRiskSection farmers={farmers} purchases={purchases} payments={payments} />}
+      {section === 'archive' && loadedReports && <ReportArchiveSection reports={reports} setReports={setReports} />}
+    </div>
+  );
+}
+
+function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers, maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance, damages, setDamages, fines, setFines, tires, setTires }) {
   const [view, setView] = useState('vehicles');
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [vehicleSubTab, setVehicleSubTab] = useState('overview');
   const [selectedPersonnelId, setSelectedPersonnelId] = useState('');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [showAddPersonnel, setShowAddPersonnel] = useState(false);
@@ -1659,7 +2826,7 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
                 const stat = vehicleStats[v.id] || { pickups: 0, pickupKg: 0, deliveries: 0, deliveryKg: 0 };
                 const driver = personnel.find((p) => p.id === v.defaultPersonnelId);
                 return (
-                  <div key={v.id} className="zk-farmer-row" onClick={() => setSelectedVehicleId(v.id)}>
+                  <div key={v.id} className="zk-farmer-row" onClick={() => { setSelectedVehicleId(v.id); setVehicleSubTab('overview'); }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div className="zk-avatar"><Truck size={16} /></div>
                       <div>
@@ -1691,62 +2858,102 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
             {personnel.find((p) => p.id === selectedVehicle.defaultPersonnelId)?.name ? `Varsayılan sürücü: ${personnel.find((p) => p.id === selectedVehicle.defaultPersonnelId).name}` : 'Sürücü atanmadı'}
           </div>
 
-          <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
-            <StatCard label="Toplama sayısı" value={vehiclePickups.length} icon={Package} />
-            <StatCard label="Toplam toplanan" value={fmtKg(vehicleStats[selectedVehicle.id]?.pickupKg || 0)} tone={COLORS.olive} />
-            <StatCard label="Teslimat sayısı" value={vehicleDeliveries.length} icon={ShoppingCart} />
-            <StatCard label="Toplam teslim edilen" value={fmtKg(vehicleStats[selectedVehicle.id]?.deliveryKg || 0)} tone={COLORS.blue} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+            {[
+              { key: 'overview', label: 'Genel Bakış', icon: Truck },
+              { key: 'maintenance', label: 'Bakım Takibi', icon: Wrench },
+              { key: 'fuel', label: 'Yakıt Yönetimi', icon: Fuel },
+              { key: 'documents', label: 'Evrak Takibi', icon: FileText },
+              { key: 'insurance', label: 'Hasar & Sigorta', icon: ShieldAlert },
+              { key: 'fines', label: 'Trafik Cezaları', icon: AlertTriangle },
+              { key: 'tires', label: 'Lastik Takibi', icon: Disc },
+              { key: 'cost', label: 'Maliyet Analizi', icon: TrendingUp },
+            ].map((t) => (
+              <button
+                key={t.key}
+                className={`zk-btn ${vehicleSubTab === t.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`}
+                style={{ fontSize: 12 }}
+                onClick={() => setVehicleSubTab(t.key)}
+              >
+                <t.icon size={13} /> {t.label}
+              </button>
+            ))}
           </div>
 
-          <div className="zk-card" style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Toplama geçmişi — nereden ne kadar aldı</div>
-            {vehiclePickups.length === 0 ? (
-              <div className="zk-empty">Bu araca bağlı toplama kaydı yok.</div>
-            ) : (
-              <table className="zk-table">
-                <thead><tr><th>Tarih</th><th>Çiftçi</th><th>Personel</th><th>Sınıflar</th><th>Net kg</th></tr></thead>
-                <tbody>
-                  {vehiclePickups.map((p) => {
-                    const f = farmers.find((x) => x.id === p.farmerId);
-                    return (
-                      <tr key={p.id}>
-                        <td>{fmtDate(p.date)}{p.time ? ` · ${p.time}` : ''}</td>
-                        <td>{f ? f.name : '—'}</td>
-                        <td style={{ color: COLORS.inkSoft }}>{p.personnelName || '—'}</td>
-                        <td style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{(p.items || []).map((it) => it.grade).join(', ')}</td>
-                        <td style={{ fontWeight: 600 }}>{fmtKg(p.netKg)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {vehicleSubTab === 'overview' && (
+            <div>
+              <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
+                <StatCard label="Toplama sayısı" value={vehiclePickups.length} icon={Package} />
+                <StatCard label="Toplam toplanan" value={fmtKg(vehicleStats[selectedVehicle.id]?.pickupKg || 0)} tone={COLORS.olive} />
+                <StatCard label="Teslimat sayısı" value={vehicleDeliveries.length} icon={ShoppingCart} />
+                <StatCard label="Toplam teslim edilen" value={fmtKg(vehicleStats[selectedVehicle.id]?.deliveryKg || 0)} tone={COLORS.blue} />
+              </div>
 
-          <div className="zk-card">
-            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Teslimat geçmişi — kime götürdü</div>
-            {vehicleDeliveries.length === 0 ? (
-              <div className="zk-empty">Bu araca bağlı teslimat kaydı yok.</div>
-            ) : (
-              <table className="zk-table">
-                <thead><tr><th>Tarih</th><th>Alıcı</th><th>Sınıf</th><th>Kg</th><th>Tutar</th></tr></thead>
-                <tbody>
-                  {vehicleDeliveries.map((s) => {
-                    const b = buyers.find((x) => x.id === s.buyerId);
-                    return (
-                      <tr key={s.id}>
-                        <td>{fmtDate(s.date)}</td>
-                        <td>{b ? b.name : '—'}</td>
-                        <td><span className="zk-badge zk-badge-blue">{s.grade || '—'}</span></td>
-                        <td>{fmtKg(s.kg)}</td>
-                        <td style={{ fontWeight: 600 }}>{fmtTL(s.amount)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+              <div className="zk-card" style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Toplama geçmişi — nereden ne kadar aldı</div>
+                {vehiclePickups.length === 0 ? (
+                  <div className="zk-empty">Bu araca bağlı toplama kaydı yok.</div>
+                ) : (
+                  <table className="zk-table">
+                    <thead><tr><th>Tarih</th><th>Çiftçi</th><th>Personel</th><th>Sınıflar</th><th>Net kg</th></tr></thead>
+                    <tbody>
+                      {vehiclePickups.map((p) => {
+                        const f = farmers.find((x) => x.id === p.farmerId);
+                        return (
+                          <tr key={p.id}>
+                            <td>{fmtDate(p.date)}{p.time ? ` · ${p.time}` : ''}</td>
+                            <td>{f ? f.name : '—'}</td>
+                            <td style={{ color: COLORS.inkSoft }}>{p.personnelName || '—'}</td>
+                            <td style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{(p.items || []).map((it) => it.grade).join(', ')}</td>
+                            <td style={{ fontWeight: 600 }}>{fmtKg(p.netKg)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="zk-card">
+                <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Teslimat geçmişi — kime götürdü</div>
+                {vehicleDeliveries.length === 0 ? (
+                  <div className="zk-empty">Bu araca bağlı teslimat kaydı yok.</div>
+                ) : (
+                  <table className="zk-table">
+                    <thead><tr><th>Tarih</th><th>Alıcı</th><th>Sınıf</th><th>Kg</th><th>Tutar</th></tr></thead>
+                    <tbody>
+                      {vehicleDeliveries.map((s) => {
+                        const b = buyers.find((x) => x.id === s.buyerId);
+                        return (
+                          <tr key={s.id}>
+                            <td>{fmtDate(s.date)}</td>
+                            <td>{b ? b.name : '—'}</td>
+                            <td><span className="zk-badge zk-badge-blue">{s.grade || '—'}</span></td>
+                            <td>{fmtKg(s.kg)}</td>
+                            <td style={{ fontWeight: 600 }}>{fmtTL(s.amount)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {vehicleSubTab === 'maintenance' && <MaintenanceSection vehicleId={selectedVehicle.id} records={maintenance} setRecords={setMaintenance} />}
+          {vehicleSubTab === 'fuel' && <FuelSection vehicleId={selectedVehicle.id} records={fuel} setRecords={setFuel} />}
+          {vehicleSubTab === 'documents' && <DocumentsSection vehicleId={selectedVehicle.id} records={documents} setRecords={setDocuments} />}
+          {vehicleSubTab === 'insurance' && <InsuranceDamageSection vehicleId={selectedVehicle.id} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} />}
+          {vehicleSubTab === 'fines' && <FinesSection vehicleId={selectedVehicle.id} records={fines} setRecords={setFines} />}
+          {vehicleSubTab === 'tires' && <TiresSection vehicleId={selectedVehicle.id} records={tires} setRecords={setTires} />}
+          {vehicleSubTab === 'cost' && (
+            <CostAnalysisSection
+              vehicleId={selectedVehicle.id}
+              maintenance={maintenance} fuel={fuel} fines={fines} insurance={insurance} damages={damages}
+              vehiclePickups={vehiclePickups} vehicleDeliveries={vehicleDeliveries}
+            />
+          )}
         </div>
       )}
 
@@ -2457,6 +3664,11 @@ function PrintArea({ purchase, farmer, settings }) {
 
 export default function ZeytinDefteri() {
   const [tab, setTab] = useState('dashboard');
+  const [userEmail, setUserEmail] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setUserEmail(data.session?.user?.email || ''));
+  }, []);
   const [farmers, setFarmers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -2466,6 +3678,13 @@ export default function ZeytinDefteri() {
   const [priceList, setPriceList] = useState([]);
   const [personnel, setPersonnel] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [maintenance, setMaintenance] = useState([]);
+  const [fuel, setFuel] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [insurance, setInsurance] = useState([]);
+  const [damages, setDamages] = useState([]);
+  const [fines, setFines] = useState([]);
+  const [tires, setTires] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [cashEntries, setCashEntries] = useState([]);
   const [selectedFarmerId, setSelectedFarmerId] = useState('');
@@ -2476,7 +3695,7 @@ export default function ZeytinDefteri() {
 
   useEffect(() => {
     (async () => {
-      const [f, p, pay, b, s, set, pl, per, exp, cash, veh] = await Promise.all([
+      const [f, p, pay, b, s, set, pl, per, exp, cash, veh, maint, fl, docs, ins, dmg, fns, trs] = await Promise.all([
         storageGet('zk:farmers'),
         storageGet('zk:purchases'),
         storageGet('zk:payments'),
@@ -2488,11 +3707,20 @@ export default function ZeytinDefteri() {
         storageGet('zk:expenses'),
         storageGet('zk:cashEntries'),
         storageGet('zk:vehicles'),
+        storageGet('zk:vehicleMaintenance'),
+        storageGet('zk:vehicleFuel'),
+        storageGet('zk:vehicleDocuments'),
+        storageGet('zk:vehicleInsurance'),
+        storageGet('zk:vehicleDamage'),
+        storageGet('zk:vehicleFines'),
+        storageGet('zk:vehicleTires'),
       ]);
       setFarmers(f || []); setPurchases(p || []); setPayments(pay || []);
       setBuyers(b || []); setSales(s || []); setSettings(set || {});
       setPersonnel(per || []); setExpenses(exp || []); setCashEntries(cash || []);
       setVehicles(veh || []);
+      setMaintenance(maint || []); setFuel(fl || []); setDocuments(docs || []);
+      setInsurance(ins || []); setDamages(dmg || []); setFines(fns || []); setTires(trs || []);
       if (pl && pl.length > 0) {
         const normalized = pl.map((v) => ('grades' in v ? v : { id: v.id, name: v.name, hasGrades: false, singlePrice: v.price || 0, grades: [] }));
         setPriceList(normalized);
@@ -2525,7 +3753,12 @@ export default function ZeytinDefteri() {
   };
 
   const backupData = () => {
-    const payload = { farmers, purchases, payments, buyers, sales, settings, priceList, personnel, expenses, cashEntries, vehicles, exportedAt: new Date().toISOString() };
+    const payload = {
+      farmers, purchases, payments, buyers, sales, settings, priceList, personnel, expenses, cashEntries, vehicles,
+      vehicleMaintenance: maintenance, vehicleFuel: fuel, vehicleDocuments: documents, vehicleInsurance: insurance,
+      vehicleDamage: damages, vehicleFines: fines, vehicleTires: tires,
+      exportedAt: new Date().toISOString(),
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2541,7 +3774,7 @@ export default function ZeytinDefteri() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles'];
+      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles', 'vehicleMaintenance', 'vehicleFuel', 'vehicleDocuments', 'vehicleInsurance', 'vehicleDamage', 'vehicleFines', 'vehicleTires'];
       for (const k of keys) {
         if (data[k] !== undefined) await storageSet(`zk:${k}`, data[k]);
       }
@@ -2550,6 +3783,8 @@ export default function ZeytinDefteri() {
       setPriceList(data.priceList || []); setPersonnel(data.personnel || []);
       setExpenses(data.expenses || []); setCashEntries(data.cashEntries || []);
       setVehicles(data.vehicles || []);
+      setMaintenance(data.vehicleMaintenance || []); setFuel(data.vehicleFuel || []); setDocuments(data.vehicleDocuments || []);
+      setInsurance(data.vehicleInsurance || []); setDamages(data.vehicleDamage || []); setFines(data.vehicleFines || []); setTires(data.vehicleTires || []);
       setRestoreStatus('Yedek başarıyla geri yüklendi.');
     } catch (e) {
       setRestoreStatus('Dosya okunamadı, geçerli bir yedek dosyası seçin.');
@@ -2563,6 +3798,7 @@ export default function ZeytinDefteri() {
     { key: 'allPurchases', label: 'Tüm alımlar', icon: ListChecks },
     { key: 'warehouse', label: 'Depo & satış', icon: Warehouse },
     { key: 'fleet', label: 'Filo & personel', icon: Truck },
+    { key: 'ai', label: 'AI Asistan', icon: Sparkles },
     { key: 'ledger', label: 'Cari hesap', icon: Wallet },
     { key: 'expenses', label: 'Giderler', icon: Receipt },
     { key: 'cash', label: 'Kasa', icon: Banknote },
@@ -2598,6 +3834,14 @@ export default function ZeytinDefteri() {
               <item.icon size={16} /> {item.label}
             </button>
           ))}
+          <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+            <div style={{ fontSize: 10.5, color: '#A9B896', padding: '0 11px', marginBottom: 8, wordBreak: 'break-all' }}>
+              {userEmail}
+            </div>
+            <button className="zk-navbtn" onClick={() => supabase.auth.signOut()}>
+              Çıkış yap
+            </button>
+          </div>
         </div>
         <div className="zk-main">
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
@@ -2605,7 +3849,8 @@ export default function ZeytinDefteri() {
           {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'warehouse' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
-          {tab === 'fleet' && <FleetTab vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} />}
+          {tab === 'fleet' && <FleetTab vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} />}
+          {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
           {tab === 'ledger' && <LedgerTab farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'expenses' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} />}
           {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
