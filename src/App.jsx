@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient.js';
+import { currentUser } from './currentUser.js';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   LayoutDashboard, Users, Scale as ScaleIcon, Wallet, FileBarChart, Warehouse, Settings as SettingsIcon,
@@ -18,10 +19,12 @@ const fmtDate = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-digit',
 const fmtDateShort = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
 
 // Bu proje bagimsiz calistigi icin Claude artifact ortamindaki window.storage
-// yerine Supabase (gercek Postgres veritabani) kullanir.
+// yerine Supabase (gercek Postgres veritabani) kullanir. Her satir giris yapan
+// kullanicinin e-postasina (owner_email) baglidir, boylece her hesap sadece
+// kendi verisini gorur/degistirir.
 async function storageGet(key) {
   try {
-    const { data, error } = await supabase.from('app_data').select('value').eq('key', key).maybeSingle();
+    const { data, error } = await supabase.from('app_data').select('value').eq('key', key).eq('owner_email', currentUser.email).maybeSingle();
     if (error) { console.error('Depolama okuma hatasi:', error); return null; }
     return data ? data.value : null;
   } catch (e) {
@@ -31,7 +34,7 @@ async function storageGet(key) {
 }
 async function storageSet(key, value) {
   try {
-    const { error } = await supabase.from('app_data').upsert({ key, value, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from('app_data').upsert({ key, value, owner_email: currentUser.email, updated_at: new Date().toISOString() });
     if (error) console.error('Depolama yazma hatasi:', error);
   } catch (e) {
     console.error('Depolama yazma hatasi:', e);
@@ -62,7 +65,7 @@ function GlobalStyle() {
       :root { --font-display: 'Fraunces', Georgia, serif; --font-body: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
       .zk-app { font-family: var(--font-body); color: ${COLORS.ink}; background: ${COLORS.paper}; min-height: 100vh; }
       .zk-shell { display: flex; min-height: 100vh; }
-      .zk-sidebar { width: 216px; background: ${COLORS.olive}; flex-shrink: 0; padding: 22px 12px; display: flex; flex-direction: column; gap: 3px; position: relative; height: 100vh; position: sticky; top: 0; }
+      .zk-sidebar { width: 216px; background: ${COLORS.olive}; flex-shrink: 0; padding: 22px 12px; display: flex; flex-direction: column; gap: 3px; position: sticky; top: 0; height: 100vh; }
       .zk-brand-row { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 2px; }
       .zk-brand { color: #F5F2E8; font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
       .zk-brand-sub { color: #A9B896; font-size: 10.5px; padding: 0 10px; margin-bottom: 24px; letter-spacing: 0.6px; text-transform: uppercase; }
@@ -3664,11 +3667,8 @@ function PrintArea({ purchase, farmer, settings }) {
 
 export default function ZeytinDefteri() {
   const [tab, setTab] = useState('dashboard');
-  const [userEmail, setUserEmail] = useState('');
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setUserEmail(data.session?.user?.email || ''));
-  }, []);
+  const [userEmail, setUserEmail] = useState(currentUser.email || '');
+  const [userBusinessName, setUserBusinessName] = useState(currentUser.businessName || '');
   const [farmers, setFarmers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -3835,9 +3835,14 @@ export default function ZeytinDefteri() {
             </button>
           ))}
           <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
-            <div style={{ fontSize: 10.5, color: '#A9B896', padding: '0 11px', marginBottom: 8, wordBreak: 'break-all' }}>
+            <div style={{ fontSize: 10.5, color: '#A9B896', padding: '0 11px', marginBottom: 2, wordBreak: 'break-all' }}>
               {userEmail}
             </div>
+            {userBusinessName && (
+              <div style={{ fontSize: 10, color: '#7C8A6C', padding: '0 11px', marginBottom: 8 }}>
+                {userBusinessName}
+              </div>
+            )}
             <button className="zk-navbtn" onClick={() => supabase.auth.signOut()}>
               Çıkış yap
             </button>

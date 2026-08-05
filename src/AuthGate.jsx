@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, ALLOWED_EMAILS } from './supabaseClient.js';
+import { supabase } from './supabaseClient.js';
+import { currentUser } from './currentUser.js';
+import AdminPanel from './AdminPanel.jsx';
 
 const COLORS = { olive: '#3F4A2E', oliveDark: '#2B331F', gold: '#B3892B', ink: '#2B2A25' };
 
@@ -18,12 +20,28 @@ function CenterScreen({ children }) {
 
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(undefined); // undefined = yükleniyor, null = oturum yok
+  const [userRecord, setUserRecord] = useState(undefined); // undefined = kontrol ediliyor, null = kayıtlı değil
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!session) { setUserRecord(session === null ? null : undefined); return; }
+    const email = session.user?.email;
+    if (!email) { setUserRecord(null); return; }
+    supabase.from('app_users').select('*').eq('email', email).maybeSingle().then(({ data }) => {
+      if (data) {
+        currentUser.email = data.email;
+        currentUser.role = data.role;
+        currentUser.businessName = data.business_name || '';
+      }
+      setUserRecord(data || null);
+    });
+  }, [session]);
 
   const signIn = () => {
     supabase.auth.signInWithOAuth({
@@ -32,9 +50,12 @@ export default function AuthGate({ children }) {
     });
   };
 
-  const signOut = () => supabase.auth.signOut();
+  const signOut = () => {
+    currentUser.email = null;
+    supabase.auth.signOut();
+  };
 
-  if (session === undefined) {
+  if (session === undefined || (session && userRecord === undefined)) {
     return (
       <CenterScreen>
         <div style={{ color: '#8a8a80', fontSize: 14 }}>Yükleniyor...</div>
@@ -70,13 +91,14 @@ export default function AuthGate({ children }) {
   }
 
   const email = session.user?.email || '';
-  if (!ALLOWED_EMAILS.includes(email)) {
+
+  if (!userRecord) {
     return (
       <CenterScreen>
         <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.ink, marginBottom: 6 }}>Yetkiniz yok</div>
         <div style={{ fontSize: 13, color: '#8a8a80', marginBottom: 20 }}>
-          <strong>{email}</strong> adresinin bu uygulamaya erişim yetkisi bulunmuyor.
+          <strong>{email}</strong> adresi henüz sisteme kaydedilmemiş. Bir yöneticiden erişim talep edin.
         </div>
         <button
           onClick={signOut}
@@ -88,5 +110,26 @@ export default function AuthGate({ children }) {
     );
   }
 
-  return children;
+  if (userRecord.role === 'admin' && showAdminPanel) {
+    return <AdminPanel onBack={() => setShowAdminPanel(false)} />;
+  }
+
+  return (
+    <>
+      {userRecord.role === 'admin' && (
+        <button
+          onClick={() => setShowAdminPanel(true)}
+          style={{
+            position: 'fixed', top: 10, right: 10, zIndex: 200,
+            padding: '8px 14px', borderRadius: 8, border: 'none',
+            background: COLORS.gold, color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          }}
+        >
+          Kullanıcı Yönetimi
+        </button>
+      )}
+      {children}
+    </>
+  );
 }

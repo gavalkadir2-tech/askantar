@@ -9,9 +9,6 @@ const SUPABASE_ANON_KEY = 'sb_publishable_pbJwgjZnjsOubgWLGuGhaA_N1ZjXmTD';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Uygulamaya giriş yapabilecek e-posta adresleri.
-// Yeni birini eklemek/çıkarmak isterseniz sadece bu listeyi düzenleyin.
-export const ALLOWED_EMAILS = [
-  'gavalkadir2@gmail.com',
-  'sadeeraytac@gmail.com',
-];
+// Not: Yetkili kullanıcı listesi artık burada değil, Supabase'deki
+// "app_users" tablosunda tutuluyor. Yeni kullanıcı eklemek/çıkarmak için
+// uygulama içindeki "Kullanıcı Yönetimi" panelini (sadece adminler görür) kullanın.
