@@ -21,7 +21,13 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const CURRENCY_CODE_MAP = { '₺': 'TRY', '$': 'USD', '€': 'EUR' };
 let FORMAT_STATE = { currencySymbol: '₺', dateFormat: 'DMY' };
 
-const fmtTL = (n) => (Number(n) || 0).toLocaleString('tr-TR', { style: 'currency', currency: CURRENCY_CODE_MAP[FORMAT_STATE.currencySymbol] || 'TRY', maximumFractionDigits: 2 });
+const fmtTL = (n) => {
+  const num = Number(n) || 0;
+  const symbol = FORMAT_STATE.currencySymbol || '₺';
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${sign}${symbol}${abs}`;
+};
 const fmtKg = (n) => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' kg';
 const fmtDate = (d) => {
   const date = new Date(d);
