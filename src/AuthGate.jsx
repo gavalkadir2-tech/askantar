@@ -18,10 +18,23 @@ function CenterScreen({ children }) {
   );
 }
 
+const USER_CACHE_KEY = 'zk_user_record_cache';
+
+function cacheUserRecord(email, data) {
+  try { window.localStorage.setItem(USER_CACHE_KEY + '_' + email, JSON.stringify(data)); } catch (e) {}
+}
+function getCachedUserRecord(email) {
+  try {
+    const raw = window.localStorage.getItem(USER_CACHE_KEY + '_' + email);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(undefined); // undefined = yükleniyor, null = oturum yok
   const [userRecord, setUserRecord] = useState(undefined); // undefined = kontrol ediliyor, null = kayıtlı değil
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -33,13 +46,28 @@ export default function AuthGate({ children }) {
     if (!session) { setUserRecord(session === null ? null : undefined); return; }
     const email = session.user?.email;
     if (!email) { setUserRecord(null); return; }
-    supabase.from('app_users').select('*').eq('email', email).maybeSingle().then(({ data }) => {
+    supabase.from('app_users').select('*').eq('email', email).maybeSingle().then(({ data, error }) => {
+      if (error) throw error;
       if (data) {
         currentUser.email = data.email;
         currentUser.role = data.role;
         currentUser.businessName = data.business_name || '';
+        cacheUserRecord(email, data);
+        setOfflineMode(false);
       }
       setUserRecord(data || null);
+    }).catch(() => {
+      // Ağ hatası (çevrimdışı) — daha önce bu cihazda giriş yapılmışsa önbellekten devam et
+      const cached = getCachedUserRecord(email);
+      if (cached) {
+        currentUser.email = cached.email;
+        currentUser.role = cached.role;
+        currentUser.businessName = cached.business_name || '';
+        setOfflineMode(true);
+        setUserRecord(cached);
+      } else {
+        setUserRecord(null);
+      }
     });
   }, [session]);
 
@@ -116,19 +144,30 @@ export default function AuthGate({ children }) {
 
   return (
     <>
-      {userRecord.role === 'admin' && (
+      <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 200, display: 'flex', gap: 8 }}>
+        {userRecord.role === 'admin' && (
+          <button
+            onClick={() => setShowAdminPanel(true)}
+            style={{
+              padding: '8px 14px', borderRadius: 8, border: 'none',
+              background: COLORS.gold, color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            }}
+          >
+            Kullanıcı Yönetimi
+          </button>
+        )}
         <button
-          onClick={() => setShowAdminPanel(true)}
+          onClick={signOut}
           style={{
-            position: 'fixed', top: 10, right: 10, zIndex: 200,
-            padding: '8px 14px', borderRadius: 8, border: 'none',
-            background: COLORS.gold, color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)',
+            background: '#fff', color: COLORS.ink, fontWeight: 600, fontSize: 12, cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           }}
         >
-          Kullanıcı Yönetimi
+          Çıkış yap
         </button>
-      )}
+      </div>
       {children}
     </>
   );

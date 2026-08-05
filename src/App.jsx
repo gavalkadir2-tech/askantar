@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient.js';
 import { currentUser } from './currentUser.js';
+import { getQrDataUrl } from './qrHelper.js';
+import { downloadReceiptPdf } from './pdfHelper.js';
+import { offlineGet, offlineSet, queuePendingWrite, getPendingCount, flushQueue } from './offlineStorage.js';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   LayoutDashboard, Users, Scale as ScaleIcon, Wallet, FileBarChart, Warehouse, Settings as SettingsIcon,
@@ -9,6 +12,7 @@ import {
   Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard, Menu,
   Wrench, Fuel, FileText, ShieldAlert, AlertTriangle, Disc, TrendingUp, Gauge, CalendarClock,
   Sparkles, AlertOctagon, UserCheck, Archive, Target, Radar, RefreshCw, Trash2, Mic, MicOff, Send, Bot, Bell, Pencil,
+  Package2, FlaskConical, Landmark, CreditCard, Navigation, MapPin, PackageCheck,
 } from 'lucide-react';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -39,23 +43,28 @@ const fmtDateShort = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-di
 // Bu proje bagimsiz calistigi icin Claude artifact ortamindaki window.storage
 // yerine Supabase (gercek Postgres veritabani) kullanir. Her satir giris yapan
 // kullanicinin e-postasina (owner_email) baglidir, boylece her hesap sadece
-// kendi verisini gorur/degistirir.
+// kendi verisini gorur/degistirir. Ayrica CEVRIMDISI-ONCELIKLI calisir: her
+// okuma/yazma once yerel tarayici onbellegine uygulanir (internetsiz de
+// calisir), Supabase'e yazma basarisiz olursa bekleyen kuyruga eklenir ve
+// baglanti gelince otomatik gonderilir (bkz. offlineStorage.js).
 async function storageGet(key) {
+  const cached = offlineGet(currentUser.email, key);
   try {
     const { data, error } = await supabase.from('app_data').select('value').eq('key', key).eq('owner_email', currentUser.email).maybeSingle();
-    if (error) { console.error('Depolama okuma hatasi:', error); return null; }
-    return data ? data.value : null;
+    if (error) throw error;
+    if (data) { offlineSet(currentUser.email, key, data.value); return data.value; }
+    return cached;
   } catch (e) {
-    console.error('Depolama okuma hatasi:', e);
-    return null;
+    return cached;
   }
 }
 async function storageSet(key, value) {
+  offlineSet(currentUser.email, key, value);
   try {
     const { error } = await supabase.from('app_data').upsert({ key, value, owner_email: currentUser.email, updated_at: new Date().toISOString() });
-    if (error) console.error('Depolama yazma hatasi:', error);
+    if (error) throw error;
   } catch (e) {
-    console.error('Depolama yazma hatasi:', e);
+    queuePendingWrite(currentUser.email, key, value);
   }
 }
 
@@ -207,6 +216,7 @@ function GlobalStyle() {
         .zk-navbtn { padding: 9px 10px; font-size: 12px; }
         .zk-scale-readout { font-size: 24px; }
         .zk-btn { padding: 10px 12px; font-size: 12.5px; }
+        .zk-app { overflow-x: hidden; }
       }
     `}</style>
   );
@@ -753,6 +763,16 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
   const [bagkurRate, setBagkurRate] = useState((settings.defaultBagkurRate ?? 1).toString());
   const [lastSaved, setLastSaved] = useState(null);
 
+  const [randiman, setRandiman] = useState('');
+  const [asit, setAsit] = useState('');
+  const [nem, setNem] = useState('');
+  const [firePercent, setFirePercent] = useState('');
+  const [hammaliyeTutari, setHammaliyeTutari] = useState('');
+  const [nakliyeTutari, setNakliyeTutari] = useState('');
+  const [cuvalKesintisi, setCuvalKesintisi] = useState('');
+  const [photo, setPhoto] = useState('');
+  const [showLabFields, setShowLabFields] = useState(false);
+
   const [items, setItems] = useState([]);
   const [lineVariety, setLineVariety] = useState(priceList[0]?.name || '');
   const [lineGradeName, setLineGradeName] = useState('');
@@ -858,13 +878,42 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
 
   const netKg = items.reduce((s, i) => s + i.kg, 0);
   const amount = items.reduce((s, i) => s + i.amount, 0);
-  const commissionAmount = noDeduction ? 0 : amount * ((parseFloat(commissionRate) || 0) / 100);
+  const fireTutari = amount * ((parseFloat(firePercent) || 0) / 100);
+  const amountAfterFire = amount - fireTutari;
+  const commissionAmount = noDeduction ? 0 : amountAfterFire * ((parseFloat(commissionRate) || 0) / 100);
   const stopajOrani = stopajOraniHesapla(borsaTescilli);
-  const stopajTutari = noDeduction ? 0 : amount * (stopajOrani / 100);
-  const bagkurTutari = (!noDeduction && applyBagkur) ? amount * ((parseFloat(bagkurRate) || 0) / 100) : 0;
-  const netPayment = amount - commissionAmount - stopajTutari - bagkurTutari;
+  const stopajTutari = noDeduction ? 0 : amountAfterFire * (stopajOrani / 100);
+  const bagkurTutari = (!noDeduction && applyBagkur) ? amountAfterFire * ((parseFloat(bagkurRate) || 0) / 100) : 0;
+  const hammaliyeVal = parseFloat(hammaliyeTutari) || 0;
+  const nakliyeVal = parseFloat(nakliyeTutari) || 0;
+  const cuvalVal = parseFloat(cuvalKesintisi) || 0;
+  const netPayment = amountAfterFire - commissionAmount - stopajTutari - bagkurTutari - hammaliyeVal - nakliyeVal - cuvalVal;
 
   const canSave = farmerId && items.length > 0;
+
+  const handlePhotoUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 700;
+        let w = img.width, h = img.height;
+        if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
+        else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        setPhoto(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const addPresetNote = (preset) => {
+    setNote((prev) => (prev ? `${prev}, ${preset}` : preset));
+  };
 
   const save = async () => {
     if (!canSave) return;
@@ -891,6 +940,15 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
       applyBagkur: noDeduction ? false : applyBagkur,
       bagkurRate: parseFloat(bagkurRate) || 0,
       bagkurTutari,
+      randiman: parseFloat(randiman) || null,
+      asit: parseFloat(asit) || null,
+      nem: parseFloat(nem) || null,
+      firePercent: parseFloat(firePercent) || 0,
+      fireTutari,
+      hammaliyeTutari: hammaliyeVal,
+      nakliyeTutari: nakliyeVal,
+      cuvalKesintisi: cuvalVal,
+      photo: photo || '',
       amount,
       netPayment,
       note,
@@ -901,6 +959,8 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     await storageSet('zk:purchases', next);
     setLastSaved(record);
     setItems([]); setNote(''); setLineKg('');
+    setRandiman(''); setAsit(''); setNem(''); setFirePercent('');
+    setHammaliyeTutari(''); setNakliyeTutari(''); setCuvalKesintisi(''); setPhoto('');
   };
 
   return (
@@ -1050,13 +1110,81 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
             </div>
           )}
 
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Hazır notlar</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {['Dip toplama', 'Yağlık', 'Asit yüksek', 'Çamurlu', 'Islak'].map((p) => (
+                <button key={p} className="zk-btn zk-btn-secondary" style={{ fontSize: 11.5, padding: '5px 10px' }} onClick={() => addPresetNote(p)}>{p}</button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ marginBottom: 16 }}>
             <label className="zk-label">Not (opsiyonel)</label>
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="serbest not..." />
           </div>
 
+          <button
+            className="zk-btn zk-btn-secondary"
+            style={{ marginBottom: 12, width: '100%', justifyContent: 'space-between' }}
+            onClick={() => setShowLabFields((v) => !v)}
+          >
+            <span>Laboratuvar sonuçları & ek kesintiler</span>
+            <span>{showLabFields ? '▲' : '▼'}</span>
+          </button>
+
+          {showLabFields && (
+            <div style={{ background: COLORS.paper, borderRadius: 10, padding: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                <div style={{ flex: '1 1 100px' }}>
+                  <label className="zk-label">Randıman (%)</label>
+                  <input className="zk-input" type="number" value={randiman} onChange={(e) => setRandiman(e.target.value)} placeholder="—" />
+                </div>
+                <div style={{ flex: '1 1 100px' }}>
+                  <label className="zk-label">Asit oranı (%)</label>
+                  <input className="zk-input" type="number" value={asit} onChange={(e) => setAsit(e.target.value)} placeholder="—" />
+                </div>
+                <div style={{ flex: '1 1 100px' }}>
+                  <label className="zk-label">Nem oranı (%)</label>
+                  <input className="zk-input" type="number" value={nem} onChange={(e) => setNem(e.target.value)} placeholder="—" />
+                </div>
+                <div style={{ flex: '1 1 100px' }}>
+                  <label className="zk-label">Fire/İskonto (%)</label>
+                  <input className="zk-input" type="number" value={firePercent} onChange={(e) => setFirePercent(e.target.value)} placeholder="0" />
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                <div style={{ flex: '1 1 120px' }}>
+                  <label className="zk-label">Hammaliye kesintisi ({FORMAT_STATE.currencySymbol})</label>
+                  <input className="zk-input" type="number" value={hammaliyeTutari} onChange={(e) => setHammaliyeTutari(e.target.value)} placeholder="0" />
+                </div>
+                <div style={{ flex: '1 1 120px' }}>
+                  <label className="zk-label">Nakliye kesintisi ({FORMAT_STATE.currencySymbol})</label>
+                  <input className="zk-input" type="number" value={nakliyeTutari} onChange={(e) => setNakliyeTutari(e.target.value)} placeholder="0" />
+                </div>
+                <div style={{ flex: '1 1 120px' }}>
+                  <label className="zk-label">Çuval/kasa kesintisi ({FORMAT_STATE.currencySymbol})</label>
+                  <input className="zk-input" type="number" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value)} placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <label className="zk-btn zk-btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
+                  <Upload size={13} /> {photo ? 'Fotoğrafı değiştir' : 'Fotoğraf ekle'}
+                  <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => { if (e.target.files[0]) handlePhotoUpload(e.target.files[0]); e.target.value = ''; }} />
+                </label>
+                {photo && (
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <img src={photo} alt="Alım fotoğrafı" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, border: `1px solid ${COLORS.border}` }} />
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setPhoto('')}><X size={12} /></button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div style={{ background: COLORS.paper, borderRadius: 10, padding: 14, marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12.5 }}>
             <div>Ürün tutarı ({fmtKg(netKg)})</div><div style={{ textAlign: 'right', fontWeight: 600 }}>{fmtTL(amount)}</div>
+            {fireTutari > 0 && (<><div style={{ color: COLORS.red }}>Fire/İskonto (%{firePercent})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.red }}>− {fmtTL(fireTutari)}</div></>)}
             {!noDeduction && (
               <>
                 <div style={{ color: COLORS.gold }}>Komisyon (%{commissionRate || 0})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.gold }}>− {fmtTL(commissionAmount)}</div>
@@ -1064,6 +1192,9 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                 {applyBagkur && (<><div style={{ color: COLORS.red }}>BAĞ-KUR (%{bagkurRate || 0})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.red }}>− {fmtTL(bagkurTutari)}</div></>)}
               </>
             )}
+            {hammaliyeVal > 0 && (<><div>Hammaliye</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(hammaliyeVal)}</div></>)}
+            {nakliyeVal > 0 && (<><div>Nakliye</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(nakliyeVal)}</div></>)}
+            {cuvalVal > 0 && (<><div>Çuval/kasa</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(cuvalVal)}</div></>)}
             <div style={{ fontWeight: 700, borderTop: `1px solid ${COLORS.border}`, paddingTop: 8 }}>Çiftçiye ödenecek</div>
             <div style={{ textAlign: 'right', fontWeight: 700, borderTop: `1px solid ${COLORS.border}`, paddingTop: 8, color: COLORS.olive }}>{fmtTL(netPayment)}</div>
           </div>
@@ -1071,6 +1202,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
           <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={!canSave} onClick={save}>
             Alımı kaydet
           </button>
+
 
           {lastSaved && (() => {
             const lastSavedFarmer = farmers.find((f) => f.id === lastSaved.farmerId);
@@ -1081,8 +1213,9 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
             return (
               <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: COLORS.oliveSoft, padding: '10px 12px', borderRadius: 8, flexWrap: 'wrap', gap: 8 }}>
                 <span style={{ fontSize: 12, color: COLORS.olive }}>Alım #{lastSaved.makbuzNo} kaydedildi.</span>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button className="zk-btn zk-btn-secondary" onClick={() => onPrintReceipt(lastSaved)}><Printer size={13} /> Yazdır</button>
+                  <button className="zk-btn zk-btn-secondary" onClick={() => downloadReceiptPdf(lastSaved, lastSavedFarmer, settings)}><Download size={13} /> PDF indir</button>
                   {waHref ? (
                     <a className="zk-btn" style={{ background: '#25D366', color: '#fff' }} href={waHref} target="_blank" rel="noopener noreferrer">
                       <MessageCircle size={13} /> WhatsApp'tan gönder
@@ -1104,7 +1237,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
   );
 }
 
-function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel }) {
+function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, collections, setCollections }) {
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState(null);
   const [buyerName, setBuyerName] = useState('');
@@ -1115,9 +1248,13 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
   const [grade, setGrade] = useState('');
   const [kg, setKg] = useState('');
   const [pricePerKg, setPricePerKg] = useState('');
+  const [vade, setVade] = useState('');
   const [note, setNote] = useState('');
   const [vehicleId, setVehicleId] = useState('');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [viewingBuyerId, setViewingBuyerId] = useState('');
+  const [collectionAmount, setCollectionAmount] = useState('');
+  const [collectionNote, setCollectionNote] = useState('');
 
   const totalPurchasedKg = purchases.reduce((s, p) => s + p.netKg, 0);
   const totalSoldKg = sales.reduce((s, s2) => s + s2.kg, 0);
@@ -1711,6 +1848,7 @@ function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintR
                     <td style={{ fontWeight: 600 }}>{fmtTL(p.netPayment)}</td>
                     <td style={{ display: 'flex', gap: 6 }}>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintReceipt(p)}><Printer size={12} /></button>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => downloadReceiptPdf(p, f, settings)}><Download size={12} /></button>
                       {waPhone && (
                         <a className="zk-btn" style={{ padding: '5px 9px', background: '#25D366', color: '#fff' }} href={`https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppReceiptText(p, f, settings))}`} target="_blank" rel="noopener noreferrer">
                           <MessageCircle size={12} />
@@ -1749,6 +1887,7 @@ function ExpiryBadge({ dateStr }) {
 }
 
 function MaintenanceSection({ vehicleId, records, setRecords }) {
+  const [editingId, setEditingId] = useState(null);
   const [date, setDate] = useState(todayStr());
   const [km, setKm] = useState('');
   const [type, setType] = useState(MAINTENANCE_TYPES[0]);
@@ -1758,14 +1897,22 @@ function MaintenanceSection({ vehicleId, records, setRecords }) {
   const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
   const total = vehicleRecords.reduce((s, r) => s + r.cost, 0);
 
+  const resetForm = () => { setEditingId(null); setDate(todayStr()); setKm(''); setType(MAINTENANCE_TYPES[0]); setCost(''); setNote(''); };
+
+  const startEdit = (r) => { setEditingId(r.id); setDate(r.date); setKm(String(r.km || '')); setType(r.type); setCost(String(r.cost)); setNote(r.note || ''); };
+
   const save = async () => {
     const c = parseFloat(cost);
     if (!c || c <= 0) return;
-    const record = { id: uid(), vehicleId, date, km: parseFloat(km) || 0, type, cost: c, note, createdAt: Date.now() };
-    const next = [...records, record];
+    let next;
+    if (editingId) {
+      next = records.map((r) => (r.id === editingId ? { ...r, date, km: parseFloat(km) || 0, type, cost: c, note } : r));
+    } else {
+      next = [...records, { id: uid(), vehicleId, date, km: parseFloat(km) || 0, type, cost: c, note, createdAt: Date.now() }];
+    }
     setRecords(next);
     await storageSet('zk:vehicleMaintenance', next);
-    setKm(''); setCost(''); setNote('');
+    resetForm();
   };
 
   const remove = async (id) => {
@@ -1773,6 +1920,7 @@ function MaintenanceSection({ vehicleId, records, setRecords }) {
     const next = records.filter((r) => r.id !== id);
     setRecords(next);
     await storageSet('zk:vehicleMaintenance', next);
+    if (editingId === id) resetForm();
   };
 
   return (
@@ -1782,7 +1930,7 @@ function MaintenanceSection({ vehicleId, records, setRecords }) {
         <StatCard label="Bakım sayısı" value={vehicleRecords.length} />
       </div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni bakım kaydı</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Bakım kaydını düzenle' : 'Yeni bakım kaydı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <select className="zk-select" style={{ flex: '1 1 160px' }} value={type} onChange={(e) => setType(e.target.value)}>
             {MAINTENANCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -1791,7 +1939,8 @@ function MaintenanceSection({ vehicleId, records, setRecords }) {
           <input className="zk-input" type="number" placeholder="Km" style={{ flex: '1 1 110px' }} value={km} onChange={(e) => setKm(e.target.value)} />
           <input className="zk-input" type="number" placeholder="Maliyet (TL)" style={{ flex: '1 1 130px' }} value={cost} onChange={(e) => setCost(e.target.value)} />
           <input className="zk-input" placeholder="Not" style={{ flex: '2 1 180px' }} value={note} onChange={(e) => setNote(e.target.value)} />
-          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
         </div>
       </div>
       <div className="zk-card">
@@ -1808,7 +1957,10 @@ function MaintenanceSection({ vehicleId, records, setRecords }) {
                   <td><span className="zk-badge zk-badge-blue">{r.type}</span></td>
                   <td style={{ fontWeight: 600 }}>{fmtTL(r.cost)}</td>
                   <td style={{ color: COLORS.inkSoft }}>{r.note || '—'}</td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(r)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><Trash2 size={12} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1820,6 +1972,7 @@ function MaintenanceSection({ vehicleId, records, setRecords }) {
 }
 
 function FuelSection({ vehicleId, records, setRecords, settings }) {
+  const [editingId, setEditingId] = useState(null);
   const [date, setDate] = useState(todayStr());
   const [km, setKm] = useState('');
   const [liters, setLiters] = useState('');
@@ -1840,14 +1993,22 @@ function FuelSection({ vehicleId, records, setRecords, settings }) {
     return { kmDiff, litersUsed, per100km: (litersUsed / kmDiff) * 100 };
   }, [vehicleRecords]);
 
+  const resetForm = () => { setEditingId(null); setDate(todayStr()); setKm(''); setLiters(''); setPricePerLiter(settings?.defaultFuelPrice ? String(settings.defaultFuelPrice) : ''); setNote(''); };
+
+  const startEdit = (r) => { setEditingId(r.id); setDate(r.date); setKm(String(r.km || '')); setLiters(String(r.liters)); setPricePerLiter(String(r.pricePerLiter)); setNote(r.note || ''); };
+
   const save = async () => {
     const l = parseFloat(liters), p = parseFloat(pricePerLiter);
     if (!l || l <= 0 || !p || p <= 0) return;
-    const record = { id: uid(), vehicleId, date, km: parseFloat(km) || 0, liters: l, pricePerLiter: p, totalCost: l * p, note, createdAt: Date.now() };
-    const next = [...records, record];
+    let next;
+    if (editingId) {
+      next = records.map((r) => (r.id === editingId ? { ...r, date, km: parseFloat(km) || 0, liters: l, pricePerLiter: p, totalCost: l * p, note } : r));
+    } else {
+      next = [...records, { id: uid(), vehicleId, date, km: parseFloat(km) || 0, liters: l, pricePerLiter: p, totalCost: l * p, note, createdAt: Date.now() }];
+    }
     setRecords(next);
     await storageSet('zk:vehicleFuel', next);
-    setKm(''); setLiters(''); setPricePerLiter(''); setNote('');
+    resetForm();
   };
 
   const remove = async (id) => {
@@ -1855,6 +2016,7 @@ function FuelSection({ vehicleId, records, setRecords, settings }) {
     const next = records.filter((r) => r.id !== id);
     setRecords(next);
     await storageSet('zk:vehicleFuel', next);
+    if (editingId === id) resetForm();
   };
 
   return (
@@ -1865,14 +2027,15 @@ function FuelSection({ vehicleId, records, setRecords, settings }) {
         <StatCard label="Ortalama tüketim" value={efficiency ? `${efficiency.per100km.toFixed(1)} L/100km` : '—'} tone={COLORS.blue} icon={TrendingUp} />
       </div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni yakıt kaydı</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Yakıt kaydını düzenle' : 'Yeni yakıt kaydı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <input className="zk-input" type="date" style={{ flex: '1 1 140px' }} value={date} onChange={(e) => setDate(e.target.value)} />
           <input className="zk-input" type="number" placeholder="Kilometre (gösterge)" style={{ flex: '1 1 160px' }} value={km} onChange={(e) => setKm(e.target.value)} />
           <input className="zk-input" type="number" placeholder="Litre" style={{ flex: '1 1 100px' }} value={liters} onChange={(e) => setLiters(e.target.value)} />
           <input className="zk-input" type="number" placeholder="Litre fiyatı" style={{ flex: '1 1 110px' }} value={pricePerLiter} onChange={(e) => setPricePerLiter(e.target.value)} />
           <input className="zk-input" placeholder="Not" style={{ flex: '2 1 160px' }} value={note} onChange={(e) => setNote(e.target.value)} />
-          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
         </div>
       </div>
       <div className="zk-card">
@@ -1889,7 +2052,10 @@ function FuelSection({ vehicleId, records, setRecords, settings }) {
                   <td>{r.liters.toFixed(1)} L</td>
                   <td>{fmtTL(r.pricePerLiter)}</td>
                   <td style={{ fontWeight: 600 }}>{fmtTL(r.totalCost)}</td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(r)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><Trash2 size={12} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1901,6 +2067,7 @@ function FuelSection({ vehicleId, records, setRecords, settings }) {
 }
 
 function DocumentsSection({ vehicleId, records, setRecords }) {
+  const [editingId, setEditingId] = useState(null);
   const [docType, setDocType] = useState(DOC_TYPES[0]);
   const [issueDate, setIssueDate] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
@@ -1908,13 +2075,21 @@ function DocumentsSection({ vehicleId, records, setRecords }) {
 
   const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => (daysUntil(a.expiryDate) ?? 9999) - (daysUntil(b.expiryDate) ?? 9999));
 
+  const resetForm = () => { setEditingId(null); setDocType(DOC_TYPES[0]); setIssueDate(''); setExpiryDate(''); setNote(''); };
+
+  const startEdit = (r) => { setEditingId(r.id); setDocType(r.docType); setIssueDate(r.issueDate || ''); setExpiryDate(r.expiryDate); setNote(r.note || ''); };
+
   const save = async () => {
     if (!expiryDate) return;
-    const record = { id: uid(), vehicleId, docType, issueDate, expiryDate, note, createdAt: Date.now() };
-    const next = [...records, record];
+    let next;
+    if (editingId) {
+      next = records.map((r) => (r.id === editingId ? { ...r, docType, issueDate, expiryDate, note } : r));
+    } else {
+      next = [...records, { id: uid(), vehicleId, docType, issueDate, expiryDate, note, createdAt: Date.now() }];
+    }
     setRecords(next);
     await storageSet('zk:vehicleDocuments', next);
-    setIssueDate(''); setExpiryDate(''); setNote('');
+    resetForm();
   };
 
   const remove = async (id) => {
@@ -1922,12 +2097,13 @@ function DocumentsSection({ vehicleId, records, setRecords }) {
     const next = records.filter((r) => r.id !== id);
     setRecords(next);
     await storageSet('zk:vehicleDocuments', next);
+    if (editingId === id) resetForm();
   };
 
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni evrak kaydı</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Evrak kaydını düzenle' : 'Yeni evrak kaydı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <select className="zk-select" style={{ flex: '1 1 150px' }} value={docType} onChange={(e) => setDocType(e.target.value)}>
             {DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -1944,7 +2120,8 @@ function DocumentsSection({ vehicleId, records, setRecords }) {
             <label className="zk-label">Not</label>
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
-          <button className="zk-btn zk-btn-gold" style={{ alignSelf: 'flex-end' }} onClick={save}><Plus size={14} /> Ekle</button>
+          <button className="zk-btn zk-btn-gold" style={{ alignSelf: 'flex-end' }} onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" style={{ alignSelf: 'flex-end' }} onClick={resetForm}>İptal</button>}
         </div>
       </div>
       <div className="zk-card">
@@ -1961,7 +2138,10 @@ function DocumentsSection({ vehicleId, records, setRecords }) {
                   <td>{fmtDate(r.expiryDate)}</td>
                   <td><ExpiryBadge dateStr={r.expiryDate} /></td>
                   <td style={{ color: COLORS.inkSoft }}>{r.note || '—'}</td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(r)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><Trash2 size={12} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1973,6 +2153,7 @@ function DocumentsSection({ vehicleId, records, setRecords }) {
 }
 
 function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, setDamages }) {
+  const [editingPolicyId, setEditingPolicyId] = useState(null);
   const [policyType, setPolicyType] = useState('Trafik');
   const [company, setCompany] = useState('');
   const [policyNo, setPolicyNo] = useState('');
@@ -1980,6 +2161,7 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
   const [endDate, setEndDate] = useState('');
   const [premium, setPremium] = useState('');
 
+  const [editingDamageId, setEditingDamageId] = useState(null);
   const [damageDate, setDamageDate] = useState(todayStr());
   const [damageDesc, setDamageDesc] = useState('');
   const [damageCost, setDamageCost] = useState('');
@@ -1989,13 +2171,20 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
   const vehicleDamages = damages.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
   const totalDamageCost = vehicleDamages.reduce((s, r) => s + r.cost, 0);
 
+  const resetPolicyForm = () => { setEditingPolicyId(null); setPolicyType('Trafik'); setCompany(''); setPolicyNo(''); setStartDate(''); setEndDate(''); setPremium(''); };
+  const startEditPolicy = (r) => { setEditingPolicyId(r.id); setPolicyType(r.policyType); setCompany(r.company); setPolicyNo(r.policyNo || ''); setStartDate(r.startDate || ''); setEndDate(r.endDate); setPremium(String(r.premium)); };
+
   const savePolicy = async () => {
     if (!company.trim() || !endDate) return;
-    const record = { id: uid(), vehicleId, policyType, company: company.trim(), policyNo, startDate, endDate, premium: parseFloat(premium) || 0, createdAt: Date.now() };
-    const next = [...insurance, record];
+    let next;
+    if (editingPolicyId) {
+      next = insurance.map((r) => (r.id === editingPolicyId ? { ...r, policyType, company: company.trim(), policyNo, startDate, endDate, premium: parseFloat(premium) || 0 } : r));
+    } else {
+      next = [...insurance, { id: uid(), vehicleId, policyType, company: company.trim(), policyNo, startDate, endDate, premium: parseFloat(premium) || 0, createdAt: Date.now() }];
+    }
     setInsurance(next);
     await storageSet('zk:vehicleInsurance', next);
-    setCompany(''); setPolicyNo(''); setStartDate(''); setEndDate(''); setPremium('');
+    resetPolicyForm();
   };
 
   const removePolicy = async (id) => {
@@ -2003,16 +2192,24 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
     const next = insurance.filter((r) => r.id !== id);
     setInsurance(next);
     await storageSet('zk:vehicleInsurance', next);
+    if (editingPolicyId === id) resetPolicyForm();
   };
+
+  const resetDamageForm = () => { setEditingDamageId(null); setDamageDate(todayStr()); setDamageDesc(''); setDamageCost(''); setDamageStatus('Bekliyor'); };
+  const startEditDamage = (r) => { setEditingDamageId(r.id); setDamageDate(r.date); setDamageDesc(r.description); setDamageCost(String(r.cost)); setDamageStatus(r.status); };
 
   const saveDamage = async () => {
     const c = parseFloat(damageCost);
     if (!damageDesc.trim()) return;
-    const record = { id: uid(), vehicleId, date: damageDate, description: damageDesc.trim(), cost: c || 0, status: damageStatus, createdAt: Date.now() };
-    const next = [...damages, record];
+    let next;
+    if (editingDamageId) {
+      next = damages.map((r) => (r.id === editingDamageId ? { ...r, date: damageDate, description: damageDesc.trim(), cost: c || 0, status: damageStatus } : r));
+    } else {
+      next = [...damages, { id: uid(), vehicleId, date: damageDate, description: damageDesc.trim(), cost: c || 0, status: damageStatus, createdAt: Date.now() }];
+    }
     setDamages(next);
     await storageSet('zk:vehicleDamage', next);
-    setDamageDesc(''); setDamageCost('');
+    resetDamageForm();
   };
 
   const removeDamage = async (id) => {
@@ -2020,12 +2217,13 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
     const next = damages.filter((r) => r.id !== id);
     setDamages(next);
     await storageSet('zk:vehicleDamage', next);
+    if (editingDamageId === id) resetDamageForm();
   };
 
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni poliçe ekle</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingPolicyId ? 'Poliçeyi düzenle' : 'Yeni poliçe ekle'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           <select className="zk-select" style={{ flex: '1 1 110px' }} value={policyType} onChange={(e) => setPolicyType(e.target.value)}>
             <option value="Trafik">Trafik</option>
@@ -2036,7 +2234,8 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           <input className="zk-input" type="number" placeholder="Prim (TL)" style={{ flex: '1 1 110px' }} value={premium} onChange={(e) => setPremium(e.target.value)} />
-          <button className="zk-btn zk-btn-gold" onClick={savePolicy}><Plus size={14} /> Ekle</button>
+          <button className="zk-btn zk-btn-gold" onClick={savePolicy}>{editingPolicyId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingPolicyId && <button className="zk-btn zk-btn-secondary" onClick={resetPolicyForm}>İptal</button>}
         </div>
         {vehiclePolicies.length === 0 ? (
           <div className="zk-empty">Poliçe kaydı yok.</div>
@@ -2051,7 +2250,10 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
                   <td>{fmtDate(r.endDate)}</td>
                   <td><ExpiryBadge dateStr={r.endDate} /></td>
                   <td>{fmtTL(r.premium)}</td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removePolicy(r.id)}><X size={12} /></button></td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEditPolicy(r)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removePolicy(r.id)}><Trash2 size={12} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2065,7 +2267,7 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
       </div>
 
       <div className="zk-card">
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni hasar kaydı</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingDamageId ? 'Hasar kaydını düzenle' : 'Yeni hasar kaydı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={damageDate} onChange={(e) => setDamageDate(e.target.value)} />
           <input className="zk-input" placeholder="Açıklama" style={{ flex: '2 1 200px' }} value={damageDesc} onChange={(e) => setDamageDesc(e.target.value)} />
@@ -2075,7 +2277,8 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
             <option value="Onarımda">Onarımda</option>
             <option value="Onarıldı">Onarıldı</option>
           </select>
-          <button className="zk-btn zk-btn-gold" onClick={saveDamage}><Plus size={14} /> Ekle</button>
+          <button className="zk-btn zk-btn-gold" onClick={saveDamage}>{editingDamageId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingDamageId && <button className="zk-btn zk-btn-secondary" onClick={resetDamageForm}>İptal</button>}
         </div>
         {vehicleDamages.length === 0 ? (
           <div className="zk-empty">Hasar kaydı yok.</div>
@@ -2091,7 +2294,10 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
                   <td>
                     <span className={`zk-badge ${r.status === 'Onarıldı' ? 'zk-badge-olive' : r.status === 'Onarımda' ? 'zk-badge-gold' : 'zk-badge-red'}`}>{r.status}</span>
                   </td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removeDamage(r.id)}><X size={12} /></button></td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEditDamage(r)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removeDamage(r.id)}><Trash2 size={12} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2103,6 +2309,7 @@ function InsuranceDamageSection({ vehicleId, insurance, setInsurance, damages, s
 }
 
 function FinesSection({ vehicleId, records, setRecords }) {
+  const [editingId, setEditingId] = useState(null);
   const [date, setDate] = useState(todayStr());
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -2112,14 +2319,21 @@ function FinesSection({ vehicleId, records, setRecords }) {
   const totalAmount = vehicleRecords.reduce((s, r) => s + r.amount, 0);
   const unpaidAmount = vehicleRecords.filter((r) => !r.paid).reduce((s, r) => s + r.amount, 0);
 
+  const resetForm = () => { setEditingId(null); setDate(todayStr()); setDescription(''); setAmount(''); setDueDate(''); };
+  const startEdit = (r) => { setEditingId(r.id); setDate(r.date); setDescription(r.description); setAmount(String(r.amount)); setDueDate(r.dueDate || ''); };
+
   const save = async () => {
     const a = parseFloat(amount);
     if (!description.trim() || !a || a <= 0) return;
-    const record = { id: uid(), vehicleId, date, description: description.trim(), amount: a, dueDate, paid: false, createdAt: Date.now() };
-    const next = [...records, record];
+    let next;
+    if (editingId) {
+      next = records.map((r) => (r.id === editingId ? { ...r, date, description: description.trim(), amount: a, dueDate } : r));
+    } else {
+      next = [...records, { id: uid(), vehicleId, date, description: description.trim(), amount: a, dueDate, paid: false, createdAt: Date.now() }];
+    }
     setRecords(next);
     await storageSet('zk:vehicleFines', next);
-    setDescription(''); setAmount(''); setDueDate('');
+    resetForm();
   };
 
   const togglePaid = async (id) => {
@@ -2133,6 +2347,7 @@ function FinesSection({ vehicleId, records, setRecords }) {
     const next = records.filter((r) => r.id !== id);
     setRecords(next);
     await storageSet('zk:vehicleFines', next);
+    if (editingId === id) resetForm();
   };
 
   return (
@@ -2142,13 +2357,14 @@ function FinesSection({ vehicleId, records, setRecords }) {
         <StatCard label="Ödenmemiş" value={fmtTL(unpaidAmount)} tone={unpaidAmount > 0 ? COLORS.red : COLORS.olive} />
       </div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni ceza kaydı</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Ceza kaydını düzenle' : 'Yeni ceza kaydı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
           <input className="zk-input" placeholder="Açıklama (örn. hız ihlali)" style={{ flex: '2 1 200px' }} value={description} onChange={(e) => setDescription(e.target.value)} />
           <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 110px' }} value={amount} onChange={(e) => setAmount(e.target.value)} />
           <input className="zk-input" type="date" placeholder="Son ödeme" style={{ flex: '1 1 130px' }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
         </div>
       </div>
       <div className="zk-card">
@@ -2169,7 +2385,10 @@ function FinesSection({ vehicleId, records, setRecords }) {
                       {r.paid ? 'Ödendi' : 'Ödenmedi'}
                     </button>
                   </td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(r)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><Trash2 size={12} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2181,6 +2400,7 @@ function FinesSection({ vehicleId, records, setRecords }) {
 }
 
 function TiresSection({ vehicleId, records, setRecords }) {
+  const [editingId, setEditingId] = useState(null);
   const [position, setPosition] = useState(TIRE_POSITIONS[0]);
   const [brand, setBrand] = useState('');
   const [installDate, setInstallDate] = useState(todayStr());
@@ -2190,13 +2410,20 @@ function TiresSection({ vehicleId, records, setRecords }) {
 
   const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
 
+  const resetForm = () => { setEditingId(null); setPosition(TIRE_POSITIONS[0]); setBrand(''); setInstallDate(todayStr()); setInstallKm(''); setStatus('Yeni'); setNote(''); };
+  const startEdit = (r) => { setEditingId(r.id); setPosition(r.position); setBrand(r.brand); setInstallDate(r.installDate); setInstallKm(String(r.installKm || '')); setStatus(r.status); setNote(r.note || ''); };
+
   const save = async () => {
     if (!brand.trim()) return;
-    const record = { id: uid(), vehicleId, position, brand: brand.trim(), installDate, installKm: parseFloat(installKm) || 0, status, note, createdAt: Date.now() };
-    const next = [...records, record];
+    let next;
+    if (editingId) {
+      next = records.map((r) => (r.id === editingId ? { ...r, position, brand: brand.trim(), installDate, installKm: parseFloat(installKm) || 0, status, note } : r));
+    } else {
+      next = [...records, { id: uid(), vehicleId, position, brand: brand.trim(), installDate, installKm: parseFloat(installKm) || 0, status, note, createdAt: Date.now() }];
+    }
     setRecords(next);
     await storageSet('zk:vehicleTires', next);
-    setBrand(''); setInstallKm(''); setNote('');
+    resetForm();
   };
 
   const remove = async (id) => {
@@ -2204,12 +2431,13 @@ function TiresSection({ vehicleId, records, setRecords }) {
     const next = records.filter((r) => r.id !== id);
     setRecords(next);
     await storageSet('zk:vehicleTires', next);
+    if (editingId === id) resetForm();
   };
 
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni lastik kaydı</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Lastik kaydını düzenle' : 'Yeni lastik kaydı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <select className="zk-select" style={{ flex: '1 1 110px' }} value={position} onChange={(e) => setPosition(e.target.value)}>
             {TIRE_POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -2221,7 +2449,8 @@ function TiresSection({ vehicleId, records, setRecords }) {
             {TIRE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <input className="zk-input" placeholder="Not" style={{ flex: '1 1 120px' }} value={note} onChange={(e) => setNote(e.target.value)} />
-          <button className="zk-btn zk-btn-gold" onClick={save}><Plus size={14} /> Ekle</button>
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
         </div>
       </div>
       <div className="zk-card">
@@ -2241,7 +2470,10 @@ function TiresSection({ vehicleId, records, setRecords }) {
                     <span className={`zk-badge ${r.status === 'Değişmeli' ? 'zk-badge-red' : r.status === 'Orta' ? 'zk-badge-gold' : 'zk-badge-olive'}`}>{r.status}</span>
                   </td>
                   <td style={{ color: COLORS.inkSoft }}>{r.note || '—'}</td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><X size={12} /></button></td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(r)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><Trash2 size={12} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2891,6 +3123,684 @@ function AiAssistantTab({ farmers, purchases, sales, expenses, payments, buyers,
       {section === 'anomaly' && <AnomalySection purchases={purchases} farmers={farmers} />}
       {section === 'risk' && <CariRiskSection farmers={farmers} purchases={purchases} payments={payments} />}
       {section === 'archive' && loadedReports && <ReportArchiveSection reports={reports} setReports={setReports} />}
+    </div>
+  );
+}
+
+// ---------- Kasa & Çuval Envanteri (fiziksel ambalaj takibi — nakit kasadan farklı) ----------
+
+const CRATE_MOVEMENT_TYPES = [
+  { key: 'kasaVerildi', label: 'Kasa verildi', sign: 1, unit: 'kasa' },
+  { key: 'kasaIade', label: 'Kasa iade alındı', sign: -1, unit: 'kasa' },
+  { key: 'cuvalVerildi', label: 'Çuval verildi', sign: 1, unit: 'çuval' },
+  { key: 'cuvalIade', label: 'Çuval iade alındı', sign: -1, unit: 'çuval' },
+];
+
+function CrateInventoryTab({ farmers, movements, setMovements }) {
+  const [selectedFarmerId, setSelectedFarmerId] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [date, setDate] = useState(todayStr());
+  const [type, setType] = useState('kasaVerildi');
+  const [quantity, setQuantity] = useState('');
+  const [deposit, setDeposit] = useState('');
+  const [note, setNote] = useState('');
+
+  const balances = useMemo(() => {
+    const map = {};
+    farmers.forEach((f) => { map[f.id] = { kasa: 0, cuval: 0 }; });
+    movements.forEach((m) => {
+      if (!map[m.farmerId]) return;
+      const def = CRATE_MOVEMENT_TYPES.find((t) => t.key === m.type);
+      if (!def) return;
+      const field = def.unit === 'kasa' ? 'kasa' : 'cuval';
+      map[m.farmerId][field] += def.sign * m.quantity;
+    });
+    return map;
+  }, [farmers, movements]);
+
+  const totalOutstandingKasa = Object.values(balances).reduce((s, b) => s + Math.max(b.kasa, 0), 0);
+  const totalOutstandingCuval = Object.values(balances).reduce((s, b) => s + Math.max(b.cuval, 0), 0);
+
+  const resetForm = () => { setEditingId(null); setDate(todayStr()); setType('kasaVerildi'); setQuantity(''); setDeposit(''); setNote(''); };
+  const startEdit = (m) => { setEditingId(m.id); setSelectedFarmerId(m.farmerId); setDate(m.date); setType(m.type); setQuantity(String(m.quantity)); setDeposit(m.deposit ? String(m.deposit) : ''); setNote(m.note || ''); };
+
+  const save = async () => {
+    const q = parseFloat(quantity);
+    if (!selectedFarmerId || !q || q <= 0) return;
+    let next;
+    if (editingId) {
+      next = movements.map((m) => (m.id === editingId ? { ...m, farmerId: selectedFarmerId, date, type, quantity: q, deposit: parseFloat(deposit) || 0, note } : m));
+    } else {
+      next = [...movements, { id: uid(), farmerId: selectedFarmerId, date, type, quantity: q, deposit: parseFloat(deposit) || 0, note, createdAt: Date.now() }];
+    }
+    setMovements(next);
+    await storageSet('zk:crateMovements', next);
+    resetForm();
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Bu kasa/çuval hareketini silmek istediğinize emin misiniz?')) return;
+    const next = movements.filter((m) => m.id !== id);
+    setMovements(next);
+    await storageSet('zk:crateMovements', next);
+    if (editingId === id) resetForm();
+  };
+
+  const farmerList = useMemo(() => {
+    return farmers.map((f) => ({ farmer: f, balance: balances[f.id] || { kasa: 0, cuval: 0 } })).filter((r) => r.balance.kasa !== 0 || r.balance.cuval !== 0 || movements.some((m) => m.farmerId === f.id));
+  }, [farmers, balances, movements]);
+
+  const farmerMovements = selectedFarmerId
+    ? movements.filter((m) => m.farmerId === selectedFarmerId).sort((a, b) => b.createdAt - a.createdAt)
+    : [];
+
+  return (
+    <div>
+      <div className="zk-h1">Kasa & Çuval Envanteri</div>
+      <div className="zk-h1-sub">Çiftçilere verilen/iade alınan kasa ve çuvalların takibi (nakit kasadan farklı, fiziksel ambalaj sayımı)</div>
+
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
+        <StatCard label="Dışarıda olan kasa" value={`${totalOutstandingKasa} adet`} tone={COLORS.blue} icon={Package2} />
+        <StatCard label="Dışarıda olan çuval" value={`${totalOutstandingCuval} adet`} tone={COLORS.gold} icon={Package2} />
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Hareketi düzenle' : 'Yeni kasa/çuval hareketi'}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <select className="zk-select" style={{ flex: '2 1 180px' }} value={selectedFarmerId} onChange={(e) => setSelectedFarmerId(e.target.value)}>
+            <option value="">Çiftçi seçin...</option>
+            {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+          <select className="zk-select" style={{ flex: '1 1 160px' }} value={type} onChange={(e) => setType(e.target.value)}>
+            {CRATE_MOVEMENT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
+          <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Adet" style={{ flex: '1 1 90px' }} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Depozito (TL, opsiyonel)" style={{ flex: '1 1 140px' }} value={deposit} onChange={(e) => setDeposit(e.target.value)} />
+          <input className="zk-input" placeholder="Not" style={{ flex: '1 1 140px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
+        </div>
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Çiftçi bazında bakiye — kimde kaç kasa/çuval var</div>
+        {farmerList.length === 0 ? (
+          <div className="zk-empty">Henüz kasa/çuval hareketi yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Çiftçi</th><th>Elindeki kasa</th><th>Elindeki çuval</th></tr></thead>
+            <tbody>
+              {farmerList.map(({ farmer, balance }) => (
+                <tr key={farmer.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedFarmerId(farmer.id)}>
+                  <td>{farmer.name}</td>
+                  <td><span className={`zk-badge ${balance.kasa > 0 ? 'zk-badge-blue' : 'zk-badge-olive'}`}>{balance.kasa} adet</span></td>
+                  <td><span className={`zk-badge ${balance.cuval > 0 ? 'zk-badge-gold' : 'zk-badge-olive'}`}>{balance.cuval} adet</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {selectedFarmerId && (
+        <div className="zk-card">
+          <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>
+            {farmers.find((f) => f.id === selectedFarmerId)?.name} — hareket geçmişi
+          </div>
+          {farmerMovements.length === 0 ? (
+            <div className="zk-empty">Hareket yok.</div>
+          ) : (
+            <table className="zk-table">
+              <thead><tr><th>Tarih</th><th>Hareket</th><th>Adet</th><th>Depozito</th><th>Not</th><th></th></tr></thead>
+              <tbody>
+                {farmerMovements.map((m) => {
+                  const def = CRATE_MOVEMENT_TYPES.find((t) => t.key === m.type);
+                  return (
+                    <tr key={m.id}>
+                      <td>{fmtDate(m.date)}</td>
+                      <td><span className={`zk-badge ${def?.sign > 0 ? 'zk-badge-blue' : 'zk-badge-olive'}`}>{def?.label}</span></td>
+                      <td>{m.quantity}</td>
+                      <td>{m.deposit ? fmtTL(m.deposit) : '—'}</td>
+                      <td style={{ color: COLORS.inkSoft }}>{m.note || '—'}</td>
+                      <td style={{ display: 'flex', gap: 6 }}>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(m)}><Pencil size={12} /></button>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(m.id)}><Trash2 size={12} /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Laboratuvar (randıman / asit / nem sonuçları) ----------
+
+function LabTab({ farmers, purchases, results, setResults }) {
+  const [editingId, setEditingId] = useState(null);
+  const [farmerId, setFarmerId] = useState('');
+  const [purchaseId, setPurchaseId] = useState('');
+  const [date, setDate] = useState(todayStr());
+  const [randiman, setRandiman] = useState('');
+  const [asit, setAsit] = useState('');
+  const [nem, setNem] = useState('');
+  const [kalite, setKalite] = useState('');
+  const [note, setNote] = useState('');
+
+  const farmerPurchases = farmerId ? purchases.filter((p) => p.farmerId === farmerId).sort((a, b) => b.createdAt - a.createdAt) : [];
+
+  const sortedResults = [...results].sort((a, b) => b.createdAt - a.createdAt);
+  const avgRandiman = results.length ? mean(results.map((r) => r.randiman).filter((v) => v > 0)) : 0;
+  const avgAsit = results.length ? mean(results.map((r) => r.asit).filter((v) => v > 0)) : 0;
+
+  const resetForm = () => { setEditingId(null); setFarmerId(''); setPurchaseId(''); setDate(todayStr()); setRandiman(''); setAsit(''); setNem(''); setKalite(''); setNote(''); };
+  const startEdit = (r) => { setEditingId(r.id); setFarmerId(r.farmerId || ''); setPurchaseId(r.purchaseId || ''); setDate(r.date); setRandiman(String(r.randiman || '')); setAsit(String(r.asit || '')); setNem(String(r.nem || '')); setKalite(r.kalite || ''); setNote(r.note || ''); };
+
+  const save = async () => {
+    if (!farmerId) return;
+    let next;
+    const data = {
+      farmerId, purchaseId: purchaseId || null, date,
+      randiman: parseFloat(randiman) || 0, asit: parseFloat(asit) || 0, nem: parseFloat(nem) || 0,
+      kalite, note,
+    };
+    if (editingId) {
+      next = results.map((r) => (r.id === editingId ? { ...r, ...data } : r));
+    } else {
+      next = [...results, { id: uid(), ...data, createdAt: Date.now() }];
+    }
+    setResults(next);
+    await storageSet('zk:labResults', next);
+    resetForm();
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Bu laboratuvar sonucunu silmek istediğinize emin misiniz?')) return;
+    const next = results.filter((r) => r.id !== id);
+    setResults(next);
+    await storageSet('zk:labResults', next);
+    if (editingId === id) resetForm();
+  };
+
+  return (
+    <div>
+      <div className="zk-h1">Laboratuvar</div>
+      <div className="zk-h1-sub">Randıman, asit ve nem sonuçlarının kaydı — istenirse bir alım kaydına bağlanabilir</div>
+
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
+        <StatCard label="Ortalama randıman" value={avgRandiman ? `%${avgRandiman.toFixed(1)}` : '—'} tone={COLORS.olive} icon={FlaskConical} />
+        <StatCard label="Ortalama asit" value={avgAsit ? `%${avgAsit.toFixed(2)}` : '—'} tone={COLORS.blue} />
+        <StatCard label="Toplam sonuç" value={results.length} />
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Sonucu düzenle' : 'Yeni laboratuvar sonucu'}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          <select className="zk-select" style={{ flex: '1 1 160px' }} value={farmerId} onChange={(e) => { setFarmerId(e.target.value); setPurchaseId(''); }}>
+            <option value="">Çiftçi seçin...</option>
+            {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+          <select className="zk-select" style={{ flex: '1 1 160px' }} value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)} disabled={!farmerId}>
+            <option value="">İlişkili alım (opsiyonel)</option>
+            {farmerPurchases.map((p) => <option key={p.id} value={p.id}>#{p.makbuzNo} · {fmtDate(p.date)} · {fmtKg(p.netKg)}</option>)}
+          </select>
+          <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <input className="zk-input" type="number" placeholder="Randıman (%)" style={{ flex: '1 1 120px' }} value={randiman} onChange={(e) => setRandiman(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Asit (%)" style={{ flex: '1 1 100px' }} value={asit} onChange={(e) => setAsit(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Nem (%)" style={{ flex: '1 1 100px' }} value={nem} onChange={(e) => setNem(e.target.value)} />
+          <input className="zk-input" placeholder="Kalite notu" style={{ flex: '1 1 130px' }} value={kalite} onChange={(e) => setKalite(e.target.value)} />
+          <input className="zk-input" placeholder="Not" style={{ flex: '1 1 130px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
+        </div>
+      </div>
+
+      <div className="zk-card">
+        {sortedResults.length === 0 ? (
+          <div className="zk-empty">Henüz laboratuvar sonucu yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>Çiftçi</th><th>Alım</th><th>Randıman</th><th>Asit</th><th>Nem</th><th>Kalite</th><th></th></tr></thead>
+            <tbody>
+              {sortedResults.map((r) => {
+                const f = farmers.find((x) => x.id === r.farmerId);
+                const p = purchases.find((x) => x.id === r.purchaseId);
+                return (
+                  <tr key={r.id}>
+                    <td>{fmtDate(r.date)}</td>
+                    <td>{f ? f.name : '—'}</td>
+                    <td style={{ color: COLORS.inkSoft }}>{p ? `#${p.makbuzNo}` : '—'}</td>
+                    <td>{r.randiman ? `%${r.randiman}` : '—'}</td>
+                    <td>{r.asit ? `%${r.asit}` : '—'}</td>
+                    <td>{r.nem ? `%${r.nem}` : '—'}</td>
+                    <td>{r.kalite ? <span className="zk-badge zk-badge-blue">{r.kalite}</span> : '—'}</td>
+                    <td style={{ display: 'flex', gap: 6 }}>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(r)}><Pencil size={12} /></button>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(r.id)}><Trash2 size={12} /></button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Muhasebe (banka hesapları + çek/senet takibi) ----------
+
+function BankAccountsSection({ accounts, setAccounts }) {
+  const [editingId, setEditingId] = useState(null);
+  const [bankName, setBankName] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [iban, setIban] = useState('');
+  const [balance, setBalance] = useState('');
+
+  const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
+
+  const resetForm = () => { setEditingId(null); setBankName(''); setAccountName(''); setIban(''); setBalance(''); };
+  const startEdit = (a) => { setEditingId(a.id); setBankName(a.bankName); setAccountName(a.accountName || ''); setIban(a.iban || ''); setBalance(String(a.balance)); };
+
+  const save = async () => {
+    if (!bankName.trim()) return;
+    let next;
+    const data = { bankName: bankName.trim(), accountName: accountName.trim(), iban: iban.trim(), balance: parseFloat(balance) || 0 };
+    if (editingId) {
+      next = accounts.map((a) => (a.id === editingId ? { ...a, ...data } : a));
+    } else {
+      next = [...accounts, { id: uid(), ...data, createdAt: Date.now() }];
+    }
+    setAccounts(next);
+    await storageSet('zk:bankAccounts', next);
+    resetForm();
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Bu banka hesabını silmek istediğinize emin misiniz?')) return;
+    const next = accounts.filter((a) => a.id !== id);
+    setAccounts(next);
+    await storageSet('zk:bankAccounts', next);
+    if (editingId === id) resetForm();
+  };
+
+  return (
+    <div>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Toplam banka bakiyesi" value={fmtTL(totalBalance)} tone={COLORS.olive} icon={Landmark} />
+        <StatCard label="Hesap sayısı" value={accounts.length} />
+      </div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Hesabı düzenle' : 'Yeni banka hesabı'}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <input className="zk-input" placeholder="Banka adı" style={{ flex: '1 1 140px' }} value={bankName} onChange={(e) => setBankName(e.target.value)} />
+          <input className="zk-input" placeholder="Hesap adı (opsiyonel)" style={{ flex: '1 1 140px' }} value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+          <input className="zk-input" placeholder="IBAN (opsiyonel)" style={{ flex: '2 1 200px' }} value={iban} onChange={(e) => setIban(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Bakiye (TL)" style={{ flex: '1 1 120px' }} value={balance} onChange={(e) => setBalance(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
+        </div>
+      </div>
+      <div className="zk-card">
+        {accounts.length === 0 ? (
+          <div className="zk-empty">Henüz banka hesabı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Banka</th><th>Hesap adı</th><th>IBAN</th><th>Bakiye</th><th></th></tr></thead>
+            <tbody>
+              {accounts.map((a) => (
+                <tr key={a.id}>
+                  <td>{a.bankName}</td>
+                  <td style={{ color: COLORS.inkSoft }}>{a.accountName || '—'}</td>
+                  <td style={{ fontSize: 11, color: COLORS.inkSoft }}>{a.iban || '—'}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(a.balance)}</td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(a)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(a.id)}><Trash2 size={12} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChecksNotesSection({ items, setItems }) {
+  const [editingId, setEditingId] = useState(null);
+  const [type, setType] = useState('çek');
+  const [direction, setDirection] = useState('alınan');
+  const [party, setParty] = useState('');
+  const [amount, setAmount] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [status, setStatus] = useState('Bekliyor');
+  const [note, setNote] = useState('');
+
+  const totalPending = items.filter((i) => i.status === 'Bekliyor').reduce((s, i) => s + (i.direction === 'alınan' ? i.amount : -i.amount), 0);
+
+  const resetForm = () => { setEditingId(null); setType('çek'); setDirection('alınan'); setParty(''); setAmount(''); setDueDate(''); setStatus('Bekliyor'); setNote(''); };
+  const startEdit = (i) => { setEditingId(i.id); setType(i.type); setDirection(i.direction); setParty(i.party); setAmount(String(i.amount)); setDueDate(i.dueDate); setStatus(i.status); setNote(i.note || ''); };
+
+  const save = async () => {
+    const a = parseFloat(amount);
+    if (!party.trim() || !a || a <= 0 || !dueDate) return;
+    let next;
+    const data = { type, direction, party: party.trim(), amount: a, dueDate, status, note };
+    if (editingId) {
+      next = items.map((i) => (i.id === editingId ? { ...i, ...data } : i));
+    } else {
+      next = [...items, { id: uid(), ...data, createdAt: Date.now() }];
+    }
+    setItems(next);
+    await storageSet('zk:checksNotes', next);
+    resetForm();
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Bu çek/senet kaydını silmek istediğinize emin misiniz?')) return;
+    const next = items.filter((i) => i.id !== id);
+    setItems(next);
+    await storageSet('zk:checksNotes', next);
+    if (editingId === id) resetForm();
+  };
+
+  const sorted = [...items].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+
+  return (
+    <div>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
+        <StatCard label="Bekleyen net tutar" value={fmtTL(totalPending)} tone={totalPending >= 0 ? COLORS.olive : COLORS.red} icon={CreditCard} />
+        <StatCard label="Toplam kayıt" value={items.length} />
+      </div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Kaydı düzenle' : 'Yeni çek/senet kaydı'}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <select className="zk-select" style={{ flex: '1 1 90px' }} value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="çek">Çek</option>
+            <option value="senet">Senet</option>
+          </select>
+          <select className="zk-select" style={{ flex: '1 1 110px' }} value={direction} onChange={(e) => setDirection(e.target.value)}>
+            <option value="alınan">Alınan</option>
+            <option value="verilen">Verilen</option>
+          </select>
+          <input className="zk-input" placeholder="Kimden/kime" style={{ flex: '2 1 160px' }} value={party} onChange={(e) => setParty(e.target.value)} />
+          <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 110px' }} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="zk-input" type="date" placeholder="Vade" style={{ flex: '1 1 130px' }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <select className="zk-select" style={{ flex: '1 1 130px' }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="Bekliyor">Bekliyor</option>
+            <option value="Tahsil Edildi">Tahsil edildi</option>
+            <option value="Karşılıksız">Karşılıksız</option>
+          </select>
+          <input className="zk-input" placeholder="Not" style={{ flex: '1 1 120px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
+          {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
+        </div>
+      </div>
+      <div className="zk-card">
+        {sorted.length === 0 ? (
+          <div className="zk-empty">Henüz çek/senet kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>Tür</th><th>Yön</th><th>Kimden/kime</th><th>Tutar</th><th>Vade</th><th>Durum</th><th></th></tr></thead>
+            <tbody>
+              {sorted.map((i) => (
+                <tr key={i.id}>
+                  <td><span className="zk-badge zk-badge-blue">{i.type === 'çek' ? 'Çek' : 'Senet'}</span></td>
+                  <td>{i.direction === 'alınan' ? 'Alınan' : 'Verilen'}</td>
+                  <td>{i.party}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(i.amount)}</td>
+                  <td><ExpiryBadge dateStr={i.dueDate} /></td>
+                  <td>
+                    <span className={`zk-badge ${i.status === 'Tahsil Edildi' ? 'zk-badge-olive' : i.status === 'Karşılıksız' ? 'zk-badge-red' : 'zk-badge-gold'}`}>{i.status}</span>
+                  </td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(i)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(i.id)}><Trash2 size={12} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNotes }) {
+  const [section, setSection] = useState('banka');
+  return (
+    <div>
+      <div className="zk-h1">Muhasebe</div>
+      <div className="zk-h1-sub">Banka hesapları ve çek/senet takibi</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
+        <button className={`zk-btn ${section === 'banka' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('banka')}><Landmark size={13} /> Banka Hesapları</button>
+        <button className={`zk-btn ${section === 'cek' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('cek')}><CreditCard size={13} /> Çek & Senet</button>
+      </div>
+      {section === 'banka' && <BankAccountsSection accounts={bankAccounts} setAccounts={setBankAccounts} />}
+      {section === 'cek' && <ChecksNotesSection items={checksNotes} setItems={setChecksNotes} />}
+    </div>
+  );
+}
+
+// ---------- Sevkiyat / İrsaliye ----------
+
+const SHIPMENT_STATUSES = ['Yükleniyor', 'Yolda', 'Teslim Edildi'];
+
+function ShipmentsTab({ vehicles, personnel, buyers, shipments, setShipments }) {
+  const [editingId, setEditingId] = useState(null);
+  const [vehicleId, setVehicleId] = useState('');
+  const [driverName, setDriverName] = useState('');
+  const [buyerId, setBuyerId] = useState('');
+  const [date, setDate] = useState(todayStr());
+  const [loadingDate, setLoadingDate] = useState(todayStr());
+  const [unloadingDate, setUnloadingDate] = useState('');
+  const [waybillNo, setWaybillNo] = useState('');
+  const [kg, setKg] = useState('');
+  const [status, setStatus] = useState('Yükleniyor');
+  const [note, setNote] = useState('');
+  const [photo, setPhoto] = useState('');
+  const [gps, setGps] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState('');
+
+  const handleVehicleSelect = (id) => {
+    setVehicleId(id);
+    const v = vehicles.find((x) => x.id === id);
+    if (v && v.defaultPersonnelId) {
+      const p = personnel.find((x) => x.id === v.defaultPersonnelId);
+      if (p) setDriverName(p.name);
+    }
+  };
+
+  const captureGps = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus('Tarayıcınız konum almayı desteklemiyor.');
+      return;
+    }
+    setGpsStatus('Konum alınıyor...');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsStatus('Konum alındı ✓');
+      },
+      () => setGpsStatus('Konum alınamadı, tarayıcı izni gerekebilir.'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handlePhotoUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 700;
+        let w = img.width, h = img.height;
+        if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
+        else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        setPhoto(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const resetForm = () => {
+    setEditingId(null); setVehicleId(''); setDriverName(''); setBuyerId(''); setDate(todayStr());
+    setLoadingDate(todayStr()); setUnloadingDate(''); setWaybillNo(''); setKg(''); setStatus('Yükleniyor');
+    setNote(''); setPhoto(''); setGps(null); setGpsStatus('');
+  };
+
+  const startEdit = (s) => {
+    setEditingId(s.id); setVehicleId(s.vehicleId || ''); setDriverName(s.driverName || ''); setBuyerId(s.buyerId || '');
+    setDate(s.date); setLoadingDate(s.loadingDate || ''); setUnloadingDate(s.unloadingDate || ''); setWaybillNo(s.waybillNo || '');
+    setKg(String(s.kg || '')); setStatus(s.status); setNote(s.note || ''); setPhoto(s.photo || ''); setGps(s.gps || null);
+  };
+
+  const save = async () => {
+    if (!vehicleId || !buyerId) return;
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    const buyer = buyers.find((b) => b.id === buyerId);
+    const data = {
+      vehicleId, vehiclePlaka: vehicle ? vehicle.plaka : '', driverName,
+      buyerId, buyerName: buyer ? buyer.name : '',
+      date, loadingDate, unloadingDate, waybillNo, kg: parseFloat(kg) || 0, status, note, photo, gps,
+    };
+    let next;
+    if (editingId) {
+      next = shipments.map((s) => (s.id === editingId ? { ...s, ...data } : s));
+    } else {
+      next = [...shipments, { id: uid(), ...data, createdAt: Date.now() }];
+    }
+    setShipments(next);
+    await storageSet('zk:shipments', next);
+    resetForm();
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Bu sevkiyat kaydını silmek istediğinize emin misiniz?')) return;
+    const next = shipments.filter((s) => s.id !== id);
+    setShipments(next);
+    await storageSet('zk:shipments', next);
+    if (editingId === id) resetForm();
+  };
+
+  const sorted = [...shipments].sort((a, b) => b.createdAt - a.createdAt);
+  const totalKg = shipments.reduce((s, x) => s + x.kg, 0);
+  const activeCount = shipments.filter((s) => s.status !== 'Teslim Edildi').length;
+
+  return (
+    <div>
+      <div className="zk-h1">Sevkiyat & İrsaliye</div>
+      <div className="zk-h1-sub">Araç ile alıcıya yapılan teslimatların takibi — yükleme, boşaltma, konum ve teslim durumu</div>
+
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
+        <StatCard label="Toplam sevkiyat" value={shipments.length} icon={PackageCheck} />
+        <StatCard label="Devam eden" value={activeCount} tone={COLORS.gold} />
+        <StatCard label="Toplam taşınan" value={fmtKg(totalKg)} tone={COLORS.olive} />
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Sevkiyatı düzenle' : 'Yeni sevkiyat'}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          <select className="zk-select" style={{ flex: '1 1 130px' }} value={vehicleId} onChange={(e) => handleVehicleSelect(e.target.value)}>
+            <option value="">Araç seçin...</option>
+            {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
+          </select>
+          <input className="zk-input" placeholder="Şoför adı" style={{ flex: '1 1 140px' }} value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+          <select className="zk-select" style={{ flex: '1 1 160px' }} value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
+            <option value="">Alıcı / fabrika seçin...</option>
+            {buyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <input className="zk-input" placeholder="İrsaliye no" style={{ flex: '1 1 120px' }} value={waybillNo} onChange={(e) => setWaybillNo(e.target.value)} />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          <div style={{ flex: '1 1 130px' }}>
+            <label className="zk-label">Yükleme tarihi</label>
+            <input className="zk-input" type="date" value={loadingDate} onChange={(e) => setLoadingDate(e.target.value)} />
+          </div>
+          <div style={{ flex: '1 1 130px' }}>
+            <label className="zk-label">Boşaltma tarihi</label>
+            <input className="zk-input" type="date" value={unloadingDate} onChange={(e) => setUnloadingDate(e.target.value)} />
+          </div>
+          <div style={{ flex: '1 1 100px' }}>
+            <label className="zk-label">Kg</label>
+            <input className="zk-input" type="number" value={kg} onChange={(e) => setKg(e.target.value)} />
+          </div>
+          <div style={{ flex: '1 1 130px' }}>
+            <label className="zk-label">Durum</label>
+            <select className="zk-select" value={status} onChange={(e) => setStatus(e.target.value)}>
+              {SHIPMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+          <input className="zk-input" placeholder="Not" style={{ flex: '2 1 180px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-secondary" onClick={captureGps}><MapPin size={13} /> Konum al</button>
+          {gps && (
+            <a href={`https://maps.google.com/?q=${gps.lat},${gps.lng}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, color: COLORS.blue }}>
+              <Navigation size={11} style={{ verticalAlign: 'middle' }} /> Haritada gör
+            </a>
+          )}
+          {gpsStatus && <span style={{ fontSize: 11, color: COLORS.inkSoft }}>{gpsStatus}</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <label className="zk-btn zk-btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
+            <Upload size={13} /> {photo ? 'Fotoğrafı değiştir' : 'Sevkiyat fotoğrafı ekle'}
+            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => { if (e.target.files[0]) handlePhotoUpload(e.target.files[0]); e.target.value = ''; }} />
+          </label>
+          {photo && <img src={photo} alt="Sevkiyat fotoğrafı" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: `1px solid ${COLORS.border}` }} />}
+        </div>
+        <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Kaydet</>}</button>
+        {editingId && <button className="zk-btn zk-btn-secondary" style={{ marginLeft: 8 }} onClick={resetForm}>İptal</button>}
+      </div>
+
+      <div className="zk-card">
+        {sorted.length === 0 ? (
+          <div className="zk-empty"><PackageCheck size={26} className="zk-empty-icon" /><br/>Henüz sevkiyat kaydı yok.</div>
+        ) : (
+          <table className="zk-table">
+            <thead><tr><th>İrsaliye</th><th>Araç</th><th>Alıcı</th><th>Kg</th><th>Durum</th><th>Konum</th><th></th></tr></thead>
+            <tbody>
+              {sorted.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.waybillNo || '—'}<div style={{ fontSize: 10.5, color: COLORS.inkSoft }}>{fmtDate(s.date)}</div></td>
+                  <td>{s.vehiclePlaka}<div style={{ fontSize: 10.5, color: COLORS.inkSoft }}>{s.driverName}</div></td>
+                  <td>{s.buyerName}</td>
+                  <td>{fmtKg(s.kg)}</td>
+                  <td>
+                    <span className={`zk-badge ${s.status === 'Teslim Edildi' ? 'zk-badge-olive' : s.status === 'Yolda' ? 'zk-badge-gold' : 'zk-badge-blue'}`}>{s.status}</span>
+                  </td>
+                  <td>
+                    {s.gps ? (
+                      <a href={`https://maps.google.com/?q=${s.gps.lat},${s.gps.lng}`} target="_blank" rel="noopener noreferrer">
+                        <MapPin size={14} color={COLORS.blue} />
+                      </a>
+                    ) : '—'}
+                  </td>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(s)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(s.id)}><Trash2 size={12} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
@@ -3772,7 +4682,79 @@ function TaxRateList({ rates, onChange }) {
 
 const ACCENT_PRESETS = ['#B3892B', '#3B5E73', '#A13D2E', '#5C6B44', '#7A4F9E', '#B34A6B'];
 
-function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup, onRestore, restoreStatus }) {
+function ExcelFarmerImport({ farmers, setFarmers }) {
+  const [status, setStatus] = useState('');
+  const [previewCount, setPreviewCount] = useState(null);
+
+  const handleFile = async (file) => {
+    setStatus('Okunuyor...');
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      const findCol = (row, candidates) => {
+        const keys = Object.keys(row);
+        for (const c of candidates) {
+          const found = keys.find((k) => k.toLowerCase().trim() === c);
+          if (found) return row[found];
+        }
+        return '';
+      };
+
+      const newFarmers = rows
+        .map((row) => {
+          const name = String(findCol(row, ['ad soyad', 'isim', 'ad', 'name'])).trim();
+          if (!name) return null;
+          return {
+            id: uid(),
+            name,
+            phone: String(findCol(row, ['telefon', 'phone'])).trim(),
+            tcNo: String(findCol(row, ['tc no', 'tc kimlik no', 'tckimlikno', 'tc'])).trim(),
+            address: String(findCol(row, ['adres', 'address'])).trim(),
+            bagkurStatus: false,
+            createdAt: Date.now(),
+          };
+        })
+        .filter(Boolean);
+
+      if (newFarmers.length === 0) {
+        setStatus('Uygun satır bulunamadı. "Ad Soyad" sütunu olduğundan emin olun.');
+        setPreviewCount(null);
+        return;
+      }
+
+      const next = [...farmers, ...newFarmers];
+      setFarmers(next);
+      await storageSet('zk:farmers', next);
+      setPreviewCount(newFarmers.length);
+      setStatus(`${newFarmers.length} çiftçi başarıyla eklendi.`);
+    } catch (e) {
+      setStatus('Dosya okunamadı, geçerli bir Excel (.xlsx) dosyası olduğundan emin olun.');
+      setPreviewCount(null);
+    }
+  };
+
+  return (
+    <div>
+      <label className="zk-btn zk-btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
+        <Upload size={14} /> Excel dosyası seç (.xlsx)
+        <input
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          style={{ display: 'none' }}
+          onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ''; }}
+        />
+      </label>
+      {status && (
+        <div style={{ fontSize: 12, color: previewCount ? COLORS.olive : COLORS.red, marginTop: 10 }}>{status}</div>
+      )}
+    </div>
+  );
+}
+
+function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup, onRestore, restoreStatus, farmers, setFarmers, allData }) {
   const [tab, setTab] = useState('genel');
 
   const [currencySymbol, setCurrencySymbol] = useState(settings.currencySymbol || '₺');
@@ -4151,23 +5133,71 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
         )}
 
         {tab === 'yedek' && (
-          <div className="zk-card">
-            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Yedekleme</div>
-            <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 14 }}>Tüm verileri (çiftçiler, alımlar, satışlar, giderler, ayarlar) tek bir dosyaya indirin veya daha önce indirdiğiniz bir yedeği geri yükleyin.</div>
-            <button className="zk-btn zk-btn-primary" onClick={onBackup} style={{ marginBottom: 12 }}><Download size={14} /> Yedeği indir (.json)</button>
-            <div>
-              <label className="zk-btn zk-btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
-                <Upload size={14} /> Yedekten geri yükle
-                <input
-                  type="file"
-                  accept="application/json"
-                  style={{ display: 'none' }}
-                  onChange={(e) => { if (e.target.files[0]) onRestore(e.target.files[0]); e.target.value = ''; }}
-                />
-              </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="zk-card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Yedekleme (JSON)</div>
+              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 14 }}>Tüm verileri (çiftçiler, alımlar, satışlar, giderler, ayarlar) tek bir dosyaya indirin veya daha önce indirdiğiniz bir yedeği geri yükleyin. Tam yedekleme/geri yükleme için önerilen yöntem budur.</div>
+              <button className="zk-btn zk-btn-primary" onClick={onBackup} style={{ marginBottom: 12 }}><Download size={14} /> Yedeği indir (.json)</button>
+              <div>
+                <label className="zk-btn zk-btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
+                  <Upload size={14} /> Yedekten geri yükle
+                  <input
+                    type="file"
+                    accept="application/json"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { if (e.target.files[0]) onRestore(e.target.files[0]); e.target.value = ''; }}
+                  />
+                </label>
+              </div>
+              {restoreStatus && <div style={{ fontSize: 12, color: COLORS.olive, marginTop: 10 }}>{restoreStatus}</div>}
+              <div style={{ fontSize: 11, color: COLORS.red, marginTop: 10 }}>Geri yükleme, o an ekrandaki tüm verilerin üzerine yazar — dikkatli kullanın.</div>
             </div>
-            {restoreStatus && <div style={{ fontSize: 12, color: COLORS.olive, marginTop: 10 }}>{restoreStatus}</div>}
-            <div style={{ fontSize: 11, color: COLORS.red, marginTop: 10 }}>Geri yükleme, o an ekrandaki tüm verilerin üzerine yazar — dikkatli kullanın.</div>
+
+            <div className="zk-card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Excel'e dışa aktarma</div>
+              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 14 }}>Tüm modülleri (çiftçiler, alımlar, satışlar, giderler, filo, kasa vb.) her biri ayrı sayfa olacak şekilde tek bir Excel dosyasına indirir.</div>
+              <button
+                className="zk-btn zk-btn-blue"
+                onClick={() => {
+                  const wb = XLSX.utils.book_new();
+                  const addSheet = (rows, sheetName) => {
+                    if (!rows || rows.length === 0) return;
+                    const ws = XLSX.utils.json_to_sheet(rows);
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
+                  };
+                  addSheet(allData.farmers.map((f) => ({ 'Ad Soyad': f.name, 'Telefon': f.phone || '', 'TC No': f.tcNo || '', 'Adres': f.address || '', 'BAĞ-KUR': f.bagkurStatus ? 'Evet' : 'Hayır' })), 'Ciftciler');
+                  addSheet(allData.purchases.map((p) => ({ 'Makbuz No': p.makbuzNo, 'Tarih': p.date, 'Ciftci Id': p.farmerId, 'Net kg': p.netKg, 'Tutar': p.amount, 'Net Odeme': p.netPayment })), 'Alimlar');
+                  addSheet(allData.sales.map((s) => ({ 'Tarih': s.date, 'Alici Id': s.buyerId, 'Sinif': s.grade || '', 'Kg': s.kg, 'Fiyat': s.pricePerKg, 'Tutar': s.amount })), 'Satislar');
+                  addSheet(allData.buyers.map((b) => ({ 'Ad': b.name, 'Telefon': b.phone || '' })), 'Alicilar');
+                  addSheet(allData.expenses.map((e) => ({ 'Tarih': e.date, 'Kategori': e.category, 'Tutar': e.amount, 'Not': e.note || '' })), 'Giderler');
+                  addSheet(allData.payments.map((p) => ({ 'Tarih': p.date, 'Ciftci Id': p.farmerId, 'Tur': p.payType, 'Tutar': p.amount, 'Not': p.note || '' })), 'Odemeler');
+                  addSheet(allData.vehicles.map((v) => ({ 'Plaka': v.plaka, 'Marka': v.marka || '', 'Kapasite': v.kapasite || '' })), 'Araclar');
+                  addSheet(allData.personnel.map((p) => ({ 'Ad Soyad': p.name, 'Telefon': p.phone || '', 'Gorev': p.role || '' })), 'Personel');
+                  addSheet(allData.maintenance.map((m) => ({ 'Tarih': m.date, 'Arac Id': m.vehicleId, 'Km': m.km, 'Tur': m.type, 'Maliyet': m.cost, 'Not': m.note || '' })), 'Bakim');
+                  addSheet(allData.fuel.map((f) => ({ 'Tarih': f.date, 'Arac Id': f.vehicleId, 'Km': f.km, 'Litre': f.liters, 'Litre Fiyati': f.pricePerLiter, 'Tutar': f.totalCost })), 'Yakit');
+                  addSheet(allData.documents.map((d) => ({ 'Arac Id': d.vehicleId, 'Belge': d.docType, 'Duzenleme': d.issueDate || '', 'Bitis': d.expiryDate })), 'Evrak');
+                  addSheet(allData.insurance.map((i) => ({ 'Arac Id': i.vehicleId, 'Tur': i.policyType, 'Sirket': i.company, 'Bitis': i.endDate, 'Prim': i.premium })), 'Sigorta');
+                  addSheet(allData.fines.map((f) => ({ 'Arac Id': f.vehicleId, 'Tarih': f.date, 'Aciklama': f.description, 'Tutar': f.amount, 'Odendi': f.paid ? 'Evet' : 'Hayir' })), 'Cezalar');
+                  addSheet(allData.cashEntries.map((c) => ({ 'Tarih': c.date, 'Tur': c.type, 'Kategori': c.category || '', 'Tutar': c.amount, 'Not': c.note || '' })), 'Kasa');
+                  addSheet(allData.crateMovements.map((c) => ({ 'Tarih': c.date, 'Ciftci Id': c.farmerId, 'Hareket': c.type, 'Adet': c.quantity, 'Depozito': c.deposit || '', 'Not': c.note || '' })), 'Kasa-Cuval');
+                  addSheet(allData.labResults.map((l) => ({ 'Tarih': l.date, 'Ciftci Id': l.farmerId, 'Randiman': l.randiman, 'Asit': l.asit, 'Nem': l.nem, 'Kalite': l.kalite || '' })), 'Laboratuvar');
+                  addSheet(allData.bankAccounts.map((b) => ({ 'Banka': b.bankName, 'Hesap': b.accountName || '', 'IBAN': b.iban || '', 'Bakiye': b.balance })), 'Banka Hesaplari');
+                  addSheet(allData.checksNotes.map((c) => ({ 'Tur': c.type, 'Yon': c.direction, 'Kimden-Kime': c.party, 'Tutar': c.amount, 'Vade': c.dueDate, 'Durum': c.status })), 'Cek-Senet');
+                  addSheet(allData.shipments.map((s) => ({ 'Tarih': s.date, 'Irsaliye No': s.waybillNo, 'Plaka': s.vehiclePlaka, 'Sofor': s.driverName, 'Alici': s.buyerName, 'Kg': s.kg, 'Durum': s.status })), 'Sevkiyat');
+                  XLSX.writeFile(wb, `zeytin-defteri-tum-veri-${todayStr()}.xlsx`);
+                }}
+              >
+                <Download size={14} /> Tümünü Excel'e aktar
+              </button>
+            </div>
+
+            <div className="zk-card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Excel'den çiftçi içe aktarma</div>
+              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 14 }}>
+                Excel dosyanızda şu sütun başlıkları olmalı: <strong>Ad Soyad</strong> (zorunlu), Telefon, TC No, Adres. İlk satır başlık satırı olarak kabul edilir, mevcut çiftçi listenize eklenir (üzerine yazmaz).
+              </div>
+              <ExcelFarmerImport farmers={farmers} setFarmers={setFarmers} />
+            </div>
           </div>
         )}
 
@@ -4183,6 +5213,12 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
 }
 
 function PrintArea({ purchase, farmer, settings }) {
+  const [qrUrl, setQrUrl] = useState(null);
+  useEffect(() => {
+    if (!purchase) return;
+    const verifyText = `ZeytinDefteri|Makbuz:${purchase.makbuzNo}|Tarih:${purchase.date}|Tutar:${purchase.netPayment}`;
+    getQrDataUrl(verifyText).then(setQrUrl);
+  }, [purchase && purchase.id]);
   if (!purchase || !farmer) return <div id="zk-print-area" />;
   return (
     <div id="zk-print-area">
@@ -4222,9 +5258,22 @@ function PrintArea({ purchase, farmer, settings }) {
             </tr>
           </tbody>
         </table>
+        {(purchase.randiman || purchase.asit || purchase.nem) && (
+          <>
+            <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+            <table style={{ width: '100%' }}>
+              <tbody>
+                {purchase.randiman != null && <tr><td>Randıman</td><td style={{ textAlign: 'right' }}>%{purchase.randiman}</td></tr>}
+                {purchase.asit != null && <tr><td>Asit oranı</td><td style={{ textAlign: 'right' }}>%{purchase.asit}</td></tr>}
+                {purchase.nem != null && <tr><td>Nem oranı</td><td style={{ textAlign: 'right' }}>%{purchase.nem}</td></tr>}
+              </tbody>
+            </table>
+          </>
+        )}
         <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
         <table style={{ width: '100%' }}>
           <tbody>
+            {purchase.fireTutari > 0 && <tr><td>Fire/İskonto (%{purchase.firePercent})</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.fireTutari)}</td></tr>}
             {purchase.noDeduction ? (
               <tr><td>Kesintisiz</td><td style={{ textAlign: 'right' }}>—</td></tr>
             ) : (
@@ -4234,6 +5283,9 @@ function PrintArea({ purchase, farmer, settings }) {
                 {purchase.applyBagkur && <tr><td>BAĞ-KUR (%{purchase.bagkurRate})</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.bagkurTutari)}</td></tr>}
               </>
             )}
+            {purchase.hammaliyeTutari > 0 && <tr><td>Hammaliye</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.hammaliyeTutari)}</td></tr>}
+            {purchase.nakliyeTutari > 0 && <tr><td>Nakliye</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.nakliyeTutari)}</td></tr>}
+            {purchase.cuvalKesintisi > 0 && <tr><td>Çuval/kasa</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.cuvalKesintisi)}</td></tr>}
             <tr style={{ borderTop: '1px solid #000' }}><td style={{ fontWeight: 700, paddingTop: 4 }}>ÖDENEN NET</td><td style={{ textAlign: 'right', fontWeight: 700, paddingTop: 4 }}>{fmtTL(purchase.netPayment)}</td></tr>
           </tbody>
         </table>
@@ -4242,6 +5294,12 @@ function PrintArea({ purchase, farmer, settings }) {
           <div>Satıcı İmza<br/>........................</div>
           <div>Alıcı İmza<br/>........................</div>
         </div>
+        {qrUrl && (
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <img src={qrUrl} alt="Dogrulama QR kodu" style={{ width: 70, height: 70 }} />
+            <div style={{ fontSize: 8, color: '#666', marginTop: 2 }}>Fiş doğrulama kodu</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4642,6 +5700,31 @@ export default function ZeytinDefteri() {
   const [tab, setTab] = useState('dashboard');
   const [userEmail, setUserEmail] = useState(currentUser.email || '');
   const [userBusinessName, setUserBusinessName] = useState(currentUser.businessName || '');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const trySync = async () => {
+      if (!navigator.onLine || !currentUser.email) return;
+      const count = getPendingCount(currentUser.email);
+      setPendingCount(count);
+      if (count === 0) return;
+      const result = await flushQueue(supabase, currentUser.email);
+      setPendingCount(getPendingCount(currentUser.email));
+      if (result.synced > 0) window.location.reload();
+    };
+    const onOnline = () => { setIsOnline(true); trySync(); };
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    trySync();
+    const interval = setInterval(trySync, 30000);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      clearInterval(interval);
+    };
+  }, []);
   const [farmers, setFarmers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -4661,6 +5744,11 @@ export default function ZeytinDefteri() {
   const [expenses, setExpenses] = useState([]);
   const [cashEntries, setCashEntries] = useState([]);
   const [reminders, setReminders] = useState([]);
+  const [crateMovements, setCrateMovements] = useState([]);
+  const [labResults, setLabResults] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [checksNotes, setChecksNotes] = useState([]);
+  const [shipments, setShipments] = useState([]);
   const [selectedFarmerId, setSelectedFarmerId] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [printTarget, setPrintTarget] = useState(null);
@@ -4669,7 +5757,7 @@ export default function ZeytinDefteri() {
 
   useEffect(() => {
     (async () => {
-      const [f, p, pay, b, s, set, pl, per, exp, cash, veh, maint, fl, docs, ins, dmg, fns, trs, rem] = await Promise.all([
+      const [f, p, pay, b, s, set, pl, per, exp, cash, veh, maint, fl, docs, ins, dmg, fns, trs, rem, crt, lab, bnk, chk, shp] = await Promise.all([
         storageGet('zk:farmers'),
         storageGet('zk:purchases'),
         storageGet('zk:payments'),
@@ -4689,6 +5777,11 @@ export default function ZeytinDefteri() {
         storageGet('zk:vehicleFines'),
         storageGet('zk:vehicleTires'),
         storageGet('zk:reminders'),
+        storageGet('zk:crateMovements'),
+        storageGet('zk:labResults'),
+        storageGet('zk:bankAccounts'),
+        storageGet('zk:checksNotes'),
+        storageGet('zk:shipments'),
       ]);
       setFarmers(f || []); setPurchases(p || []); setPayments(pay || []);
       setBuyers(b || []); setSales(s || []); setSettings(set || {});
@@ -4698,6 +5791,8 @@ export default function ZeytinDefteri() {
       setMaintenance(maint || []); setFuel(fl || []); setDocuments(docs || []);
       setInsurance(ins || []); setDamages(dmg || []); setFines(fns || []); setTires(trs || []);
       setReminders(rem || []);
+      setCrateMovements(crt || []); setLabResults(lab || []); setBankAccounts(bnk || []); setChecksNotes(chk || []);
+      setShipments(shp || []);
       if (pl && pl.length > 0) {
         const normalized = pl.map((v) => ('grades' in v ? v : { id: v.id, name: v.name, hasGrades: false, singlePrice: v.price || 0, grades: [] }));
         setPriceList(normalized);
@@ -4734,6 +5829,7 @@ export default function ZeytinDefteri() {
       farmers, purchases, payments, buyers, sales, settings, priceList, personnel, expenses, cashEntries, vehicles,
       vehicleMaintenance: maintenance, vehicleFuel: fuel, vehicleDocuments: documents, vehicleInsurance: insurance,
       vehicleDamage: damages, vehicleFines: fines, vehicleTires: tires, reminders,
+      crateMovements, labResults, bankAccounts, checksNotes, shipments,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -4751,7 +5847,7 @@ export default function ZeytinDefteri() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles', 'vehicleMaintenance', 'vehicleFuel', 'vehicleDocuments', 'vehicleInsurance', 'vehicleDamage', 'vehicleFines', 'vehicleTires', 'reminders'];
+      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles', 'vehicleMaintenance', 'vehicleFuel', 'vehicleDocuments', 'vehicleInsurance', 'vehicleDamage', 'vehicleFines', 'vehicleTires', 'reminders', 'crateMovements', 'labResults', 'bankAccounts', 'checksNotes', 'shipments'];
       for (const k of keys) {
         if (data[k] !== undefined) await storageSet(`zk:${k}`, data[k]);
       }
@@ -4764,6 +5860,9 @@ export default function ZeytinDefteri() {
       setMaintenance(data.vehicleMaintenance || []); setFuel(data.vehicleFuel || []); setDocuments(data.vehicleDocuments || []);
       setInsurance(data.vehicleInsurance || []); setDamages(data.vehicleDamage || []); setFines(data.vehicleFines || []); setTires(data.vehicleTires || []);
       setReminders(data.reminders || []);
+      setCrateMovements(data.crateMovements || []); setLabResults(data.labResults || []);
+      setBankAccounts(data.bankAccounts || []); setChecksNotes(data.checksNotes || []);
+      setShipments(data.shipments || []);
       setRestoreStatus('Yedek başarıyla geri yüklendi.');
     } catch (e) {
       setRestoreStatus('Dosya okunamadı, geçerli bir yedek dosyası seçin.');
@@ -4777,6 +5876,10 @@ export default function ZeytinDefteri() {
     { key: 'allPurchases', label: 'Tüm alımlar', icon: ListChecks },
     { key: 'warehouse', label: 'Depo & satış', icon: Warehouse },
     { key: 'fleet', label: 'Filo & personel', icon: Truck },
+    { key: 'crates', label: 'Kasa & çuval', icon: Package2 },
+    { key: 'lab', label: 'Laboratuvar', icon: FlaskConical },
+    { key: 'accounting', label: 'Muhasebe', icon: Landmark },
+    { key: 'shipments', label: 'Sevkiyat', icon: PackageCheck },
     { key: 'ai', label: 'AI Asistan', icon: Sparkles },
     { key: 'ledger', label: 'Cari hesap', icon: Wallet },
     { key: 'expenses', label: 'Giderler', icon: Receipt },
@@ -4784,6 +5887,19 @@ export default function ZeytinDefteri() {
     { key: 'reports', label: 'Raporlar', icon: FileBarChart },
     { key: 'settings', label: 'Ayarlar', icon: SettingsIcon },
   ];
+
+  const ROLE_TAB_ACCESS = {
+    admin: null, user: null, // null = tum sekmelere erisim
+    muhasebe: ['dashboard', 'ledger', 'expenses', 'cash', 'accounting', 'reports', 'allPurchases', 'settings'],
+    kantar: ['dashboard', 'purchase', 'allPurchases', 'farmers'],
+    depo: ['dashboard', 'warehouse', 'crates', 'lab'],
+    sevkiyat: ['dashboard', 'shipments', 'fleet'],
+  };
+  const allowedTabs = ROLE_TAB_ACCESS[currentUser.role];
+  const visibleNavItems = allowedTabs ? navItems.filter((item) => allowedTabs.includes(item.key)) : navItems;
+  useEffect(() => {
+    if (allowedTabs && !allowedTabs.includes(tab)) setTab(allowedTabs[0] || 'dashboard');
+  }, [currentUser.role]);
 
   if (!loaded) {
     return <div className="zk-app"><GlobalStyle /><div style={{ padding: 40, fontSize: 13, color: COLORS.inkSoft }}>Yükleniyor...</div></div>;
@@ -4820,12 +5936,21 @@ export default function ZeytinDefteri() {
             maintenance={maintenance} fuel={fuel} vehicles={vehicles}
             reminders={reminders} setReminders={setReminders} settings={settings}
           />
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <button key={item.key} className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
               <item.icon size={16} /> {item.label}
             </button>
           ))}
           <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '0 11px', marginBottom: 8, fontSize: 10.5,
+              color: isOnline ? (pendingCount > 0 ? '#E8C468' : '#8FBF8A') : '#E08A6E',
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+              {!isOnline
+                ? `Çevrimdışı${pendingCount > 0 ? ` · ${pendingCount} değişiklik bekliyor` : ''}`
+                : pendingCount > 0 ? `Senkronize ediliyor (${pendingCount})` : 'Çevrimiçi'}
+            </div>
             <div style={{ fontSize: 10.5, color: '#A9B896', padding: '0 11px', marginBottom: 2, wordBreak: 'break-all' }}>
               {userEmail}
             </div>
@@ -4846,12 +5971,16 @@ export default function ZeytinDefteri() {
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'warehouse' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
           {tab === 'fleet' && <FleetTab vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} />}
+          {tab === 'crates' && <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} />}
+          {tab === 'lab' && <LabTab farmers={farmers} purchases={purchases} results={labResults} setResults={setLabResults} />}
+          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} />}
+          {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
           {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
           {tab === 'ledger' && <LedgerTab farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'expenses' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
           {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
           {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} />}
-          {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} />}
+          {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} />}
         </div>
       </div>
       {printTarget && <PrintArea purchase={printTarget.purchase} farmer={printTarget.farmer} settings={settings} />}
