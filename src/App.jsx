@@ -4,7 +4,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import {
   LayoutDashboard, Users, Scale as ScaleIcon, Wallet, FileBarChart, Warehouse, Settings as SettingsIcon,
   Plus, Printer, Bluetooth, BluetoothConnected, Search, X, Phone, ChevronRight, Download, Package, ShoppingCart, Clock as ClockIcon,
-  Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard,
+  Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard, Menu,
 } from 'lucide-react';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -61,7 +61,9 @@ function GlobalStyle() {
       .zk-navbtn { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 8px; background: transparent; border: none; border-left: 2px solid transparent; color: #C9D2B9; font-size: 13px; font-weight: 500; cursor: pointer; text-align: left; width: 100%; transition: background 0.12s ease, color 0.12s ease; }
       .zk-navbtn:hover { background: rgba(255,255,255,0.07); color: #F5F2E8; }
       .zk-navbtn.active { background: rgba(255,255,255,0.13); color: #fff; border-left: 2px solid ${COLORS.gold}; }
-      .zk-main { flex: 1; padding: 28px 32px; max-width: 1180px; }
+      .zk-main { flex: 1; padding: 28px 32px; max-width: 1180px; min-width: 0; }
+      .zk-topbar { display: none; }
+      .zk-sidebar-overlay { display: none; }
       .zk-h1 { font-family: var(--font-display); font-size: 23px; font-weight: 600; margin-bottom: 3px; letter-spacing: 0.1px; }
       .zk-h1-sub { font-size: 12.5px; color: ${COLORS.inkSoft}; margin-bottom: 20px; }
       .zk-card { background: ${COLORS.paperCard}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 16px 18px; transition: box-shadow 0.15s ease, border-color 0.15s ease; overflow-x: auto; }
@@ -116,16 +118,31 @@ function GlobalStyle() {
         #zk-print-area { display: block; position: absolute; top: 0; left: 0; width: 100%; }
       }
 
-      /* Tablet düzeni: yan menü üstte yatay bar olur, iki sütunlu formlar tek sütuna iner */
+      /* Tablet: sidebar sabit kalır, sadece içerik alanı biraz daralır */
       @media (max-width: 1024px) {
-        .zk-shell { flex-direction: column; }
-        .zk-sidebar { width: 100%; flex-direction: row; align-items: center; padding: 10px 12px; gap: 4px; overflow-x: auto; }
-        .zk-brand-row { margin-bottom: 0; padding: 0 8px 0 2px; flex-shrink: 0; }
-        .zk-brand-sub { display: none; }
-        .zk-navbtn { width: auto; white-space: nowrap; border-left: none; border-bottom: 2px solid transparent; padding: 10px 13px; }
-        .zk-navbtn.active { border-left: none; border-bottom: 2px solid ${COLORS.gold}; }
-        .zk-main { padding: 20px 16px; max-width: 100%; }
-        .zk-h1 { font-size: 21px; }
+        .zk-sidebar { width: 190px; }
+        .zk-main { padding: 22px 20px; }
+      }
+
+      /* Telefon: sidebar gizli çekmeceye döner, üstte hamburger bar açar */
+      @media (max-width: 768px) {
+        .zk-topbar {
+          display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+          background: ${COLORS.olive}; position: sticky; top: 0; z-index: 60;
+        }
+        .zk-topbar-btn { background: rgba(255,255,255,0.1); border: none; border-radius: 8px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer; flex-shrink: 0; }
+        .zk-topbar-brand { color: #F5F2E8; font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+        .zk-shell { display: block; }
+        .zk-sidebar {
+          position: fixed; top: 0; left: -260px; height: 100vh; width: 232px; z-index: 90;
+          transition: left 0.22s ease; box-shadow: 2px 0 18px rgba(0,0,0,0.25); overflow-y: auto;
+        }
+        .zk-sidebar.zk-sidebar-open { left: 0; }
+        .zk-sidebar-overlay {
+          display: none; position: fixed; inset: 0; background: rgba(20,20,15,0.45); z-index: 80;
+        }
+        .zk-sidebar-overlay.zk-sidebar-open { display: block; }
+        .zk-main { padding: 16px 14px; max-width: 100%; }
       }
       @media (max-width: 720px) {
         .zk-grid[style*="1fr 1fr"] { grid-template-columns: 1fr !important; }
@@ -2455,6 +2472,7 @@ export default function ZeytinDefteri() {
   const [loaded, setLoaded] = useState(false);
   const [printTarget, setPrintTarget] = useState(null);
   const [restoreStatus, setRestoreStatus] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -2559,8 +2577,13 @@ export default function ZeytinDefteri() {
   return (
     <div className="zk-app">
       <GlobalStyle />
+      <div className="zk-topbar">
+        <button className="zk-topbar-btn" onClick={() => setSidebarOpen(true)} aria-label="Menüyü aç"><Menu size={20} /></button>
+        <div className="zk-topbar-brand">Zeytin Defteri</div>
+      </div>
+      <div className={`zk-sidebar-overlay ${sidebarOpen ? 'zk-sidebar-open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <div className="zk-shell">
-        <div className="zk-sidebar">
+        <div className={`zk-sidebar ${sidebarOpen ? 'zk-sidebar-open' : ''}`}>
           <div className="zk-brand-row">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M4 20c6-1 9-4 11-9 1.5-3.7 1-6.5-1-8.5-3 2-5 5-6 8-1.5 4-3 7-4 9.5Z" stroke="#D9C77E" strokeWidth="1.4" strokeLinejoin="round"/>
@@ -2571,7 +2594,7 @@ export default function ZeytinDefteri() {
           </div>
           <div className="zk-brand-sub">Komisyon Yönetimi</div>
           {navItems.map((item) => (
-            <button key={item.key} className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => setTab(item.key)}>
+            <button key={item.key} className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
               <item.icon size={16} /> {item.label}
             </button>
           ))}
