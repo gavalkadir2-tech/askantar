@@ -14,8 +14,6 @@ const fmtKg = (n) => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionD
 const fmtDate = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const fmtDateShort = (d) => new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
 
-// Bu proje bağımsız (standalone) çalıştığı için Claude artifact ortamındaki
-// window.storage yerine tarayıcının kendi localStorage'ını kullanır.
 async function storageGet(key) {
   try {
     const raw = window.localStorage.getItem(key);
@@ -66,14 +64,14 @@ function GlobalStyle() {
       .zk-main { flex: 1; padding: 28px 32px; max-width: 1180px; }
       .zk-h1 { font-family: var(--font-display); font-size: 23px; font-weight: 600; margin-bottom: 3px; letter-spacing: 0.1px; }
       .zk-h1-sub { font-size: 12.5px; color: ${COLORS.inkSoft}; margin-bottom: 20px; }
-      .zk-card { background: ${COLORS.paperCard}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 16px 18px; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+      .zk-card { background: ${COLORS.paperCard}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 16px 18px; transition: box-shadow 0.15s ease, border-color 0.15s ease; overflow-x: auto; }
       .zk-grid { display: grid; gap: 12px; }
       .zk-stat { background: ${COLORS.paperCard}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 14px 16px; transition: box-shadow 0.15s ease, transform 0.15s ease; }
       .zk-stat:hover { box-shadow: 0 4px 14px rgba(43,42,37,0.07); transform: translateY(-1px); }
       .zk-stat-label { font-size: 11px; color: ${COLORS.inkSoft}; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
       .zk-stat-icon { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; background: ${COLORS.oliveSoft}; color: ${COLORS.olive}; }
       .zk-stat-value { font-family: var(--font-display); font-size: 22px; font-weight: 600; }
-      .zk-input, .zk-select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid ${COLORS.border}; background: #FCFBF7; font-size: 15px; font-family: inherit; color: ${COLORS.ink}; min-height: 44px; }
+      .zk-input, .zk-select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid ${COLORS.border}; background: #FCFBF7; font-size: 16px; font-family: inherit; color: ${COLORS.ink}; min-height: 44px; }
       .zk-input:focus, .zk-select:focus { outline: none; border-color: ${COLORS.oliveLight}; box-shadow: 0 0 0 3px ${COLORS.oliveSoft}; }
       .zk-label { font-size: 12.5px; font-weight: 600; color: ${COLORS.inkSoft}; margin-bottom: 5px; display: block; }
       .zk-btn { display: inline-flex; align-items: center; gap: 6px; padding: 11px 16px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease; min-height: 44px; }
@@ -131,6 +129,22 @@ function GlobalStyle() {
       }
       @media (max-width: 720px) {
         .zk-grid[style*="1fr 1fr"] { grid-template-columns: 1fr !important; }
+      }
+
+      /* Telefon düzeni: tüm çok sütunlu ızgaralar tek sütuna iner, tablolar yatay kayar */
+      @media (max-width: 600px) {
+        [style*="gridTemplateColumns"] { grid-template-columns: 1fr !important; }
+        .zk-main { padding: 14px 12px; }
+        .zk-h1 { font-size: 18px; }
+        .zk-h1-sub { font-size: 11.5px; margin-bottom: 14px; }
+        .zk-card { padding: 12px 13px; }
+        .zk-stat-value { font-size: 18px; }
+        .zk-table { min-width: 560px; }
+        .zk-modal { max-width: 94vw; padding: 16px; }
+        .zk-brand { font-size: 15px; }
+        .zk-navbtn { padding: 9px 10px; font-size: 12px; }
+        .zk-scale-readout { font-size: 24px; }
+        .zk-btn { padding: 10px 12px; font-size: 12.5px; }
       }
     `}</style>
   );
