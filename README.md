@@ -87,6 +87,49 @@ npm run dev
 Yerelde test ederken Supabase'in **Redirect URLs** listesine
 `http://localhost:5173` adresini de eklemeniz gerekir.
 
+## AI destekli sesli asistan (opsiyonel, ÜCRETSİZ — Groq API)
+
+Varsayılan olarak sesli asistan tamamen **ücretsiz, tarayıcıda çalışan kural
+tabanlı bir motorla** çalışır (alım, çiftçi ekleme, ödeme/avans, gider,
+hatırlatma gibi komutları anlar). İsterseniz bunun yerine gerçek bir yapay
+zeka ile çok daha esnek/doğal cümleleri anlamasını sağlayabilirsiniz —
+**Groq** kullanıyoruz çünkü kredi kartı istemeyen, gerçekten ücretsiz bir
+katmanı var ve çok hızlı çalışıyor. Güvenlik için API anahtarı **tarayıcıya
+hiç inmez** — Supabase'in sunucu tarafında (Edge Function) saklanır.
+
+### 1. Groq API anahtarı alma (ücretsiz, kredi kartı istemiyor)
+
+1. https://console.groq.com/keys adresine gidin.
+2. Google/GitHub hesabınızla veya e-posta ile ücretsiz kayıt olun (30 saniye sürer, kredi kartı istenmez).
+3. **Create API Key** deyip bir anahtar oluşturun, kopyalayın.
+
+Ücretsiz katman dakikada 30 istek / günde 1.000 istek gibi cömert bir
+sınırla geliyor — bu uygulamanın sesli komut kullanımı için fazlasıyla
+yeterli.
+
+### 2. Edge Function'ı Supabase'e yükleme (CLI gerekmez, tarayıcıdan)
+
+1. Supabase Dashboard'da sol menüden **Edge Functions**'a girin.
+2. **Deploy a new function** / **Create a new function** deyin, adını tam olarak `ai-voice-parse` yazın.
+3. Açılan kod editörüne bu projedeki `supabase/functions/ai-voice-parse/index.ts` dosyasının tüm içeriğini yapıştırın.
+4. **Deploy** deyin.
+
+### 3. API anahtarını sır (secret) olarak tanımlama
+
+1. Aynı Edge Functions sayfasında (veya Project Settings → Edge Functions) **Secrets** / **Manage secrets** bölümüne girin.
+2. Yeni bir secret ekleyin: **Name:** `GROQ_API_KEY`, **Value:** Groq'tan aldığınız anahtar.
+3. Kaydedin.
+
+### 4. Uygulamada etkinleştirme
+
+1. Uygulamada **Ayarlar → Genel** sekmesine gidin.
+2. **"AI destekli sesli komut kullan"** kutusunu işaretleyip **Tüm ayarları kaydet** deyin.
+3. Sesli asistanı açtığınızda başlıkta küçük bir **"AI"** rozeti görünecek — bu, komutların artık Groq/Llama tarafından anlaşıldığı anlamına gelir.
+
+Bir sorun olursa (Edge Function kurulmamışsa, secret eksikse, günlük ücretsiz
+kota dolmuşsa, internet yoksa) uygulama otomatik olarak ücretsiz yerel
+motora geri döner, hiçbir şey bozulmaz.
+
 ## Kantar (HC-05 / ESP32) bağlantısı
 
 Uygulama Web Serial / Web Bluetooth API kullanıyor — bu yüzden yalnızca
