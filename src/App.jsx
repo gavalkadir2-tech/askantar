@@ -4760,6 +4760,7 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
   const [currencySymbol, setCurrencySymbol] = useState(settings.currencySymbol || '₺');
   const [dateFormat, setDateFormat] = useState(settings.dateFormat || 'DMY');
   const [defaultVatRate, setDefaultVatRate] = useState(settings.defaultVatRate ?? 20);
+  const [aiVoiceEnabled, setAiVoiceEnabled] = useState(settings.aiVoiceEnabled ?? false);
   const [defaultFuelPrice, setDefaultFuelPrice] = useState(settings.defaultFuelPrice ?? '');
   const [crateWeight, setCrateWeight] = useState(settings.crateWeight ?? 2);
   const [defaultCrateCount, setDefaultCrateCount] = useState(settings.defaultCrateCount ?? 5);
@@ -4812,6 +4813,7 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
     logo, businessName, address, phone, taxNo, taxOffice,
     incomeCategories, expenseCategories, taxRates,
     theme, accentColor, sidebarDensity, fontSize,
+    aiVoiceEnabled,
     openingCashBalance: settings.openingCashBalance ?? 0,
   });
 
@@ -4921,6 +4923,17 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
               <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 10 }}>
                 KDV oranı henüz ayrı bir fatura modülü olmadığı için şu an sadece Vergi sekmesindeki hızlı seçim listesinin varsayılanı olarak saklanır.
               </div>
+            </div>
+
+            <div className="zk-card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>🎙️ Sesli asistan</div>
+              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 12 }}>
+                Kapalıyken sesli komutlar tarayıcıda çalışan ücretsiz, kural tabanlı bir motorla anlaşılır (alım, çiftçi ekleme, ödeme, gider, hatırlatma). Açtığınızda önce sunucu tarafında (Supabase Edge Function) çalışan Groq/Llama modeli denenir, daha esnek ve doğal cümleleri anlar — Groq'un ücretsiz katmanı kredi kartı istemez. Önce Edge Function'ı kurmanız gerekir (bkz. proje README'si).
+              </div>
+              <label className="zk-checkbox-row">
+                <input type="checkbox" checked={aiVoiceEnabled} onChange={(e) => setAiVoiceEnabled(e.target.checked)} />
+                AI destekli sesli komut kullan (Edge Function kurulmuş olmalı)
+              </label>
             </div>
 
             <div className="zk-card">
@@ -5307,15 +5320,12 @@ function PrintArea({ purchase, farmer, settings }) {
 
 // ---------- Sesli komut asistanı ----------
 
-function parsePurchaseCommand(text, farmers, priceList) {
-  const lower = text.toLowerCase().replace(/İ/g, 'i').replace(/I/g, 'ı');
+// ---------- Sesli komut ayrıştırma: yerel (ücretsiz) kural tabanlı motor ----------
+// "supabase" tanımlıysa (GitHub sürümü) ve ayarlarda etkinse önce AI destekli
+// ayrıştırma denenir; tanımlı değilse (Claude ortamı) veya başarısız olursa
+// bu yerel motor devreye girer. İki ortamda da aynı dosya çalışır.
 
-  const kgMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:kilo|kg)/);
-  const kg = kgMatch ? parseFloat(kgMatch[1].replace(',', '.')) : null;
-
-  const priceMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*lira/);
-  let price = priceMatch ? parseFloat(priceMatch[1].replace(',', '.')) : null;
-
+function extractFarmer(lower, farmers) {
   let farmer = farmers.find((f) => lower.includes(f.name.toLowerCase()));
   if (!farmer) {
     farmer = farmers.find((f) => {
@@ -5323,6 +5333,22 @@ function parsePurchaseCommand(text, farmers, priceList) {
       return first.length > 2 && lower.includes(first);
     });
   }
+  return farmer;
+}
+
+function extractAmount(lower) {
+  const m = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:lira|tl|₺)/);
+  return m ? parseFloat(m[1].replace(',', '.')) : null;
+}
+
+function parsePurchaseCommand(text, farmers, priceList) {
+  const lower = text.toLowerCase().replace(/İ/g, 'i').replace(/I/g, 'ı');
+
+  const kgMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:kilo|kg)/);
+  const kg = kgMatch ? parseFloat(kgMatch[1].replace(',', '.')) : null;
+  let price = extractAmount(lower);
+
+  const farmer = extractFarmer(lower, farmers);
 
   let varietyLabel = null, matchedPrice = null;
   for (const v of priceList) {
@@ -5344,14 +5370,120 @@ function parsePurchaseCommand(text, farmers, priceList) {
   if (!varietyLabel) return { ok: false, message: 'Zeytin türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
   if (!price) return { ok: false, message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
 
-  return { ok: true, farmer, kg, price, varietyLabel };
+  return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel };
 }
 
-function VoiceAssistant({ farmers, priceList, purchases, setPurchases }) {
+function parseAddFarmerCommand(text) {
+  const phoneMatch = text.match(/0?5\d{9}|0?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}/);
+  let name = text
+    .replace(/(yeni |,)?\s*çiftçi\s*(olarak\s*)?(ekle|kaydet|oluştur)/gi, '')
+    .replace(/telefon(u)?\s*[:\-]?\s*/gi, '')
+    .replace(phoneMatch ? phoneMatch[0] : '', '')
+    .trim();
+  if (!name) return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Yeni çiftçi ekle Ali Veli, telefon 0532 111 22 33".' };
+  return { ok: true, type: 'add_farmer', name, phone: phoneMatch ? phoneMatch[0] : '' };
+}
+
+function parsePaymentCommand(text, farmers) {
+  const lower = text.toLowerCase().replace(/İ/g, 'i').replace(/I/g, 'ı');
+  const farmer = extractFarmer(lower, farmers);
+  const amount = extractAmount(lower);
+  const payType = lower.includes('avans') ? 'avans' : 'odeme';
+  if (!farmer) return { ok: false, message: 'Hangi çiftçiye ödeme/avans yapıldığını anlayamadım.' };
+  if (!amount) return { ok: false, message: `${farmer.name} anladım ama tutarı anlayamadım. "500 lira" gibi net söyleyin.` };
+  return { ok: true, type: 'payment', farmer, amount, payType };
+}
+
+function parseExpenseCommand(text) {
+  const lower = text.toLowerCase().replace(/İ/g, 'i').replace(/I/g, 'ı');
+  const amount = extractAmount(lower);
+  if (!amount) return { ok: false, message: 'Gider tutarını anlayamadım. "150 lira nakliye gideri ekle" gibi söyleyin.' };
+  const categories = EXPENSE_CATEGORIES;
+  const category = categories.find((c) => lower.includes(c.toLowerCase())) || 'Diğer';
+  return { ok: true, type: 'expense', amount, category, note: text };
+}
+
+function parseReminderCommand(text) {
+  const title = text.replace(/hatırlat(ma|ıcı)?( ekle)?/gi, '').trim() || text;
+  let date = todayStr();
+  if (/yarın/i.test(text)) {
+    const d = new Date(); d.setDate(d.getDate() + 1); date = d.toISOString().slice(0, 10);
+  }
+  return { ok: true, type: 'reminder', title, date };
+}
+
+function parseVoiceCommandLocal(text, ctx) {
+  const lower = text.toLowerCase().replace(/İ/g, 'i').replace(/I/g, 'ı');
+  if (lower.includes('hatırlat')) return parseReminderCommand(text);
+  if (lower.includes('gider') || lower.includes('masraf')) return parseExpenseCommand(text);
+  if (lower.includes('avans') || lower.includes('ödeme') || lower.includes('odeme')) return parsePaymentCommand(text, ctx.farmers);
+  if (lower.includes('çiftçi ekle') || lower.includes('ciftci ekle') || lower.includes('yeni çiftçi') || lower.includes('yeni ciftci')) return parseAddFarmerCommand(text);
+  return parsePurchaseCommand(text, ctx.farmers, ctx.priceList);
+}
+
+// AI destekli ayrıştırma: sadece "supabase" tanımlıysa (GitHub sürümü) ve
+// ayarlarda etkinleştirilmişse denenir. Sunucu tarafında (Supabase Edge
+// Function) çalıştığı için API anahtarı tarayıcıya hiç inmez.
+async function parseVoiceCommandAI(text, ctx) {
+  if (typeof supabase === 'undefined' || !supabase.functions) return null;
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-voice-parse', {
+      body: {
+        text,
+        context: {
+          farmerNames: ctx.farmers.map((f) => f.name),
+          varietyNames: ctx.priceList.map((v) => v.name),
+          today: todayStr(),
+        },
+      },
+    });
+    if (error || !data) return null;
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    if (!parsed || parsed.action === 'error' || parsed.action === 'unknown') return null;
+
+    if (parsed.action === 'purchase') {
+      const farmer = ctx.farmers.find((f) => f.name.toLowerCase() === String(parsed.farmerName || '').toLowerCase())
+        || ctx.farmers.find((f) => f.name.toLowerCase().includes(String(parsed.farmerName || '').toLowerCase()));
+      if (!farmer || !parsed.kg || !parsed.price) return null;
+      const varietyLabel = parsed.grade ? `${parsed.variety} · ${parsed.grade}` : parsed.variety;
+      return { ok: true, type: 'purchase', farmer, kg: parsed.kg, price: parsed.price, varietyLabel, viaAi: true };
+    }
+    if (parsed.action === 'add_farmer' && parsed.name) {
+      return { ok: true, type: 'add_farmer', name: parsed.name, phone: parsed.phone || '', viaAi: true };
+    }
+    if (parsed.action === 'payment' && parsed.amount) {
+      const farmer = ctx.farmers.find((f) => f.name.toLowerCase() === String(parsed.farmerName || '').toLowerCase())
+        || ctx.farmers.find((f) => f.name.toLowerCase().includes(String(parsed.farmerName || '').toLowerCase()));
+      if (!farmer) return null;
+      return { ok: true, type: 'payment', farmer, amount: parsed.amount, payType: parsed.payType === 'avans' ? 'avans' : 'odeme', viaAi: true };
+    }
+    if (parsed.action === 'expense' && parsed.amount) {
+      return { ok: true, type: 'expense', amount: parsed.amount, category: parsed.category || 'Diğer', note: parsed.note || text, viaAi: true };
+    }
+    if (parsed.action === 'reminder' && parsed.title) {
+      return { ok: true, type: 'reminder', title: parsed.title, date: parsed.date || todayStr(), viaAi: true };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function pendingSummaryText(p) {
+  if (p.type === 'purchase') return `Alım: ${p.farmer.name} — ${p.varietyLabel} — ${fmtKg(p.kg)} — ${fmtTL(p.price)}/kg. Toplam ${fmtTL(p.kg * p.price)}.`;
+  if (p.type === 'add_farmer') return `Yeni çiftçi: ${p.name}${p.phone ? ' · ' + p.phone : ''}.`;
+  if (p.type === 'payment') return `${p.payType === 'avans' ? 'Avans' : 'Ödeme'}: ${p.farmer.name} — ${fmtTL(p.amount)}.`;
+  if (p.type === 'expense') return `Gider: ${p.category} — ${fmtTL(p.amount)}.`;
+  if (p.type === 'reminder') return `Hatırlatma: "${p.title}" — ${fmtDate(p.date)}.`;
+  return '';
+}
+
+function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchases, payments, setPayments, expenses, setExpenses, reminders, setReminders, settings }) {
   const [open, setOpen] = useState(false);
   const [listening, setListening] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: 'Merhaba! Mikrofona basıp "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al" gibi bir alım komutu söyleyebilirsiniz.' },
+    { role: 'assistant', text: 'Merhaba! Alım, çiftçi ekleme, ödeme/avans, gider ve hatırlatma gibi işlemleri sesli veya yazarak yapabilirsiniz. Örnek: "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al" ya da "Ahmet\'e 500 lira avans ver".' },
   ]);
   const [pending, setPending] = useState(null);
   const [typedText, setTypedText] = useState('');
@@ -5359,24 +5491,31 @@ function VoiceAssistant({ farmers, priceList, purchases, setPurchases }) {
   const logEndRef = useRef(null);
 
   const speechSupported = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const aiEnabled = !!(settings && settings.aiVoiceEnabled);
 
   useEffect(() => {
     if (logEndRef.current) logEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages, open]);
 
-  const handleCommand = (text) => {
+  const handleCommand = async (text) => {
     if (!text.trim()) return;
     setMessages((m) => [...m, { role: 'user', text }]);
-    const result = parsePurchaseCommand(text, farmers, priceList);
+    const ctx = { farmers, priceList };
+
+    let result = null;
+    if (aiEnabled) {
+      setThinking(true);
+      result = await parseVoiceCommandAI(text, ctx);
+      setThinking(false);
+    }
+    if (!result) result = parseVoiceCommandLocal(text, ctx);
+
     if (result.ok) {
       setPending(result);
-      setMessages((m) => [...m, {
-        role: 'assistant',
-        text: `Anladığım: ${result.farmer.name} — ${result.varietyLabel} — ${fmtKg(result.kg)} — ${fmtTL(result.price)}/kg. Toplam ${fmtTL(result.kg * result.price)}. Kaydedeyim mi?`,
-      }]);
+      setMessages((m) => [...m, { role: 'assistant', text: `${result.viaAi ? '✨ ' : ''}Anladığım: ${pendingSummaryText(result)} Kaydedeyim mi?` }]);
     } else {
       setPending(null);
-      setMessages((m) => [...m, { role: 'assistant', text: result.message }]);
+      setMessages((m) => [...m, { role: 'assistant', text: result.message || 'Anlayamadım, tekrar deneyin.' }]);
     }
   };
 
@@ -5408,29 +5547,57 @@ function VoiceAssistant({ farmers, priceList, purchases, setPurchases }) {
 
   const confirmSave = async () => {
     if (!pending) return;
-    const amount = pending.kg * pending.price;
-    const record = {
-      id: uid(),
-      makbuzNo: purchases.length + 1,
-      farmerId: pending.farmer.id,
-      date: todayStr(),
-      time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-      personnelId: null, personnelName: '',
-      vehicleId: null, vehiclePlaka: '',
-      items: [{ id: uid(), grade: pending.varietyLabel, kg: pending.kg, pricePerKg: pending.price, amount }],
-      netKg: pending.kg,
-      noDeduction: true,
-      commissionRate: 0, commissionAmount: 0,
-      borsaTescilli: false, stopajOrani: 0, stopajTutari: 0,
-      applyBagkur: false, bagkurRate: 0, bagkurTutari: 0,
-      amount, netPayment: amount,
-      note: 'Sesli komutla eklendi',
-      createdAt: Date.now(),
-    };
-    const next = [...purchases, record];
-    setPurchases(next);
-    await storageSet('zk:purchases', next);
-    setMessages((m) => [...m, { role: 'assistant', text: `Kaydedildi ✓ (Makbuz #${record.makbuzNo})` }]);
+
+    if (pending.type === 'purchase') {
+      const amount = pending.kg * pending.price;
+      const record = {
+        id: uid(), makbuzNo: purchases.length + 1, farmerId: pending.farmer.id,
+        date: todayStr(), time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+        personnelId: null, personnelName: '', vehicleId: null, vehiclePlaka: '',
+        items: [{ id: uid(), grade: pending.varietyLabel, kg: pending.kg, pricePerKg: pending.price, amount }],
+        netKg: pending.kg, noDeduction: true,
+        commissionRate: 0, commissionAmount: 0, borsaTescilli: false, stopajOrani: 0, stopajTutari: 0,
+        applyBagkur: false, bagkurRate: 0, bagkurTutari: 0,
+        amount, netPayment: amount, note: 'Sesli komutla eklendi', createdAt: Date.now(),
+      };
+      const next = [...purchases, record];
+      setPurchases(next);
+      await storageSet('zk:purchases', next);
+      setMessages((m) => [...m, { role: 'assistant', text: `Kaydedildi ✓ (Makbuz #${record.makbuzNo})` }]);
+    }
+
+    if (pending.type === 'add_farmer') {
+      const record = { id: uid(), name: pending.name, phone: pending.phone || '', tcNo: '', address: '', bagkurStatus: false, createdAt: Date.now() };
+      const next = [...farmers, record];
+      setFarmers(next);
+      await storageSet('zk:farmers', next);
+      setMessages((m) => [...m, { role: 'assistant', text: `${pending.name} çiftçi olarak eklendi ✓` }]);
+    }
+
+    if (pending.type === 'payment') {
+      const record = { id: uid(), farmerId: pending.farmer.id, date: todayStr(), amount: pending.amount, note: 'Sesli komutla eklendi', payType: pending.payType, createdAt: Date.now() };
+      const next = [...payments, record];
+      setPayments(next);
+      await storageSet('zk:payments', next);
+      setMessages((m) => [...m, { role: 'assistant', text: `${pending.payType === 'avans' ? 'Avans' : 'Ödeme'} kaydedildi ✓` }]);
+    }
+
+    if (pending.type === 'expense') {
+      const record = { id: uid(), date: todayStr(), category: pending.category, amount: pending.amount, note: pending.note, createdAt: Date.now() };
+      const next = [...expenses, record];
+      setExpenses(next);
+      await storageSet('zk:expenses', next);
+      setMessages((m) => [...m, { role: 'assistant', text: 'Gider kaydedildi ✓' }]);
+    }
+
+    if (pending.type === 'reminder') {
+      const record = { id: uid(), title: pending.title, date: pending.date, note: '', done: false, createdAt: Date.now() };
+      const next = [...reminders, record];
+      setReminders(next);
+      await storageSet('zk:reminders', next);
+      setMessages((m) => [...m, { role: 'assistant', text: 'Hatırlatma eklendi ✓' }]);
+    }
+
     setPending(null);
   };
 
@@ -5469,7 +5636,8 @@ function VoiceAssistant({ farmers, priceList, purchases, setPurchases }) {
         }}>
           <div style={{ background: COLORS.olive, color: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Mic size={16} />
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Sesli Alım Asistanı</div>
+            <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Sesli Asistan</div>
+            {aiEnabled && <span style={{ fontSize: 9.5, background: 'rgba(255,255,255,0.18)', padding: '2px 7px', borderRadius: 10 }}>AI</span>}
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: COLORS.paper }}>
@@ -5483,6 +5651,9 @@ function VoiceAssistant({ farmers, priceList, purchases, setPurchases }) {
                 {m.text}
               </div>
             ))}
+            {thinking && (
+              <div style={{ alignSelf: 'flex-start', fontSize: 11.5, color: COLORS.inkSoft, fontStyle: 'italic' }}>Düşünüyor...</div>
+            )}
             {pending && (
               <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start' }}>
                 <button className="zk-btn zk-btn-primary" style={{ fontSize: 11.5, padding: '6px 10px' }} onClick={confirmSave}>Evet, kaydet</button>
@@ -5984,7 +6155,7 @@ export default function ZeytinDefteri() {
         </div>
       </div>
       {printTarget && <PrintArea purchase={printTarget.purchase} farmer={printTarget.farmer} settings={settings} />}
-      <VoiceAssistant farmers={farmers} priceList={priceList} purchases={purchases} setPurchases={setPurchases} />
+      <VoiceAssistant farmers={farmers} setFarmers={setFarmers} priceList={priceList} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} reminders={reminders} setReminders={setReminders} settings={settings} />
     </div>
   );
 }
