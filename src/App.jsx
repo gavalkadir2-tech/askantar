@@ -111,6 +111,7 @@ function GlobalStyle() {
       .zk-brand { color: #F5F2E8; font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
       .zk-brand-sub { color: #A9B896; font-size: 10.5px; padding: 0 10px; margin-bottom: 24px; letter-spacing: 0.6px; text-transform: uppercase; }
       .zk-navbtn { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 8px; background: transparent; border: none; border-left: 2px solid transparent; color: #C9D2B9; font-size: 13px; font-weight: 500; cursor: pointer; text-align: left; width: 100%; transition: background 0.12s ease, color 0.12s ease; }
+      .zk-navgroup-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: #7C8A6C; padding: 14px 11px 4px; }
       .zk-sidebar-compact .zk-navbtn { padding: 6px 11px; font-size: 12px; gap: 8px; }
       .zk-sidebar-compact .zk-brand-sub { margin-bottom: 14px; }
       .zk-navbtn:hover { background: rgba(255,255,255,0.07); color: #F5F2E8; }
@@ -517,7 +518,7 @@ function DashboardTab({ farmers, purchases, payments, sales, setTab }) {
       <div className="zk-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700 }}>Son alımlar</div>
-          <button className="zk-btn zk-btn-primary" onClick={() => setTab('purchases')}><Plus size={14} /> Yeni alım</button>
+          <button className="zk-btn zk-btn-primary" onClick={() => setTab('purchase')}><Plus size={14} /> Yeni alım</button>
         </div>
         {recent.length === 0 ? (
           <div className="zk-empty"><Package size={26} className="zk-empty-icon" /><br/>Henüz alım kaydı yok. "Yeni alım" ile başlayın.</div>
@@ -713,7 +714,7 @@ function FarmersTab({ farmers, setFarmers, purchases, payments, setTab, setSelec
               const bal = balances[f.id] || 0;
               return (
                 <div key={f.id} className="zk-farmer-row">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }} onClick={() => { setSelectedFarmerId(f.id); setTab('purchases'); }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }} onClick={() => { setSelectedFarmerId(f.id); setTab('ledger'); }}>
                     <div className="zk-avatar">{f.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</div>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -732,7 +733,7 @@ function FarmersTab({ farmers, setFarmers, purchases, payments, setTab, setSelec
                     </span>
                     <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => setEditingFarmer(f)}><Pencil size={12} /></button>
                     <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeFarmer(f)}><Trash2 size={12} /></button>
-                    <ChevronRight size={16} color={COLORS.inkSoft} onClick={() => { setSelectedFarmerId(f.id); setTab('purchases'); }} style={{ cursor: 'pointer' }} />
+                    <ChevronRight size={16} color={COLORS.inkSoft} onClick={() => { setSelectedFarmerId(f.id); setTab('ledger'); }} style={{ cursor: 'pointer' }} />
                   </div>
                 </div>
               );
@@ -3844,131 +3845,8 @@ function StockOverview({ purchases, sales }) {
 
 // ---------- Alışlar (Çiftçiler + Kantarlı Alış + Alış Geçmişi + Cari Hesap birleşik) ----------
 
-function PurchasesModuleTab({
-  farmers, setFarmers, purchases, setPurchases, payments, setPayments,
-  selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings, priceList,
-  personnel, setPersonnel, vehicles, setVehicles,
-}) {
-  const [section, setSection] = useState('purchase');
-  const sections = [
-    { key: 'farmers', label: 'Çiftçiler', icon: Users },
-    { key: 'purchase', label: 'Kantarlı Alış', icon: ScaleIcon },
-    { key: 'history', label: 'Alış Geçmişi', icon: ListChecks },
-    { key: 'ledger', label: 'Cari Hesap', icon: Wallet },
-  ];
-  return (
-    <div>
-      <div className="zk-h1">Alışlar</div>
-      <div className="zk-h1-sub">Çiftçiler, kantarlı alış, alış geçmişi ve cari hesap tek yerde</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
-        {sections.map((s) => (
-          <button key={s.key} className={`zk-btn ${section === s.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection(s.key)}>
-            <s.icon size={13} /> {s.label}
-          </button>
-        ))}
-      </div>
-      {section === 'farmers' && (
-        <FarmersTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setTab={() => setSection('ledger')} setSelectedFarmerId={setSelectedFarmerId} />
-      )}
-      {section === 'purchase' && (
-        <PurchaseTab
-          farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases}
-          onPrintReceipt={onPrintReceipt} settings={settings} priceList={priceList}
-          personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles}
-        />
-      )}
-      {section === 'history' && (
-        <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} onPrintReceipt={onPrintReceipt} settings={settings} />
-      )}
-      {section === 'ledger' && (
-        <LedgerTab
-          farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments}
-          selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId}
-          onPrintReceipt={onPrintReceipt} settings={settings}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------- Banka & Kasa (Kasa + Giderler + Muhasebe birleşik) ----------
-
-function BankingTab({
-  settings, setSettings, payments, expenses, setExpenses, cashEntries, setCashEntries, farmers,
-  bankAccounts, setBankAccounts, checksNotes, setChecksNotes,
-}) {
-  const [section, setSection] = useState('cash');
-  const sections = [
-    { key: 'cash', label: 'Kasa', icon: Banknote },
-    { key: 'expenses', label: 'Giderler', icon: Receipt },
-    { key: 'accounting', label: 'Muhasebe', icon: Landmark },
-  ];
-  return (
-    <div>
-      <div className="zk-h1">Banka & Kasa</div>
-      <div className="zk-h1-sub">Kasa, giderler ve muhasebe tek yerde</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
-        {sections.map((s) => (
-          <button key={s.key} className={`zk-btn ${section === s.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection(s.key)}>
-            <s.icon size={13} /> {s.label}
-          </button>
-        ))}
-      </div>
-      {section === 'cash' && (
-        <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />
-      )}
-      {section === 'expenses' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
-      {section === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} />}
-    </div>
-  );
-}
-
-// ---------- Depo & Envanter (Stok + Filo/Personel/Kasa-Çuval + Sevkiyat + Laboratuvar birleşik) ----------
-
-function InventoryTab({
-  purchases, sales, vehicles, setVehicles, personnel, setPersonnel, farmers, buyers,
-  maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance,
-  damages, setDamages, fines, setFines, tires, setTires, settings,
-  crateMovements, setCrateMovements, shipments, setShipments,
-  labResults, setLabResults,
-}) {
-  const [section, setSection] = useState('stock');
-  const sections = [
-    { key: 'stock', label: 'Stok', icon: Warehouse },
-    { key: 'fleet', label: 'Filo & Personel', icon: Truck },
-    { key: 'shipments', label: 'Sevkiyat', icon: PackageCheck },
-    { key: 'lab', label: 'Laboratuvar', icon: FlaskConical },
-  ];
-  return (
-    <div>
-      <div className="zk-h1">Depo & Envanter</div>
-      <div className="zk-h1-sub">Stok, filo/personel/kasa-çuval, sevkiyat ve laboratuvar tek yerde</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
-        {sections.map((s) => (
-          <button key={s.key} className={`zk-btn ${section === s.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection(s.key)}>
-            <s.icon size={13} /> {s.label}
-          </button>
-        ))}
-      </div>
-      {section === 'stock' && <StockOverview purchases={purchases} sales={sales} />}
-      {section === 'fleet' && (
-        <FleetTab
-          vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel}
-          purchases={purchases} sales={sales} farmers={farmers} buyers={buyers}
-          maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel}
-          documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance}
-          damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires}
-          settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements}
-        />
-      )}
-      {section === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
-      {section === 'lab' && <LabTab farmers={farmers} purchases={purchases} results={labResults} setResults={setLabResults} />}
-    </div>
-  );
-}
-
-function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers, maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance, damages, setDamages, fines, setFines, tires, setTires, settings, crateMovements, setCrateMovements }) {
-  const [view, setView] = useState('vehicles');
+function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers, maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance, damages, setDamages, fines, setFines, tires, setTires, settings, crateMovements, setCrateMovements, lockedView }) {
+  const [view, setView] = useState(lockedView || 'vehicles');
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [vehicleSubTab, setVehicleSubTab] = useState('overview');
   const [selectedPersonnelId, setSelectedPersonnelId] = useState('');
@@ -4073,13 +3951,20 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   const vehicleDeliveries = selectedVehicle ? sales.filter((s) => s.vehicleId === selectedVehicle.id).sort((a, b) => b.createdAt - a.createdAt) : [];
   const personnelPickups = selectedPersonnel ? purchases.filter((p) => p.personnelId === selectedPersonnel.id).sort((a, b) => b.createdAt - a.createdAt) : [];
 
+  const titles = {
+    vehicles: ['Araçlar', 'Hangi araç nereden ne kadar topladı, kime teslim etti'],
+    personnel: ['Personel', 'Personelin yaptığı alımlar ve performansı'],
+    crates: ['Kasa & Çuval', 'Çiftçilere verilen/iade alınan kasa ve çuval takibi'],
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div className="zk-h1">Personel & Envanter</div>
-          <div className="zk-h1-sub">Araçlar, personel ve kasa/çuval envanteri tek yerde</div>
+          <div className="zk-h1">{titles[view][0]}</div>
+          <div className="zk-h1-sub">{titles[view][1]}</div>
         </div>
+        {!lockedView && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className={`zk-btn ${view === 'vehicles' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => { setView('vehicles'); setSelectedPersonnelId(''); }}>
             <Truck size={14} /> Araçlar
@@ -4091,6 +3976,7 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
             <Package2 size={14} /> Kasa & Çuval
           </button>
         </div>
+        )}
       </div>
 
       {view === 'crates' && (
@@ -6212,22 +6098,37 @@ export default function ZeytinDefteri() {
   };
 
   const navItems = [
-    { key: 'dashboard', label: 'Pano', icon: LayoutDashboard },
-    { key: 'sales', label: 'Satışlar', icon: ShoppingCart },
-    { key: 'purchases', label: 'Alışlar', icon: ScaleIcon },
-    { key: 'banking', label: 'Banka & Kasa', icon: Banknote },
-    { key: 'inventory', label: 'Depo & Envanter', icon: Warehouse },
-    { key: 'ai', label: 'AI Asistan', icon: Sparkles },
-    { key: 'reports', label: 'Raporlar', icon: FileBarChart },
-    { key: 'settings', label: 'Ayarlar', icon: SettingsIcon },
+    { key: 'dashboard', label: 'Pano', icon: LayoutDashboard, group: null },
+
+    { key: 'purchase', label: 'Kantarlı Alış', icon: ScaleIcon, group: 'İşlemler' },
+    { key: 'sales', label: 'Satış', icon: ShoppingCart, group: 'İşlemler' },
+    { key: 'shipments', label: 'Sevkiyat', icon: PackageCheck, group: 'İşlemler' },
+
+    { key: 'farmers', label: 'Çiftçiler', icon: Users, group: 'Kayıtlar' },
+    { key: 'allPurchases', label: 'Alış Geçmişi', icon: ListChecks, group: 'Kayıtlar' },
+    { key: 'ledger', label: 'Cari Hesap', icon: Wallet, group: 'Kayıtlar' },
+    { key: 'stock', label: 'Depo (Stok)', icon: Warehouse, group: 'Kayıtlar' },
+
+    { key: 'cash', label: 'Kasa', icon: Banknote, group: 'Finans' },
+    { key: 'expenses', label: 'Giderler', icon: Receipt, group: 'Finans' },
+    { key: 'accounting', label: 'Muhasebe', icon: Landmark, group: 'Finans' },
+
+    { key: 'vehicles', label: 'Araçlar', icon: Truck, group: 'Filo & Personel' },
+    { key: 'personnel', label: 'Personel', icon: IdCard, group: 'Filo & Personel' },
+    { key: 'crates', label: 'Kasa & Çuval', icon: Package2, group: 'Filo & Personel' },
+    { key: 'lab', label: 'Laboratuvar', icon: FlaskConical, group: 'Filo & Personel' },
+
+    { key: 'ai', label: 'AI Asistan', icon: Sparkles, group: 'Diğer' },
+    { key: 'reports', label: 'Raporlar', icon: FileBarChart, group: 'Diğer' },
+    { key: 'settings', label: 'Ayarlar', icon: SettingsIcon, group: 'Diğer' },
   ];
 
   const ROLE_TAB_ACCESS = {
     admin: null, user: null, // null = tum sekmelere erisim
-    muhasebe: ['dashboard', 'banking', 'reports', 'purchases', 'sales', 'settings'],
-    kantar: ['dashboard', 'purchases', 'sales'],
-    depo: ['dashboard', 'inventory', 'sales'],
-    sevkiyat: ['dashboard', 'inventory'],
+    muhasebe: ['dashboard', 'cash', 'expenses', 'accounting', 'ledger', 'reports', 'allPurchases', 'settings'],
+    kantar: ['dashboard', 'purchase', 'farmers', 'allPurchases'],
+    depo: ['dashboard', 'stock', 'sales', 'crates', 'lab'],
+    sevkiyat: ['dashboard', 'shipments', 'vehicles'],
   };
   const allowedTabs = ROLE_TAB_ACCESS[currentUser.role];
   const visibleNavItems = allowedTabs ? navItems.filter((item) => allowedTabs.includes(item.key)) : navItems;
@@ -6270,10 +6171,15 @@ export default function ZeytinDefteri() {
             maintenance={maintenance} fuel={fuel} vehicles={vehicles}
             reminders={reminders} setReminders={setReminders} settings={settings}
           />
-          {visibleNavItems.map((item) => (
-            <button key={item.key} className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
-              <item.icon size={16} /> {item.label}
-            </button>
+          {visibleNavItems.map((item, i) => (
+            <React.Fragment key={item.key}>
+              {item.group && item.group !== visibleNavItems[i - 1]?.group && (
+                <div className="zk-navgroup-label">{item.group}</div>
+              )}
+              <button className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
+                <item.icon size={16} /> {item.label}
+              </button>
+            </React.Fragment>
           ))}
           <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
             <div style={{
@@ -6300,10 +6206,25 @@ export default function ZeytinDefteri() {
         </div>
         <div className="zk-main">
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
+
+          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
           {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
-          {tab === 'purchases' && <PurchasesModuleTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
-          {tab === 'banking' && <BankingTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} />}
-          {tab === 'inventory' && <InventoryTab purchases={purchases} sales={sales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} shipments={shipments} setShipments={setShipments} labResults={labResults} setLabResults={setLabResults} />}
+          {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
+
+          {tab === 'farmers' && <FarmersTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setTab={setTab} setSelectedFarmerId={setSelectedFarmerId} />}
+          {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
+          {tab === 'ledger' && <LedgerTab farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
+          {tab === 'stock' && <StockOverview purchases={purchases} sales={sales} />}
+
+          {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
+          {tab === 'expenses' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
+          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} />}
+
+          {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} />}
+          {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} />}
+          {tab === 'crates' && <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} />}
+          {tab === 'lab' && <LabTab farmers={farmers} purchases={purchases} results={labResults} setResults={setLabResults} />}
+
           {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
           {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} />}
           {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} />}
