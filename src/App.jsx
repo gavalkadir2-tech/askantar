@@ -110,7 +110,9 @@ function GlobalStyle() {
       .zk-brand-row { display: flex; align-items: center; gap: 9px; padding: 0 10px; margin-bottom: 2px; }
       .zk-brand { color: #F5F2E8; font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
       .zk-brand-sub { color: #A9B896; font-size: 10.5px; padding: 0 10px; margin-bottom: 24px; letter-spacing: 0.6px; text-transform: uppercase; }
-      .zk-navbtn { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 8px; background: transparent; border: none; border-left: 2px solid transparent; color: #C9D2B9; font-size: 13px; font-weight: 500; cursor: pointer; text-align: left; width: 100%; transition: background 0.12s ease, color 0.12s ease; }
+      .zk-navbtn { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 8px; background: transparent; border: none; border-left: 2px solid transparent; color: #C9D2B9; font-size: 13px; font-weight: 500; cursor: pointer; text-align: left; width: 100%; transition: background 0.12s ease, color 0.12s ease; white-space: nowrap; overflow: hidden; }
+      .zk-navbtn span, .zk-navbtn { text-overflow: ellipsis; }
+      .zk-navbtn svg { flex-shrink: 0; }
       .zk-navgroup-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: #7C8A6C; padding: 14px 11px 4px; }
       .zk-sidebar-compact .zk-navbtn { padding: 6px 11px; font-size: 12px; gap: 8px; }
       .zk-sidebar-compact .zk-brand-sub { margin-bottom: 14px; }
@@ -173,10 +175,13 @@ function GlobalStyle() {
         #zk-print-area { display: block; position: absolute; top: 0; left: 0; width: 100%; }
       }
 
-      /* Tablet: sidebar sabit kalır, sadece içerik alanı biraz daralır */
+      /* Tablet: sidebar sabit kalır, sadece içerik alanı biraz daralır.
+         Sidebar (190px) içerik alanını yediği için iki sütunlu formlar
+         burada da tek sütuna insin — yoksa 768-1024px aralığında sıkışıyor. */
       @media (max-width: 1024px) {
         .zk-sidebar { width: 190px; }
         .zk-main { padding: 22px 20px; }
+        .zk-grid[style*="1fr 1fr"] { grid-template-columns: 1fr !important; }
       }
 
       /* Telefon: sidebar gizli çekmeceye döner, üstte hamburger bar açar */
@@ -199,6 +204,7 @@ function GlobalStyle() {
         .zk-sidebar-overlay.zk-sidebar-open { display: block; }
         .zk-main { padding: 16px 14px; max-width: 100%; }
       }
+      /* Ana içeriğin kendisi (sidebar hesaba katılmadan) 720px altına inerse de aynı kural geçerli olsun */
       @media (max-width: 720px) {
         .zk-grid[style*="1fr 1fr"] { grid-template-columns: 1fr !important; }
       }
