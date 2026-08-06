@@ -1,9 +1,10 @@
 import jsPDF from 'jspdf';
 
-function tl(n, symbol) {
+function tl(n, decimals) {
   const num = Number(n) || 0;
-  const abs = Math.abs(num).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${num < 0 ? '-' : ''}${symbol || '₺'}${abs}`;
+  const d = decimals ?? 2;
+  const abs = Math.abs(num).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return `${num < 0 ? '-' : ''}${abs} ₺`;
 }
 function fmtDateTr(d) {
   return new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -13,7 +14,7 @@ function fmtKgTr(n) {
 }
 
 export function downloadReceiptPdf(purchase, farmer, settings) {
-  const symbol = (settings && settings.currencySymbol) || '₺';
+  const decimals = (settings && settings.decimalPlaces) ?? 2;
   const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
   const cx = 40;
   let y = 8;
@@ -57,14 +58,14 @@ export function downloadReceiptPdf(purchase, farmer, settings) {
   (purchase.items || []).forEach((it) => {
     doc.setFontSize(7.5);
     line(`${it.grade}`);
-    doc.text(`${fmtKgTr(it.kg)} x ${tl(it.pricePerKg, symbol)}`, 5, y);
-    doc.text(tl(it.amount, symbol), 75, y, { align: 'right' });
+    doc.text(`${fmtKgTr(it.kg)} x ${tl(it.pricePerKg, decimals)}`, 5, y);
+    doc.text(tl(it.amount, decimals), 75, y, { align: 'right' });
     y += 4;
     doc.setFontSize(8);
   });
   doc.setFont('helvetica', 'bold');
   doc.text('Toplam', 5, y);
-  doc.text(`${fmtKgTr(purchase.netKg)}  ${tl(purchase.amount, symbol)}`, 75, y, { align: 'right' });
+  doc.text(`${fmtKgTr(purchase.netKg)}  ${tl(purchase.amount, decimals)}`, 75, y, { align: 'right' });
   y += 5;
   doc.setFont('helvetica', 'normal');
   doc.line(4, y, 76, y);
@@ -74,13 +75,13 @@ export function downloadReceiptPdf(purchase, farmer, settings) {
   if (purchase.noDeduction) {
     row('Kesintisiz', '—');
   } else {
-    row(`Komisyon (%${purchase.commissionRate})`, `- ${tl(purchase.commissionAmount, symbol)}`);
-    row(`Stopaj (%${purchase.stopajOrani})`, `- ${tl(purchase.stopajTutari, symbol)}`);
-    if (purchase.applyBagkur) row(`BAĞ-KUR (%${purchase.bagkurRate})`, `- ${tl(purchase.bagkurTutari, symbol)}`);
+    row(`Komisyon (%${purchase.commissionRate})`, `- ${tl(purchase.commissionAmount, decimals)}`);
+    row(`Stopaj (%${purchase.stopajOrani})`, `- ${tl(purchase.stopajTutari, decimals)}`);
+    if (purchase.applyBagkur) row(`BAĞ-KUR (%${purchase.bagkurRate})`, `- ${tl(purchase.bagkurTutari, decimals)}`);
   }
-  if (purchase.hammaliyeTutari) row('Hammaliye', `- ${tl(purchase.hammaliyeTutari, symbol)}`);
-  if (purchase.nakliyeTutari) row('Nakliye', `- ${tl(purchase.nakliyeTutari, symbol)}`);
-  if (purchase.cuvalKesintisi) row('Çuval/kasa', `- ${tl(purchase.cuvalKesintisi, symbol)}`);
+  if (purchase.hammaliyeTutari) row('Hammaliye', `- ${tl(purchase.hammaliyeTutari, decimals)}`);
+  if (purchase.nakliyeTutari) row('Nakliye', `- ${tl(purchase.nakliyeTutari, decimals)}`);
+  if (purchase.cuvalKesintisi) row('Çuval/kasa', `- ${tl(purchase.cuvalKesintisi, decimals)}`);
 
   y += 1;
   doc.line(4, y, 76, y);
@@ -88,7 +89,7 @@ export function downloadReceiptPdf(purchase, farmer, settings) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.text('ÖDENEN NET', 5, y);
-  doc.text(tl(purchase.netPayment, symbol), 75, y, { align: 'right' });
+  doc.text(tl(purchase.netPayment, decimals), 75, y, { align: 'right' });
   y += 8;
 
   if (purchase.note) {

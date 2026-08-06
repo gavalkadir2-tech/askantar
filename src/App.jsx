@@ -23,14 +23,14 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 // bunun yerine değerler mutasyona uğratılır ve React'in normal render döngüsü
 // (ayarlar değiştiğinde tetiklenen re-render) yeni değerleri otomatik yansıtır.
 const CURRENCY_CODE_MAP = { '₺': 'TRY', '$': 'USD', '€': 'EUR' };
-let FORMAT_STATE = { currencySymbol: '₺', dateFormat: 'DMY' };
+let FORMAT_STATE = { dateFormat: 'DMY', decimalPlaces: 2 };
 
 const fmtTL = (n) => {
   const num = Number(n) || 0;
-  const symbol = FORMAT_STATE.currencySymbol || '₺';
   const sign = num < 0 ? '-' : '';
-  const abs = Math.abs(num).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${sign}${symbol}${abs}`;
+  const decimals = FORMAT_STATE.decimalPlaces ?? 2;
+  const abs = Math.abs(num).toLocaleString('tr-TR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return `${sign}${abs} ₺`;
 };
 const fmtKg = (n) => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' kg';
 const fmtDate = (d) => {
@@ -96,7 +96,7 @@ function applyAppearance(settings) {
   const preset = THEME_PRESETS[settings.theme] || THEME_PRESETS.light;
   Object.assign(COLORS, preset);
   if (settings.accentColor) COLORS.gold = settings.accentColor;
-  FORMAT_STATE = { currencySymbol: settings.currencySymbol || '₺', dateFormat: settings.dateFormat || 'DMY' };
+  FORMAT_STATE = { dateFormat: settings.dateFormat || 'DMY', decimalPlaces: settings.decimalPlaces ?? 2 };
 }
 
 function GlobalStyle() {
@@ -1190,15 +1190,15 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                 <div style={{ flex: '1 1 120px' }}>
-                  <label className="zk-label">Hammaliye kesintisi ({FORMAT_STATE.currencySymbol})</label>
+                  <label className="zk-label">Hammaliye kesintisi (₺)</label>
                   <input className="zk-input" type="number" value={hammaliyeTutari} onChange={(e) => setHammaliyeTutari(e.target.value)} placeholder="0" />
                 </div>
                 <div style={{ flex: '1 1 120px' }}>
-                  <label className="zk-label">Nakliye kesintisi ({FORMAT_STATE.currencySymbol})</label>
+                  <label className="zk-label">Nakliye kesintisi (₺)</label>
                   <input className="zk-input" type="number" value={nakliyeTutari} onChange={(e) => setNakliyeTutari(e.target.value)} placeholder="0" />
                 </div>
                 <div style={{ flex: '1 1 120px' }}>
-                  <label className="zk-label">Çuval/kasa kesintisi ({FORMAT_STATE.currencySymbol})</label>
+                  <label className="zk-label">Çuval/kasa kesintisi (₺)</label>
                   <input className="zk-input" type="number" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value)} placeholder="0" />
                 </div>
               </div>
@@ -4323,30 +4323,215 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   );
 }
 
-function CariTab({ farmers, setFarmers, purchases, payments, setPayments, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings }) {
-  const [section, setSection] = useState('farmers');
+function AddCariModal({ onClose, onSave, initialData, lockType }) {
+  const [type, setType] = useState(initialData?.type || lockType || 'tedarikci');
+  const [name, setName] = useState(initialData?.name || '');
+  const [phone, setPhone] = useState(initialData?.phone || '');
+  const [tcNo, setTcNo] = useState(initialData?.tcNo || '');
+  const [address, setAddress] = useState(initialData?.address || '');
+  const [bagkurStatus, setBagkurStatus] = useState(initialData?.bagkurStatus || false);
+
+  const submit = () => {
+    if (!name.trim()) return;
+    onSave({ type, name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus });
+  };
+
   return (
-    <div>
-      <div className="zk-h1">Cari</div>
-      <div className="zk-h1-sub">Çiftçiler ve cari hesap takibi tek yerde</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
-        <button className={`zk-btn ${section === 'farmers' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('farmers')}>
-          <Users size={13} /> Çiftçiler
-        </button>
-        <button className={`zk-btn ${section === 'ledger' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('ledger')}>
-          <Wallet size={13} /> Cari Hesap
-        </button>
-      </div>
-      {section === 'farmers' && (
-        <FarmersTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setTab={() => setSection('ledger')} setSelectedFarmerId={setSelectedFarmerId} />
+    <Modal title={initialData ? 'Cariyi düzenle' : 'Cari ekle'} onClose={onClose}>
+      {!lockType && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button className={`zk-btn ${type === 'tedarikci' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => setType('tedarikci')}>
+            Tedarikçi (çiftçi)
+          </button>
+          <button className={`zk-btn ${type === 'cari' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => setType('cari')}>
+            Cari (alıcı/müşteri)
+          </button>
+        </div>
       )}
-      {section === 'ledger' && (
+      <div style={{ marginBottom: 12 }}>
+        <label className="zk-label">{type === 'tedarikci' ? 'Ad soyad' : 'Ad / firma adı'}</label>
+        <input className="zk-input" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder={type === 'tedarikci' ? 'örn. Mehmet Yılmaz' : 'örn. Ege Zeytinyağı A.Ş.'} />
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label className="zk-label">Telefon</label>
+        <input className="zk-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0532 xxx xx xx" />
+      </div>
+      {type === 'tedarikci' && (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">TC Kimlik No</label>
+            <input className="zk-input" value={tcNo} onChange={(e) => setTcNo(e.target.value)} placeholder="11 haneli" maxLength={11} />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Adres (müstahsil makbuzu için)</label>
+            <input className="zk-input" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Köy / ilçe / il" />
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <label className="zk-checkbox-row">
+              <input type="checkbox" checked={bagkurStatus} onChange={(e) => setBagkurStatus(e.target.checked)} />
+              Tarım BAĞ-KUR'lu (SGK kesintisi uygulanır)
+            </label>
+          </div>
+        </>
+      )}
+      <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: type === 'cari' ? 6 : 0 }} onClick={submit}>Kaydet</button>
+    </Modal>
+  );
+}
+
+function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, setPayments, sales, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingFarmer, setEditingFarmer] = useState(null);
+  const [editingBuyer, setEditingBuyer] = useState(null);
+  const [viewingLedger, setViewingLedger] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const farmerBalances = useMemo(() => {
+    const map = {};
+    farmers.forEach((f) => { map[f.id] = 0; });
+    purchases.forEach((p) => { map[p.farmerId] = (map[p.farmerId] || 0) + p.netPayment; });
+    payments.forEach((pay) => { map[pay.farmerId] = (map[pay.farmerId] || 0) - pay.amount; });
+    return map;
+  }, [farmers, purchases, payments]);
+
+  const combined = useMemo(() => {
+    const f = farmers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, type: 'tedarikci', raw: x }));
+    const b = buyers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, type: 'cari', raw: x }));
+    return [...f, ...b]
+      .filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
+      .sort((a, b2) => a.name.localeCompare(b2.name, 'tr'));
+  }, [farmers, buyers, query]);
+
+  const openLedger = (farmerId) => { setSelectedFarmerId(farmerId); setViewingLedger(true); };
+  const closeLedger = () => { setViewingLedger(false); setSelectedFarmerId(''); };
+
+  const addCari = async (data) => {
+    if (data.type === 'tedarikci') {
+      const rec = { id: uid(), name: data.name, phone: data.phone || '', tcNo: data.tcNo || '', address: data.address || '', bagkurStatus: !!data.bagkurStatus, createdAt: Date.now() };
+      const next = [...farmers, rec];
+      setFarmers(next);
+      await storageSet('zk:farmers', next);
+    } else {
+      const rec = { id: uid(), name: data.name, phone: data.phone || '', createdAt: Date.now() };
+      const next = [...buyers, rec];
+      setBuyers(next);
+      await storageSet('zk:buyers', next);
+    }
+    setShowAdd(false);
+  };
+
+  const saveFarmerEdit = async (data) => {
+    const next = farmers.map((x) => (x.id === editingFarmer.id ? { ...x, ...data } : x));
+    setFarmers(next);
+    await storageSet('zk:farmers', next);
+    setEditingFarmer(null);
+  };
+
+  const saveBuyerEdit = async (data) => {
+    const next = buyers.map((x) => (x.id === editingBuyer.id ? { ...x, name: data.name, phone: data.phone } : x));
+    setBuyers(next);
+    await storageSet('zk:buyers', next);
+    setEditingBuyer(null);
+  };
+
+  const removeCari = async (c) => {
+    if (c.type === 'tedarikci') {
+      const hasHistory = purchases.some((p) => p.farmerId === c.id) || payments.some((p) => p.farmerId === c.id);
+      const msg = hasHistory
+        ? `${c.name} adına kayıtlı alım/ödeme geçmişi var. Yine de silmek istediğinize emin misiniz?`
+        : `${c.name} adlı tedarikçiyi silmek istediğinize emin misiniz?`;
+      if (!window.confirm(msg)) return;
+      const next = farmers.filter((x) => x.id !== c.id);
+      setFarmers(next);
+      await storageSet('zk:farmers', next);
+    } else {
+      const hasHistory = sales.some((s) => s.buyerId === c.id);
+      const msg = hasHistory
+        ? `${c.name} adına kayıtlı satış geçmişi var. Yine de silmek istediğinize emin misiniz?`
+        : `${c.name} adlı cariyi silmek istediğinize emin misiniz?`;
+      if (!window.confirm(msg)) return;
+      const next = buyers.filter((x) => x.id !== c.id);
+      setBuyers(next);
+      await storageSet('zk:buyers', next);
+    }
+  };
+
+  if (viewingLedger && selectedFarmerId) {
+    return (
+      <div>
+        <button className="zk-btn zk-btn-secondary" style={{ marginBottom: 14 }} onClick={closeLedger}>← Cariler listesine dön</button>
         <LedgerTab
           farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments}
           selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId}
           onPrintReceipt={onPrintReceipt} settings={settings}
         />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <div className="zk-h1">Cariler</div>
+          <div className="zk-h1-sub">{combined.length} kayıtlı cari — tedarikçi (çiftçi) ve müşteri (alıcı) bir arada</div>
+        </div>
+        <button className="zk-btn zk-btn-primary" onClick={() => setShowAdd(true)}><Plus size={14} /> Cari ekle</button>
+      </div>
+
+      <div style={{ position: 'relative', marginBottom: 14, maxWidth: 320 }}>
+        <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: COLORS.inkSoft }} />
+        <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="Cari ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+      </div>
+
+      <div className="zk-card">
+        {combined.length === 0 ? (
+          <div className="zk-empty"><Users size={26} className="zk-empty-icon" /><br/>Henüz cari eklenmedi.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {combined.map((c) => {
+              const bal = c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : null;
+              return (
+                <div key={`${c.type}-${c.id}`} className="zk-farmer-row">
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }}
+                    onClick={() => (c.type === 'tedarikci' ? openLedger(c.id) : setEditingBuyer(c.raw))}
+                  >
+                    <div className="zk-avatar">{c.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 7 }}>
+                        {c.name}
+                        <span className={`zk-badge ${c.type === 'tedarikci' ? 'zk-badge-olive' : 'zk-badge-blue'}`} style={{ fontSize: 10 }}>
+                          {c.type === 'tedarikci' ? 'Tedarikçi' : 'Cari'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginTop: 2 }}>{c.phone || 'Telefon kayıtlı değil'}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {c.type === 'tedarikci' && (
+                      <span className={`zk-badge ${bal > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
+                        {bal > 0 ? `${fmtTL(bal)} ödenecek` : 'Bakiye kapalı'}
+                      </span>
+                    )}
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => (c.type === 'tedarikci' ? setEditingFarmer(c.raw) : setEditingBuyer(c.raw))}>
+                      <Pencil size={12} />
+                    </button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeCari(c)}>
+                      <Trash2 size={12} />
+                    </button>
+                    {c.type === 'tedarikci' && <ChevronRight size={16} color={COLORS.inkSoft} style={{ cursor: 'pointer' }} onClick={() => openLedger(c.id)} />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {showAdd && <AddCariModal onClose={() => setShowAdd(false)} onSave={addCari} />}
+      {editingFarmer && <AddCariModal lockType="tedarikci" initialData={{ ...editingFarmer, type: 'tedarikci' }} onClose={() => setEditingFarmer(null)} onSave={saveFarmerEdit} />}
+      {editingBuyer && <AddCariModal lockType="cari" initialData={{ ...editingBuyer, type: 'cari' }} onClose={() => setEditingBuyer(null)} onSave={saveBuyerEdit} />}
     </div>
   );
 }
@@ -4953,7 +5138,7 @@ function ExcelFarmerImport({ farmers, setFarmers }) {
 function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup, onRestore, restoreStatus, farmers, setFarmers, allData }) {
   const [tab, setTab] = useState('genel');
 
-  const [currencySymbol, setCurrencySymbol] = useState(settings.currencySymbol || '₺');
+  const [decimalPlaces, setDecimalPlaces] = useState(settings.decimalPlaces ?? 2);
   const [dateFormat, setDateFormat] = useState(settings.dateFormat || 'DMY');
   const [defaultVatRate, setDefaultVatRate] = useState(settings.defaultVatRate ?? 20);
   const [aiVoiceEnabled, setAiVoiceEnabled] = useState(settings.aiVoiceEnabled ?? false);
@@ -4994,7 +5179,7 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
   const [savedNote, setSavedNote] = useState('');
 
   const buildNext = () => ({
-    currencySymbol, dateFormat,
+    decimalPlaces, dateFormat,
     defaultVatRate: parseFloat(defaultVatRate) || 0,
     defaultFuelPrice: parseFloat(defaultFuelPrice) || 0,
     crateWeight: parseFloat(crateWeight) || 0,
@@ -5093,11 +5278,11 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
               <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Biçim</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14 }}>
                 <div>
-                  <label className="zk-label">Para birimi sembolü</label>
-                  <select className="zk-select" value={currencySymbol} onChange={(e) => setCurrencySymbol(e.target.value)}>
-                    <option value="₺">₺ — Türk Lirası</option>
-                    <option value="$">$ — Dolar</option>
-                    <option value="€">€ — Euro</option>
+                  <label className="zk-label">Ondalık basamak sayısı</label>
+                  <select className="zk-select" value={decimalPlaces} onChange={(e) => setDecimalPlaces(parseInt(e.target.value, 10))}>
+                    <option value={0}>0 — örn. 1.234 ₺</option>
+                    <option value={1}>1 — örn. 1.234,5 ₺</option>
+                    <option value={2}>2 — örn. 1.234,56 ₺</option>
                   </select>
                 </div>
                 <div>
@@ -5112,7 +5297,7 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
                   <input className="zk-input" type="number" value={defaultVatRate} onChange={(e) => setDefaultVatRate(e.target.value)} placeholder="20" />
                 </div>
                 <div>
-                  <label className="zk-label">Varsayılan yakıt fiyatı ({currencySymbol}/Lt)</label>
+                  <label className="zk-label">Varsayılan yakıt fiyatı (₺/Lt)</label>
                   <input className="zk-input" type="number" value={defaultFuelPrice} onChange={(e) => setDefaultFuelPrice(e.target.value)} placeholder="örn. 45" />
                 </div>
               </div>
@@ -6351,7 +6536,7 @@ export default function ZeytinDefteri() {
     { key: 'shipments', label: 'Sevkiyat', icon: PackageCheck, group: 'İşlemler' },
 
     { key: 'accounting', label: 'Muhasebe', icon: Landmark, group: 'Finans' },
-    { key: 'cari', label: 'Cari', icon: Wallet, group: 'Finans' },
+    { key: 'cari', label: 'Cariler', icon: Wallet, group: 'Finans' },
     { key: 'allPurchases', label: 'Alış Geçmişi', icon: ListChecks, group: 'Finans' },
     { key: 'sales', label: 'Satış', icon: ShoppingCart, group: 'Finans' },
     { key: 'stock', label: 'Depo (Stok)', icon: Warehouse, group: 'Finans' },
@@ -6454,7 +6639,7 @@ export default function ZeytinDefteri() {
           {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
 
           {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
-          {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
+          {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
 
