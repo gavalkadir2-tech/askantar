@@ -145,10 +145,10 @@ old_navitems_use = """  if (!loaded) {
   }"""
 new_navitems_use = """  const ROLE_TAB_ACCESS = {
     admin: null, user: null, // null = tum sekmelere erisim
-    muhasebe: ['dashboard', 'ledger', 'expenses', 'cash', 'accounting', 'reports', 'allPurchases', 'settings'],
-    kantar: ['dashboard', 'purchase', 'allPurchases', 'farmers'],
-    depo: ['dashboard', 'warehouse', 'crates', 'lab'],
-    sevkiyat: ['dashboard', 'shipments', 'fleet'],
+    muhasebe: ['dashboard', 'finance', 'reports', 'logistics', 'settings'],
+    kantar: ['dashboard', 'purchase', 'logistics', 'farmers'],
+    depo: ['dashboard', 'logistics', 'crates', 'lab'],
+    sevkiyat: ['dashboard', 'logistics', 'fleet'],
   };
   const allowedTabs = ROLE_TAB_ACCESS[currentUser.role];
   const visibleNavItems = allowedTabs ? navItems.filter((item) => allowedTabs.includes(item.key)) : navItems;
