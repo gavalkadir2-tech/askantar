@@ -12,7 +12,7 @@ import {
   Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard, Menu,
   Wrench, Fuel, FileText, ShieldAlert, AlertTriangle, Disc, TrendingUp, Gauge, CalendarClock,
   Sparkles, AlertOctagon, UserCheck, Archive, Target, Radar, RefreshCw, Trash2, Mic, MicOff, Send, Bot, Bell, Pencil,
-  Package2, FlaskConical, Landmark, CreditCard, Navigation, MapPin, PackageCheck,
+  Package2, FlaskConical, Landmark, CreditCard, Navigation, MapPin, PackageCheck, Repeat, BellRing,
 } from 'lucide-react';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -125,12 +125,13 @@ function GlobalStyle() {
       .zk-h1-sub { font-size: 12.5px; color: ${COLORS.inkSoft}; margin-bottom: 20px; }
       .zk-card { background: ${COLORS.paperCard}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 16px 18px; transition: box-shadow 0.15s ease, border-color 0.15s ease; overflow-x: auto; }
       .zk-grid { display: grid; gap: 12px; }
+      .zk-grid > * { min-width: 0; }
       .zk-stat { background: ${COLORS.paperCard}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 14px 16px; transition: box-shadow 0.15s ease, transform 0.15s ease; }
       .zk-stat:hover { box-shadow: 0 4px 14px rgba(43,42,37,0.07); transform: translateY(-1px); }
       .zk-stat-label { font-size: 11px; color: ${COLORS.inkSoft}; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
       .zk-stat-icon { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; background: ${COLORS.oliveSoft}; color: ${COLORS.olive}; }
       .zk-stat-value { font-family: var(--font-display); font-size: 22px; font-weight: 600; }
-      .zk-input, .zk-select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid ${COLORS.border}; background: #FCFBF7; font-size: 16px; font-family: inherit; color: ${COLORS.ink}; min-height: 44px; }
+      .zk-input, .zk-select { width: 100%; min-width: 0; padding: 11px 12px; border-radius: 8px; border: 1px solid ${COLORS.border}; background: #FCFBF7; font-size: 16px; font-family: inherit; color: ${COLORS.ink}; min-height: 44px; }
       .zk-input:focus, .zk-select:focus { outline: none; border-color: ${COLORS.oliveLight}; box-shadow: 0 0 0 3px ${COLORS.oliveSoft}; }
       .zk-label { font-size: 12.5px; font-weight: 600; color: ${COLORS.inkSoft}; margin-bottom: 5px; display: block; }
       .zk-btn { display: inline-flex; align-items: center; gap: 6px; padding: 11px 16px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease; min-height: 44px; }
@@ -351,7 +352,7 @@ function ScaleWidget({ onWeightCapture, compact }) {
             </div>
           )}
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {!connected && (
               <select value={baud} onChange={(e) => setBaud(Number(e.target.value))} style={{ background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: '6px 6px' }}>
                 <option value={9600}>9600</option>
@@ -762,6 +763,9 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
   const [vehicleId, setVehicleId] = useState('');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [manualDateTime, setManualDateTime] = useState(false);
+  const [manualDate, setManualDate] = useState(todayStr());
+  const [manualTime, setManualTime] = useState('');
   const [commissionRate, setCommissionRate] = useState((settings.defaultCommissionRate ?? 3).toString());
   const [borsaTescilli, setBorsaTescilli] = useState(false);
   const [noDeduction, setNoDeduction] = useState(settings.defaultNoDeduction ?? true);
@@ -793,9 +797,15 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
 
   const farmer = farmers.find((f) => f.id === farmerId);
   const selectedVariety = priceList.find((v) => v.name === lineVariety);
-  const date = now.toISOString().slice(0, 10);
-  const timeLabel = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-  const dateTimeLabel = now.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' · ' + timeLabel;
+  const date = manualDateTime ? manualDate : now.toISOString().slice(0, 10);
+  const timeLabel = manualDateTime ? (manualTime || '00:00') : now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const dateTimeLabel = fmtDate(date) + ' · ' + timeLabel;
+
+  const startManualEdit = () => {
+    setManualDate(now.toISOString().slice(0, 10));
+    setManualTime(now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+    setManualDateTime(true);
+  };
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30000);
@@ -931,7 +941,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
       makbuzNo: purchases.length + 1,
       farmerId,
       date,
-      time: now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+      time: timeLabel,
       personnelId: personnelId || null,
       personnelName: person ? person.name : '',
       vehicleId: vehicleId || null,
@@ -968,6 +978,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     setItems([]); setNote(''); setLineKg('');
     setRandiman(''); setAsit(''); setNem(''); setFirePercent('');
     setHammaliyeTutari(''); setNakliyeTutari(''); setCuvalKesintisi(''); setPhoto('');
+    setManualDateTime(false);
   };
 
   return (
@@ -1007,8 +1018,25 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
             </div>
           </div>
 
-          <div style={{ fontSize: 12, color: COLORS.inkSoft, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ClockIcon size={13} /> {dateTimeLabel} (otomatik)
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            {!manualDateTime ? (
+              <>
+                <div style={{ fontSize: 12, color: COLORS.inkSoft, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ClockIcon size={13} /> {dateTimeLabel} (otomatik)
+                </div>
+                <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 9px', fontSize: 11 }} onClick={startManualEdit}>
+                  <Pencil size={11} /> Değiştir
+                </button>
+              </>
+            ) : (
+              <>
+                <input className="zk-input" type="date" style={{ maxWidth: 150, minHeight: 34, padding: '5px 8px', fontSize: 12 }} value={manualDate} onChange={(e) => setManualDate(e.target.value)} />
+                <input className="zk-input" type="time" style={{ maxWidth: 110, minHeight: 34, padding: '5px 8px', fontSize: 12 }} value={manualTime} onChange={(e) => setManualTime(e.target.value)} />
+                <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 9px', fontSize: 11 }} onClick={() => setManualDateTime(false)}>
+                  <RefreshCw size={11} /> Otomatiğe dön
+                </button>
+              </>
+            )}
           </div>
 
           <div style={{ background: COLORS.paper, borderRadius: 10, padding: 12, marginBottom: 14 }}>
@@ -3568,16 +3596,29 @@ function ChecksNotesSection({ items, setItems }) {
   );
 }
 
-function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNotes }) {
-  const [section, setSection] = useState('banka');
+function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNotes, settings, setSettings, payments, expenses, setExpenses, cashEntries, setCashEntries, farmers }) {
+  const [section, setSection] = useState('kasa');
+  const sections = [
+    { key: 'kasa', label: 'Kasa', icon: Banknote },
+    { key: 'giderler', label: 'Giderler', icon: Receipt },
+    { key: 'banka', label: 'Banka Hesapları', icon: Landmark },
+    { key: 'cek', label: 'Çek & Senet', icon: CreditCard },
+  ];
   return (
     <div>
       <div className="zk-h1">Muhasebe</div>
-      <div className="zk-h1-sub">Banka hesapları ve çek/senet takibi</div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
-        <button className={`zk-btn ${section === 'banka' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('banka')}><Landmark size={13} /> Banka Hesapları</button>
-        <button className={`zk-btn ${section === 'cek' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('cek')}><CreditCard size={13} /> Çek & Senet</button>
+      <div className="zk-h1-sub">Kasa, giderler, banka hesapları ve çek/senet takibi</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+        {sections.map((s) => (
+          <button key={s.key} className={`zk-btn ${section === s.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection(s.key)}>
+            <s.icon size={13} /> {s.label}
+          </button>
+        ))}
       </div>
+      {section === 'kasa' && (
+        <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />
+      )}
+      {section === 'giderler' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
       {section === 'banka' && <BankAccountsSection accounts={bankAccounts} setAccounts={setBankAccounts} />}
       {section === 'cek' && <ChecksNotesSection items={checksNotes} setItems={setChecksNotes} />}
     </div>
@@ -4224,6 +4265,34 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   );
 }
 
+function CariTab({ farmers, setFarmers, purchases, payments, setPayments, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings }) {
+  const [section, setSection] = useState('farmers');
+  return (
+    <div>
+      <div className="zk-h1">Cari</div>
+      <div className="zk-h1-sub">Çiftçiler ve cari hesap takibi tek yerde</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+        <button className={`zk-btn ${section === 'farmers' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('farmers')}>
+          <Users size={13} /> Çiftçiler
+        </button>
+        <button className={`zk-btn ${section === 'ledger' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection('ledger')}>
+          <Wallet size={13} /> Cari Hesap
+        </button>
+      </div>
+      {section === 'farmers' && (
+        <FarmersTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setTab={() => setSection('ledger')} setSelectedFarmerId={setSelectedFarmerId} />
+      )}
+      {section === 'ledger' && (
+        <LedgerTab
+          farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments}
+          selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId}
+          onPrintReceipt={onPrintReceipt} settings={settings}
+        />
+      )}
+    </div>
+  );
+}
+
 function LedgerTab({ farmers, purchases, payments, setPayments, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings }) {
   const [payAmount, setPayAmount] = useState('');
   const [payNote, setPayNote] = useState('');
@@ -4352,8 +4421,10 @@ function LedgerTab({ farmers, purchases, payments, setPayments, selectedFarmerId
 function ReportsTab({ farmers, purchases, sales, buyers, expenses }) {
   const [range, setRange] = useState('month');
   const currentYear = new Date().getFullYear();
-  const [yearA, setYearA] = useState(currentYear);
-  const [yearB, setYearB] = useState(currentYear - 1);
+  const [fromA, setFromA] = useState(`${currentYear}-01-01`);
+  const [toA, setToA] = useState(todayStr());
+  const [fromB, setFromB] = useState(`${currentYear - 1}-01-01`);
+  const [toB, setToB] = useState(`${currentYear - 1}-12-31`);
 
   const filtered = useMemo(() => {
     const now = new Date();
@@ -4394,10 +4465,10 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses }) {
   const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
   const estimatedProfit = totalCommission + totalSalesAmount - totalExpenses;
 
-  const yearStats = (year) => {
-    const yp = purchases.filter((p) => new Date(p.date).getFullYear() === year);
-    const ys = sales.filter((s) => new Date(s.date).getFullYear() === year);
-    const ye = expenses.filter((e) => new Date(e.date).getFullYear() === year);
+  const rangeStats = (from, to) => {
+    const yp = purchases.filter((p) => p.date >= from && p.date <= to);
+    const ys = sales.filter((s) => s.date >= from && s.date <= to);
+    const ye = expenses.filter((e) => e.date >= from && e.date <= to);
     return {
       kg: yp.reduce((s, p) => s + p.netKg, 0),
       purchaseAmount: yp.reduce((s, p) => s + p.netPayment, 0),
@@ -4407,13 +4478,8 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses }) {
       count: yp.length,
     };
   };
-  const statsA = yearStats(parseInt(yearA, 10));
-  const statsB = yearStats(parseInt(yearB, 10));
-  const availableYears = useMemo(() => {
-    const years = new Set([currentYear]);
-    purchases.forEach((p) => years.add(new Date(p.date).getFullYear()));
-    return Array.from(years).sort((a, b) => b - a);
-  }, [purchases, currentYear]);
+  const statsA = rangeStats(fromA, toA);
+  const statsB = rangeStats(fromB, toB);
 
   const byFarmer = useMemo(() => {
     const map = {};
@@ -4539,18 +4605,27 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses }) {
       <div className="zk-card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700 }}>Dönem karşılaştırma</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5 }}>
-            <select className="zk-select" style={{ width: 100 }} value={yearA} onChange={(e) => setYearA(e.target.value)}>
-              {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <span style={{ color: COLORS.inkSoft }}>vs</span>
-            <select className="zk-select" style={{ width: 100 }} value={yearB} onChange={(e) => setYearB(e.target.value)}>
-              {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, color: COLORS.inkSoft, marginBottom: 4 }}>Dönem A</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input className="zk-input" type="date" style={{ width: 140 }} value={fromA} onChange={(e) => setFromA(e.target.value)} />
+              <span style={{ color: COLORS.inkSoft, fontSize: 12 }}>—</span>
+              <input className="zk-input" type="date" style={{ width: 140 }} value={toA} onChange={(e) => setToA(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: COLORS.inkSoft, marginBottom: 4 }}>Dönem B</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input className="zk-input" type="date" style={{ width: 140 }} value={fromB} onChange={(e) => setFromB(e.target.value)} />
+              <span style={{ color: COLORS.inkSoft, fontSize: 12 }}>—</span>
+              <input className="zk-input" type="date" style={{ width: 140 }} value={toB} onChange={(e) => setToB(e.target.value)} />
+            </div>
           </div>
         </div>
         <table className="zk-table">
-          <thead><tr><th></th><th>{yearA}</th><th>{yearB}</th></tr></thead>
+          <thead><tr><th></th><th>{fmtDate(fromA)} – {fmtDate(toA)}</th><th>{fmtDate(fromB)} – {fmtDate(toB)}</th></tr></thead>
           <tbody>
             <tr><td>Alım sayısı</td><td>{statsA.count}</td><td>{statsB.count}</td></tr>
             <tr><td>Toplam kg</td><td>{fmtKg(statsA.kg)}</td><td>{fmtKg(statsB.kg)}</td></tr>
@@ -5769,15 +5844,29 @@ function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchase
 
 function NotificationCenter({ farmers, purchases, payments, documents, insurance, fines, maintenance, fuel, vehicles, reminders, setReminders, settings }) {
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('all');
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState('');
+  const [linkedFarmerId, setLinkedFarmerId] = useState('');
+  const [recurrence, setRecurrence] = useState('none');
+  const [dismissed, setDismissed] = useState({});
+  const [notifPermission, setNotifPermission] = useState(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
 
   const docWarningDays = settings.docWarningDays ?? 30;
   const cariRiskDays = settings.cariRiskDays ?? 45;
   const maintenanceWarningKm = settings.maintenanceWarningKm ?? 500;
 
-  const alerts = useMemo(() => {
+  useEffect(() => {
+    (async () => {
+      const d = await storageGet('zk:dismissedAlerts');
+      setDismissed(d || {});
+    })();
+  }, []);
+
+  const allAlerts = useMemo(() => {
     const list = [];
 
     documents.forEach((d) => {
@@ -5785,7 +5874,7 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
       if (days !== null && days <= docWarningDays) {
         const v = vehicles.find((x) => x.id === d.vehicleId);
         list.push({
-          severity: days < 0 ? 'kritik' : 'uyari', icon: FileText,
+          key: `doc-${d.id}`, severity: days < 0 ? 'kritik' : 'uyari', icon: FileText,
           title: `${d.docType} süresi ${days < 0 ? 'doldu' : 'yaklaşıyor'}`,
           detail: `${v ? v.plaka : 'Araç'} · ${days < 0 ? Math.abs(days) + ' gün önce doldu' : days + ' gün kaldı'}`,
         });
@@ -5797,7 +5886,7 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
       if (days !== null && days <= docWarningDays) {
         const v = vehicles.find((x) => x.id === i.vehicleId);
         list.push({
-          severity: days < 0 ? 'kritik' : 'uyari', icon: ShieldAlert,
+          key: `ins-${i.id}`, severity: days < 0 ? 'kritik' : 'uyari', icon: ShieldAlert,
           title: `${i.policyType} poliçesi ${days < 0 ? 'doldu' : 'yaklaşıyor'}`,
           detail: `${v ? v.plaka : 'Araç'} · ${i.company}`,
         });
@@ -5806,7 +5895,7 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
 
     fines.filter((f) => !f.paid).forEach((f) => {
       const v = vehicles.find((x) => x.id === f.vehicleId);
-      list.push({ severity: 'uyari', icon: AlertTriangle, title: 'Ödenmemiş ceza', detail: `${v ? v.plaka : 'Araç'} · ${fmtTL(f.amount)}` });
+      list.push({ key: `fine-${f.id}`, severity: 'uyari', icon: AlertTriangle, title: 'Ödenmemiş ceza', detail: `${v ? v.plaka : 'Araç'} · ${fmtTL(f.amount)}` });
     });
 
     farmers.forEach((f) => {
@@ -5816,7 +5905,7 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
       const last = [...fp, ...fpay].sort((a, b) => b.createdAt - a.createdAt)[0];
       const daysSince = last ? Math.round((Date.now() - last.createdAt) / (1000 * 60 * 60 * 24)) : null;
       if (balance > 0 && daysSince !== null && daysSince > cariRiskDays) {
-        list.push({ severity: 'kritik', icon: ShieldAlert, title: 'Yüksek cari risk', detail: `${f.name} · ${fmtTL(balance)} · ${daysSince} gündür hareket yok` });
+        list.push({ key: `risk-${f.id}`, severity: 'kritik', icon: ShieldAlert, title: 'Yüksek cari risk', detail: `${f.name} · ${fmtTL(balance)} · ${daysSince} gündür hareket yok` });
       }
     });
 
@@ -5831,7 +5920,7 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
         const lastKm = records[records.length - 1].km;
         const remaining = avg - (currentKm - lastKm);
         if (remaining < maintenanceWarningKm) {
-          list.push({ severity: remaining < 0 ? 'kritik' : 'uyari', icon: Wrench, title: 'Bakım zamanı yaklaştı', detail: `${v.plaka} · tahmini ${Math.round(remaining)} km kaldı` });
+          list.push({ key: `maint-${v.id}`, severity: remaining < 0 ? 'kritik' : 'uyari', icon: Wrench, title: 'Bakım zamanı yaklaştı', detail: `${v.plaka} · tahmini ${Math.round(remaining)} km kaldı` });
         }
       }
     });
@@ -5839,20 +5928,66 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
     return list.sort((a, b) => (a.severity === 'kritik' ? 0 : 1) - (b.severity === 'kritik' ? 0 : 1));
   }, [farmers, purchases, payments, documents, insurance, fines, maintenance, fuel, vehicles, docWarningDays, cariRiskDays, maintenanceWarningKm]);
 
+  const now = Date.now();
+  const alerts = allAlerts.filter((a) => !dismissed[a.key] || dismissed[a.key] < now);
   const activeReminders = reminders.filter((r) => !r.done).sort((a, b) => a.date.localeCompare(b.date));
   const totalCount = alerts.length + activeReminders.length;
 
+  // Kritik uyarılar için masaüstü bildirimi (izin verilmişse) — her uyarı için sadece bir kez
+  useEffect(() => {
+    if (notifPermission !== 'granted') return;
+    const critical = alerts.filter((a) => a.severity === 'kritik');
+    let seen = [];
+    try { seen = JSON.parse(window.localStorage.getItem('zk_notified_keys') || '[]'); } catch (e) {}
+    const fresh = critical.filter((a) => !seen.includes(a.key));
+    if (fresh.length > 0) {
+      fresh.forEach((a) => {
+        try { new Notification(a.title, { body: a.detail, tag: a.key }); } catch (e) {}
+      });
+      try { window.localStorage.setItem('zk_notified_keys', JSON.stringify([...seen, ...fresh.map((a) => a.key)].slice(-300))); } catch (e) {}
+    }
+  }, [alerts, notifPermission]);
+
+  const requestNotifPermission = async () => {
+    if (!('Notification' in window)) return;
+    const perm = await Notification.requestPermission();
+    setNotifPermission(perm);
+  };
+
+  const dismissAlert = async (key, days) => {
+    const until = Date.now() + days * 24 * 60 * 60 * 1000;
+    const next = { ...dismissed, [key]: until };
+    setDismissed(next);
+    await storageSet('zk:dismissedAlerts', next);
+  };
+
+  const filteredAlerts = filter === 'all' ? alerts : filter === 'reminders' ? [] : alerts.filter((a) => a.severity === filter);
+  const showReminders = filter === 'all' || filter === 'reminders';
+
+  const resetForm = () => { setTitle(''); setNote(''); setLinkedFarmerId(''); setRecurrence('none'); setDate(todayStr()); };
+
   const addReminder = async () => {
     if (!title.trim()) return;
-    const r = { id: uid(), title: title.trim(), date, note: note.trim(), done: false, createdAt: Date.now() };
+    const r = { id: uid(), title: title.trim(), date, note: note.trim(), done: false, farmerId: linkedFarmerId || null, recurrence, createdAt: Date.now() };
     const next = [...reminders, r];
     setReminders(next);
     await storageSet('zk:reminders', next);
-    setTitle(''); setNote('');
+    resetForm();
+  };
+
+  const advanceDate = (dateStr, recur) => {
+    const d = new Date(dateStr);
+    if (recur === 'weekly') d.setDate(d.getDate() + 7);
+    else if (recur === 'monthly') d.setMonth(d.getMonth() + 1);
+    return d.toISOString().slice(0, 10);
   };
 
   const toggleDone = async (id) => {
-    const next = reminders.map((r) => (r.id === id ? { ...r, done: !r.done } : r));
+    const target = reminders.find((r) => r.id === id);
+    let next = reminders.map((r) => (r.id === id ? { ...r, done: !r.done } : r));
+    if (target && !target.done && target.recurrence && target.recurrence !== 'none') {
+      next = [...next, { ...target, id: uid(), date: advanceDate(target.date, target.recurrence), done: false, createdAt: Date.now() }];
+    }
     setReminders(next);
     await storageSet('zk:reminders', next);
   };
@@ -5862,6 +5997,15 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
     const next = reminders.filter((r) => r.id !== id);
     setReminders(next);
     await storageSet('zk:reminders', next);
+  };
+
+  const dueLabel = (dateStr) => {
+    const d = daysUntil(dateStr);
+    if (d === null) return '';
+    if (d < 0) return `${Math.abs(d)} gün gecikti`;
+    if (d === 0) return 'Bugün';
+    if (d === 1) return 'Yarın';
+    return `${d} gün kaldı`;
   };
 
   return (
@@ -5881,36 +6025,64 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
 
       {open && (
         <Modal title="Bildirim ve Hatırlatma Merkezi" onClose={() => setOpen(false)}>
-          <div style={{ maxHeight: '55vh', overflowY: 'auto', marginBottom: 16 }}>
-            {alerts.length === 0 && activeReminders.length === 0 ? (
-              <div className="zk-empty">Her şey yolunda, aktif uyarı yok.</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {[
+              { key: 'all', label: 'Tümü' },
+              { key: 'kritik', label: 'Kritik' },
+              { key: 'uyari', label: 'Uyarı' },
+              { key: 'reminders', label: 'Hatırlatmalar' },
+            ].map((f) => (
+              <button key={f.key} className={`zk-btn ${filter === f.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ padding: '5px 10px', fontSize: 11.5 }} onClick={() => setFilter(f.key)}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
+            <button className="zk-btn zk-btn-secondary" style={{ width: '100%', justifyContent: 'center', marginBottom: 12, fontSize: 11.5 }} onClick={requestNotifPermission}>
+              <BellRing size={13} /> Masaüstü bildirimlerini aç (kritik uyarılar için)
+            </button>
+          )}
+
+          <div style={{ maxHeight: '50vh', overflowY: 'auto', marginBottom: 16 }}>
+            {filteredAlerts.length === 0 && (!showReminders || activeReminders.length === 0) ? (
+              <div className="zk-empty">Bu filtrede bildirim yok.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {alerts.map((a, i) => (
-                  <div key={`a${i}`} style={{
+                {filteredAlerts.map((a) => (
+                  <div key={a.key} style={{
                     display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 11px',
                     borderRadius: 8, background: a.severity === 'kritik' ? COLORS.redSoft : COLORS.goldSoft,
                   }}>
                     <a.icon size={15} color={a.severity === 'kritik' ? COLORS.red : COLORS.gold} style={{ marginTop: 1, flexShrink: 0 }} />
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.ink }}>{a.title}</div>
                       <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{a.detail}</div>
                     </div>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 7px', fontSize: 10.5 }} onClick={() => dismissAlert(a.key, 3)} title="3 gün ertele">
+                      <BellOff size={11} />
+                    </button>
                   </div>
                 ))}
-                {activeReminders.map((r) => (
-                  <div key={r.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 11px', borderRadius: 8, background: COLORS.oliveSoft }}>
-                    <ClockIcon size={15} color={COLORS.olive} style={{ marginTop: 1, flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.ink }}>{r.title}</div>
-                      <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{fmtDate(r.date)}{r.note ? ` · ${r.note}` : ''}</div>
+                {showReminders && activeReminders.map((r) => {
+                  const f = r.farmerId ? farmers.find((x) => x.id === r.farmerId) : null;
+                  const overdue = daysUntil(r.date) < 0;
+                  return (
+                    <div key={r.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 11px', borderRadius: 8, background: overdue ? COLORS.redSoft : COLORS.oliveSoft }}>
+                      {r.recurrence && r.recurrence !== 'none' ? <Repeat size={15} color={COLORS.olive} style={{ marginTop: 1, flexShrink: 0 }} /> : <ClockIcon size={15} color={overdue ? COLORS.red : COLORS.olive} style={{ marginTop: 1, flexShrink: 0 }} />}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.ink }}>{r.title}</div>
+                        <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>
+                          {fmtDate(r.date)} · {dueLabel(r.date)}{f ? ` · ${f.name}` : ''}{r.note ? ` · ${r.note}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 7px' }} onClick={() => toggleDone(r.id)} title="Tamamlandı işaretle">✓</button>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 7px' }} onClick={() => removeReminder(r.id)}><X size={11} /></button>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 7px' }} onClick={() => toggleDone(r.id)} title="Tamamlandı işaretle">✓</button>
-                      <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 7px' }} onClick={() => removeReminder(r.id)}><X size={11} /></button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -5920,6 +6092,17 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               <input className="zk-input" placeholder="Başlık (örn. Ahmet'i ara)" style={{ flex: '2 1 160px' }} value={title} onChange={(e) => setTitle(e.target.value)} />
               <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              <select className="zk-select" style={{ flex: '1 1 150px' }} value={linkedFarmerId} onChange={(e) => setLinkedFarmerId(e.target.value)}>
+                <option value="">Çiftçiyle ilişkilendir (opsiyonel)</option>
+                {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+              <select className="zk-select" style={{ flex: '1 1 120px' }} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
+                <option value="none">Tekrar yok</option>
+                <option value="weekly">Haftalık tekrar</option>
+                <option value="monthly">Aylık tekrar</option>
+              </select>
             </div>
             <input className="zk-input" placeholder="Not (opsiyonel)" style={{ marginBottom: 10 }} value={note} onChange={(e) => setNote(e.target.value)} />
             <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={addReminder}>Ekle</button>
@@ -6107,17 +6290,13 @@ export default function ZeytinDefteri() {
     { key: 'dashboard', label: 'Pano', icon: LayoutDashboard, group: null },
 
     { key: 'purchase', label: 'Kantarlı Alış', icon: ScaleIcon, group: 'İşlemler' },
-    { key: 'sales', label: 'Satış', icon: ShoppingCart, group: 'İşlemler' },
     { key: 'shipments', label: 'Sevkiyat', icon: PackageCheck, group: 'İşlemler' },
 
-    { key: 'farmers', label: 'Çiftçiler', icon: Users, group: 'Kayıtlar' },
-    { key: 'allPurchases', label: 'Alış Geçmişi', icon: ListChecks, group: 'Kayıtlar' },
-    { key: 'ledger', label: 'Cari Hesap', icon: Wallet, group: 'Kayıtlar' },
-    { key: 'stock', label: 'Depo (Stok)', icon: Warehouse, group: 'Kayıtlar' },
-
-    { key: 'cash', label: 'Kasa', icon: Banknote, group: 'Finans' },
-    { key: 'expenses', label: 'Giderler', icon: Receipt, group: 'Finans' },
     { key: 'accounting', label: 'Muhasebe', icon: Landmark, group: 'Finans' },
+    { key: 'cari', label: 'Cari', icon: Wallet, group: 'Finans' },
+    { key: 'allPurchases', label: 'Alış Geçmişi', icon: ListChecks, group: 'Finans' },
+    { key: 'sales', label: 'Satış', icon: ShoppingCart, group: 'Finans' },
+    { key: 'stock', label: 'Depo (Stok)', icon: Warehouse, group: 'Finans' },
 
     { key: 'vehicles', label: 'Araçlar', icon: Truck, group: 'Filo & Personel' },
     { key: 'personnel', label: 'Personel', icon: IdCard, group: 'Filo & Personel' },
@@ -6131,8 +6310,8 @@ export default function ZeytinDefteri() {
 
   const ROLE_TAB_ACCESS = {
     admin: null, user: null, // null = tum sekmelere erisim
-    muhasebe: ['dashboard', 'cash', 'expenses', 'accounting', 'ledger', 'reports', 'allPurchases', 'settings'],
-    kantar: ['dashboard', 'purchase', 'farmers', 'allPurchases'],
+    muhasebe: ['dashboard', 'accounting', 'cari', 'reports', 'allPurchases', 'settings'],
+    kantar: ['dashboard', 'purchase', 'cari', 'allPurchases'],
     depo: ['dashboard', 'stock', 'sales', 'crates', 'lab'],
     sevkiyat: ['dashboard', 'shipments', 'vehicles'],
   };
@@ -6214,17 +6393,14 @@ export default function ZeytinDefteri() {
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
 
           {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
-          {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
           {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
 
-          {tab === 'farmers' && <FarmersTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setTab={setTab} setSelectedFarmerId={setSelectedFarmerId} />}
+          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
+          {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'ledger' && <LedgerTab farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'stock' && <StockOverview purchases={purchases} sales={sales} />}
+          {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
 
-          {tab === 'cash' && <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
-          {tab === 'expenses' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
-          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} />}
+          {tab === 'stock' && <StockOverview purchases={purchases} sales={sales} />}
 
           {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} />}
           {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} />}
