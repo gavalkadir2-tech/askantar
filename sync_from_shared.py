@@ -64,16 +64,26 @@ content = content.replace(
     "import { supabase } from './supabaseClient.js';\nimport { currentUser } from './currentUser.js';\nimport { offlineGet, offlineSet, queuePendingWrite, getPendingCount, flushQueue } from './offlineStorage.js';\n" + anchor
 )
 
-old_sidebar_end = """          {navItems.map((item) => (
-            <button key={item.key} className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
-              <item.icon size={16} /> {item.label}
-            </button>
+old_sidebar_end = """          {navItems.map((item, i) => (
+            <React.Fragment key={item.key}>
+              {item.group && item.group !== navItems[i - 1]?.group && (
+                <div className="zk-navgroup-label">{item.group}</div>
+              )}
+              <button className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
+                <item.icon size={16} /> {item.label}
+              </button>
+            </React.Fragment>
           ))}
         </div>"""
-new_sidebar_end = """          {navItems.map((item) => (
-            <button key={item.key} className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
-              <item.icon size={16} /> {item.label}
-            </button>
+new_sidebar_end = """          {navItems.map((item, i) => (
+            <React.Fragment key={item.key}>
+              {item.group && item.group !== navItems[i - 1]?.group && (
+                <div className="zk-navgroup-label">{item.group}</div>
+              )}
+              <button className={`zk-navbtn ${tab === item.key ? 'active' : ''}`} onClick={() => { setTab(item.key); setSidebarOpen(false); }}>
+                <item.icon size={16} /> {item.label}
+              </button>
+            </React.Fragment>
           ))}
           <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
             <div style={{
@@ -145,10 +155,10 @@ old_navitems_use = """  if (!loaded) {
   }"""
 new_navitems_use = """  const ROLE_TAB_ACCESS = {
     admin: null, user: null, // null = tum sekmelere erisim
-    muhasebe: ['dashboard', 'banking', 'reports', 'purchases', 'sales', 'settings'],
-    kantar: ['dashboard', 'purchases', 'sales'],
-    depo: ['dashboard', 'inventory', 'sales'],
-    sevkiyat: ['dashboard', 'inventory'],
+    muhasebe: ['dashboard', 'cash', 'expenses', 'accounting', 'ledger', 'reports', 'allPurchases', 'settings'],
+    kantar: ['dashboard', 'purchase', 'farmers', 'allPurchases'],
+    depo: ['dashboard', 'stock', 'sales', 'crates', 'lab'],
+    sevkiyat: ['dashboard', 'shipments', 'vehicles'],
   };
   const allowedTabs = ROLE_TAB_ACCESS[currentUser.role];
   const visibleNavItems = allowedTabs ? navItems.filter((item) => allowedTabs.includes(item.key)) : navItems;
@@ -162,8 +172,8 @@ new_navitems_use = """  const ROLE_TAB_ACCESS = {
 assert old_navitems_use in content, "navItems kullanım bloğu bulunamadı"
 content = content.replace(old_navitems_use, new_navitems_use)
 
-old_navmap = "{navItems.map((item) => ("
-new_navmap = "{visibleNavItems.map((item) => ("
+old_navmap = "{navItems.map((item, i) => (\n            <React.Fragment key={item.key}>\n              {item.group && item.group !== navItems[i - 1]?.group && ("
+new_navmap = "{visibleNavItems.map((item, i) => (\n            <React.Fragment key={item.key}>\n              {item.group && item.group !== visibleNavItems[i - 1]?.group && ("
 assert old_navmap in content
 content = content.replace(old_navmap, new_navmap)
 
