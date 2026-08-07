@@ -12,7 +12,7 @@ import {
   Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard, Menu,
   Wrench, Fuel, FileText, ShieldAlert, AlertTriangle, Disc, TrendingUp, Gauge, CalendarClock,
   Sparkles, AlertOctagon, UserCheck, Archive, Target, Radar, RefreshCw, Trash2, Mic, MicOff, Send, Bot, Bell, Pencil,
-  Package2, FlaskConical, Landmark, CreditCard, Navigation, MapPin, PackageCheck, Repeat, BellRing, CheckCircle2, ChevronLeft, ArrowUpDown,
+  Package2, FlaskConical, Landmark, CreditCard, Navigation, MapPin, PackageCheck, Repeat, BellRing, CheckCircle2, ChevronLeft, ArrowUpDown, Tv,
 } from 'lucide-react';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -203,7 +203,8 @@ function GlobalStyle() {
       .zk-modal { background: #fff; border-radius: 14px; padding: 22px; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto; }
       .zk-close { background: none; border: none; cursor: pointer; color: ${COLORS.inkSoft}; padding: 8px; min-height: 40px; min-width: 40px; }
       .zk-empty { text-align: center; padding: 36px 20px; color: ${COLORS.inkSoft}; font-size: 13px; }
-      .zk-farmer-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 13px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; transition: background 0.12s ease, border-color 0.12s ease; min-height: 44px; }
+      .zk-farmer-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; row-gap: 8px; padding: 14px 13px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; transition: background 0.12s ease, border-color 0.12s ease; min-height: 44px; }
+      .zk-farmer-row > * { min-width: 0; }
       .zk-farmer-row:hover { background: #FAF8F1; border-color: ${COLORS.border}; }
       .zk-avatar { width: 34px; height: 34px; border-radius: 50%; background: ${COLORS.oliveSoft}; color: ${COLORS.olive}; display: inline-flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; font-family: var(--font-display); flex-shrink: 0; }
       .zk-tag { font-size: 10.5px; padding: 2px 8px; border-radius: 5px; background: ${COLORS.oliveSoft}; color: ${COLORS.olive}; font-weight: 600; }
@@ -288,7 +289,7 @@ function Modal({ title, onClose, children }) {
   return (
     <div className="zk-modal-overlay" onClick={onClose}>
       <div className="zk-modal" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8,}}>
           <div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
           <button className="zk-close" onClick={onClose} aria-label="Kapat"><X size={18} /></button>
         </div>
@@ -422,7 +423,7 @@ function ScaleWidget({ onWeightCapture, compact }) {
 
   return (
     <div className="zk-scalebox">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8,}}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#B7C4B3' }}>
           {connected ? <BluetoothConnected size={15} /> : <Bluetooth size={15} />}
           {status}
@@ -499,6 +500,20 @@ function buildWhatsAppReceiptText(purchase, farmer, settings) {
   }
   lines.push(`*Ödenecek net: ${fmtTL(purchase.netPayment)}*`);
   if (purchase.note) lines.push(`Not: ${purchase.note}`);
+  lines.push('');
+  lines.push('Teşekkür ederiz.');
+  return lines.join('\n');
+}
+
+function buildWhatsAppPaymentText(row, settings) {
+  const lines = [];
+  lines.push(`*${settings?.businessName || 'Zeytin Komisyonculuğu'}*`);
+  lines.push(row.kind === 'odeme' ? (row.payType === 'avans' ? 'Avans Makbuzu' : 'Ödeme Makbuzu') : 'Tahsilat Makbuzu');
+  lines.push('');
+  lines.push(`Sayın ${row.partyName},`);
+  lines.push(`Tarih: ${fmtDate(row.date)}`);
+  lines.push(`*Tutar: ${fmtTL(row.amount)}*`);
+  if (row.note) lines.push(`Not: ${row.note}`);
   lines.push('');
   lines.push('Teşekkür ederiz.');
   return lines.join('\n');
@@ -676,7 +691,7 @@ function DashboardTab({ farmers, purchases, payments, sales, setTab }) {
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             {stockByGrade.map(({ grade: g, stock }) => (
-              <div key={g} style={{ flex: '1 1 130px', background: COLORS.paper, borderRadius: 10, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div key={g} style={{ flex: '1 1 130px', background: COLORS.paper, borderRadius: 10, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap',}}>
                 <span className="zk-badge zk-badge-blue" style={{ fontSize: 11 }}>{g}</span>
                 <span style={{ fontWeight: 700, fontSize: 13, color: stock < 0 ? COLORS.red : COLORS.ink }}>{fmtKg(stock)}</span>
               </div>
@@ -686,7 +701,7 @@ function DashboardTab({ farmers, purchases, payments, sales, setTab }) {
       </div>
 
       <div className="zk-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8,}}>
           <div style={{ fontSize: 13.5, fontWeight: 700 }}>Son alımlar</div>
           <button className="zk-btn zk-btn-primary" onClick={() => setTab('purchase')}><Plus size={14} /> Yeni alım</button>
         </div>
@@ -889,7 +904,7 @@ function FarmersTab({ farmers, setFarmers, purchases, payments, setTab, setSelec
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8,}}>
         <div>
           <div className="zk-h1">Çiftçiler</div>
           <div className="zk-h1-sub">{farmers.length} kayıtlı çiftçi</div>
@@ -945,7 +960,7 @@ function FarmersTab({ farmers, setFarmers, purchases, payments, setTab, setSelec
   );
 }
 
-function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles }) {
+function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles, broadcastLive, openCustomerDisplay }) {
   const [farmerId, setFarmerId] = useState('');
   const [showAddFarmer, setShowAddFarmer] = useState(false);
   const [personnelId, setPersonnelId] = useState('');
@@ -1023,6 +1038,19 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     const g = selectedVariety.grades.find((x) => x.name === lineGradeName);
     if (g) setLinePrice(g.price.toString());
   }, [lineGradeName]);
+
+  useEffect(() => {
+    if (!broadcastLive) return;
+    const lineLabel = lineVariety ? (lineGradeName ? `${lineVariety} · ${lineGradeName}` : lineVariety) : '';
+    const lineNetKg = (parseFloat(lineKg) || 0) - lineDara;
+    broadcastLive({
+      type: 'purchase', partyName: farmer ? farmer.name : '', dateTimeLabel,
+      items: items.map((it) => ({ grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount })),
+      currentLine: { grade: lineLabel, kg: lineNetKg > 0 ? lineNetKg : 0, pricePerKg: parseFloat(linePrice) || 0 },
+      netKg: items.reduce((s, it) => s + it.kg, 0) + (lineNetKg > 0 ? lineNetKg : 0),
+      total: items.reduce((s, it) => s + it.amount, 0) + (lineNetKg > 0 ? lineNetKg : 0) * (parseFloat(linePrice) || 0),
+    });
+  }, [farmer, items, lineVariety, lineGradeName, lineKg, linePrice, lineDara, dateTimeLabel, broadcastLive]);
 
   const handleFarmerSelect = (value) => {
     if (value === '__add_new__') { setShowAddFarmer(true); return; }
@@ -1169,12 +1197,20 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     setRandiman(''); setAsit(''); setNem(''); setFirePercent('');
     setHammaliyeTutari(''); setNakliyeTutari(''); setCuvalKesintisi(''); setPhoto('');
     setManualDateTime(false);
+    if (broadcastLive) broadcastLive({ type: 'purchase_done', partyName: farmer ? farmer.name : '', netKg, total: netPayment });
   };
 
   return (
     <div>
-      <div className="zk-h1">Alım</div>
-      <div className="zk-h1-sub">Elekten çıkan her sınıfı ayrı tartıp ekleyin, sonunda toplam üzerinden hesaplansın</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <div className="zk-h1">Alım</div>
+          <div className="zk-h1-sub">Elekten çıkan her sınıfı ayrı tartıp ekleyin, sonunda toplam üzerinden hesaplansın</div>
+        </div>
+        {openCustomerDisplay && (
+          <button className="zk-btn zk-btn-secondary" onClick={openCustomerDisplay}><Tv size={14} /> Müşteri ekranını aç</button>
+        )}
+      </div>
 
       <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} compact />
 
@@ -1639,7 +1675,7 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
             <label className="zk-label">Not</label>
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="opsiyonel" />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13, flexWrap: 'wrap', gap: 8,}}>
             <span style={{ color: COLORS.inkSoft }}>Toplam tutar</span>
             <span style={{ fontWeight: 700 }}>{fmtTL(amount)}</span>
           </div>
@@ -1809,6 +1845,270 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
   );
 }
 
+function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList, personnel, vehicles, settings, onPrintSaleReceipt, broadcastLive, openCustomerDisplay }) {
+  const [buyerId, setBuyerId] = useState('');
+  const [showAddBuyer, setShowAddBuyer] = useState(false);
+  const [personnelId, setPersonnelId] = useState('');
+  const [vehicleId, setVehicleId] = useState('');
+  const [now, setNow] = useState(new Date());
+  const [manualDateTime, setManualDateTime] = useState(false);
+  const [manualDate, setManualDate] = useState(todayStr());
+  const [manualTime, setManualTime] = useState('');
+  const [items, setItems] = useState([]);
+  const [lineGrade, setLineGrade] = useState('');
+  const [lineKg, setLineKg] = useState('');
+  const [linePrice, setLinePrice] = useState('');
+  const [lastSavedBatch, setLastSavedBatch] = useState(null);
+
+  const buyer = buyers.find((b) => b.id === buyerId);
+  const date = manualDateTime ? manualDate : now.toISOString().slice(0, 10);
+  const timeLabel = manualDateTime ? (manualTime || '00:00') : now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const dateTimeLabel = fmtDate(date) + ' · ' + timeLabel;
+
+  const startManualEdit = () => {
+    setManualDate(now.toISOString().slice(0, 10));
+    setManualTime(now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+    setManualDateTime(true);
+  };
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  const purchasedByGrade = useMemo(() => {
+    const map = {};
+    purchases.forEach((p) => { (p.items || []).forEach((it) => { map[it.grade] = (map[it.grade] || 0) + it.kg; }); });
+    return map;
+  }, [purchases]);
+  const soldByGrade = useMemo(() => {
+    const map = {};
+    sales.forEach((s) => { map[s.grade || 'Etiketsiz'] = (map[s.grade || 'Etiketsiz'] || 0) + s.kg; });
+    return map;
+  }, [sales]);
+  const addedByGrade = useMemo(() => {
+    const map = {};
+    items.forEach((it) => { map[it.grade] = (map[it.grade] || 0) + it.kg; });
+    return map;
+  }, [items]);
+  const stockByGrade = useMemo(() => {
+    const grades = new Set([...Object.keys(purchasedByGrade), ...Object.keys(soldByGrade)]);
+    return Array.from(grades)
+      .map((g) => ({ grade: g, stock: (purchasedByGrade[g] || 0) - (soldByGrade[g] || 0) - (addedByGrade[g] || 0) }))
+      .sort((a, b) => b.stock - a.stock);
+  }, [purchasedByGrade, soldByGrade, addedByGrade]);
+
+  useEffect(() => {
+    const v = priceList.find((p) => p.name === lineGrade);
+    if (v && !v.hasGrades) setLinePrice(String(v.singlePrice || 0));
+  }, [lineGrade, priceList]);
+
+  // Kantar/kamera üzerinden canli tartim, "musteri ekrani" ikinci pencereye yayinlanir.
+  useEffect(() => {
+    if (!broadcastLive) return;
+    broadcastLive({
+      type: 'sale', partyName: buyer ? buyer.name : '', dateTimeLabel,
+      items: items.map((it) => ({ grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount })),
+      currentLine: { grade: lineGrade, kg: parseFloat(lineKg) || 0, pricePerKg: parseFloat(linePrice) || 0 },
+      netKg: items.reduce((s, it) => s + it.kg, 0) + (parseFloat(lineKg) || 0),
+      total: items.reduce((s, it) => s + it.amount, 0) + (parseFloat(lineKg) || 0) * (parseFloat(linePrice) || 0),
+    });
+  }, [buyer, items, lineGrade, lineKg, linePrice, dateTimeLabel, broadcastLive]);
+
+  const availableForLine = lineGrade ? (stockByGrade.find((g) => g.grade === lineGrade)?.stock ?? 0) : 0;
+
+  const addLine = () => {
+    const kg = parseFloat(lineKg);
+    const price = parseFloat(linePrice);
+    if (!lineGrade || !kg || kg <= 0 || !price || price <= 0 || kg > availableForLine + 0.001) return;
+    setItems((prev) => [...prev, { id: uid(), grade: lineGrade, kg, pricePerKg: price, amount: kg * price }]);
+    setLineKg('');
+  };
+  const removeLine = (id) => setItems((prev) => prev.filter((x) => x.id !== id));
+
+  const netKg = items.reduce((s, it) => s + it.kg, 0);
+  const totalAmount = items.reduce((s, it) => s + it.amount, 0);
+  const canSave = buyerId && items.length > 0;
+
+  const saveNewBuyer = async (data) => {
+    if (!data.name || !data.name.trim()) return;
+    const b = { id: uid(), name: data.name.trim(), phone: data.phone || '', createdAt: Date.now() };
+    const next = [...buyers, b];
+    setBuyers(next);
+    await storageSet('zk:buyers', next);
+    setShowAddBuyer(false);
+    setBuyerId(b.id);
+  };
+
+  const save = async () => {
+    if (!canSave) return;
+    const person = personnel.find((p) => p.id === personnelId);
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    let counter = nextReceiptNo(sales, settings?.salesReceiptNext);
+    const newRecords = items.map((it) => {
+      const rec = {
+        id: uid(), makbuzNo: counter, buyerId, date, grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount,
+        note: '', vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '',
+        personnelId: personnelId || null, personnelName: person ? person.name : '',
+        createdAt: Date.now(),
+      };
+      counter += 1;
+      return rec;
+    });
+    const next = [...sales, ...newRecords];
+    setSales(next);
+    await storageSet('zk:sales', next);
+    setLastSavedBatch(newRecords);
+    setItems([]);
+    if (broadcastLive) broadcastLive({ type: 'sale_done', partyName: buyer ? buyer.name : '', netKg, total: totalAmount });
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <div className="zk-h1">Kantarlı Satış</div>
+          <div className="zk-h1-sub">Kantar/tartı bağlantısıyla canlı tartım yaparak satış kaydı oluşturun</div>
+        </div>
+        {openCustomerDisplay && (
+          <button className="zk-btn zk-btn-secondary" onClick={openCustomerDisplay}><Tv size={14} /> Müşteri ekranını aç</button>
+        )}
+      </div>
+
+      <div style={{ maxWidth: 640 }}>
+        <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} compact />
+
+        <div className="zk-card" style={{ marginTop: 14 }}>
+          <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
+            <div>
+              <label className="zk-label">Alıcı</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <select className="zk-select" value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
+                  <option value="">Seçin...</option>
+                  {buyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <button className="zk-btn zk-btn-secondary" onClick={() => setShowAddBuyer(true)}><Plus size={13} /></button>
+              </div>
+            </div>
+            <div>
+              <label className="zk-label">Personel (opsiyonel)</label>
+              <select className="zk-select" value={personnelId} onChange={(e) => setPersonnelId(e.target.value)}>
+                <option value="">Seçin...</option>
+                {personnel.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 14 }}>
+            <div>
+              <label className="zk-label">Araç (opsiyonel)</label>
+              <select className="zk-select" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+                <option value="">Seçin...</option>
+                {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="zk-label">Tarih / Saat</label>
+              {!manualDateTime ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minHeight: 44 }}>
+                  <span style={{ fontSize: 12.5, color: COLORS.inkSoft, display: 'flex', alignItems: 'center', gap: 5 }}><ClockIcon size={12} /> {dateTimeLabel}</span>
+                  <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 9px', fontSize: 11 }} onClick={startManualEdit}><Pencil size={11} /> Değiştir</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <input className="zk-input" type="date" style={{ maxWidth: 140 }} value={manualDate} onChange={(e) => setManualDate(e.target.value)} />
+                  <input className="zk-input" type="time" style={{ maxWidth: 100 }} value={manualTime} onChange={(e) => setManualTime(e.target.value)} />
+                  <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 9px', fontSize: 11 }} onClick={() => setManualDateTime(false)}><RefreshCw size={11} /> Otomatik</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Tartım satırı ekle</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            <select className="zk-select" style={{ flex: '2 1 160px' }} value={lineGrade} onChange={(e) => setLineGrade(e.target.value)}>
+              <option value="">Sınıf seçin...</option>
+              {stockByGrade.filter((g) => g.stock > 0.01).map((g) => <option key={g.grade} value={g.grade}>{g.grade} · stokta {fmtKg(g.stock)}</option>)}
+            </select>
+            <input className="zk-input" type="number" placeholder="Kg (kantardan)" style={{ flex: '1 1 120px' }} value={lineKg} onChange={(e) => setLineKg(e.target.value)} />
+            <input className="zk-input" type="number" placeholder="Kg fiyatı" style={{ flex: '1 1 100px' }} value={linePrice} onChange={(e) => setLinePrice(e.target.value)} />
+            <button className="zk-btn zk-btn-gold" onClick={addLine}><Plus size={14} /> Ekle</button>
+          </div>
+          {lineGrade && parseFloat(lineKg) > availableForLine && lineKg && (
+            <div style={{ fontSize: 11.5, color: COLORS.red, marginBottom: 8 }}>Bu sınıfta stoktan fazla miktar girdiniz (stokta {fmtKg(availableForLine)}).</div>
+          )}
+
+          {items.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              {items.map((it) => (
+                <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px dashed ${COLORS.border}`, fontSize: 12.5 }}>
+                  <span>{it.grade} · {fmtKg(it.kg)} × {fmtTL(it.pricePerKg)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 600 }}>{fmtTL(it.amount)}</span>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '3px 7px' }} onClick={() => removeLine(it.id)}><X size={11} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13 }}>
+            <span style={{ color: COLORS.inkSoft }}>Toplam {fmtKg(netKg)}</span>
+            <span style={{ fontWeight: 700 }}>{fmtTL(totalAmount)}</span>
+          </div>
+          <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={!canSave} onClick={save}>
+            Satışı kaydet
+          </button>
+
+          {lastSavedBatch && lastSavedBatch.length > 0 && (() => {
+            const waPhone = buyer ? formatPhoneForWhatsApp(buyer.phone) : null;
+            return (
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {lastSavedBatch.map((rec) => (
+                  <div key={rec.id} style={{ background: COLORS.oliveSoft, padding: '10px 12px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: COLORS.olive }}>Satış #{rec.makbuzNo} — {rec.grade} · {fmtTL(rec.amount)}</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="zk-btn zk-btn-secondary" onClick={() => onPrintSaleReceipt(rec)}><Printer size={13} /> Yazdır</button>
+                      {waPhone && (
+                        <a className="zk-btn" style={{ background: '#25D366', color: '#fff' }} href={`https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppSaleReceiptText(rec, buyer, settings))}`} target="_blank" rel="noopener noreferrer">
+                          <MessageCircle size={13} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {showAddBuyer && (
+        <Modal title="Yeni alıcı ekle" onClose={() => setShowAddBuyer(false)}>
+          <BuyerQuickForm onSave={saveNewBuyer} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function BuyerQuickForm({ onSave }) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  return (
+    <>
+      <div style={{ marginBottom: 12 }}>
+        <label className="zk-label">Alıcı / firma adı</label>
+        <input className="zk-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="örn. Ege Zeytinyağı A.Ş." autoFocus />
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <label className="zk-label">Telefon (opsiyonel)</label>
+        <input className="zk-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </div>
+      <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => onSave({ name, phone })}>Kaydet</button>
+    </>
+  );
+}
+
 function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases, priceList, personnel, vehicles, settings, onPrintReceipt }) {
   const [showAddFarmer, setShowAddFarmer] = useState(false);
   const [farmerId, setFarmerId] = useState('');
@@ -1949,15 +2249,15 @@ function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases, price
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="opsiyonel" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12, fontSize: 13 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,}}>
               <span style={{ color: COLORS.inkSoft }}>Toplam tutar</span>
               <span>{fmtTL(amount)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,}}>
               <span style={{ color: COLORS.inkSoft }}>Komisyon</span>
               <span>- {fmtTL(commissionAmount)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, flexWrap: 'wrap', gap: 8,}}>
               <span>Çiftçiye net ödeme</span>
               <span>{fmtTL(netPayment)}</span>
             </div>
@@ -1980,7 +2280,73 @@ function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases, price
   );
 }
 
-function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt }) {
+function EditSaleModal({ sale, buyers, vehicles, onClose, onSave }) {
+  const [buyerId, setBuyerId] = useState(sale.buyerId);
+  const [date, setDate] = useState(sale.date);
+  const [grade, setGrade] = useState(sale.grade || '');
+  const [kg, setKg] = useState(String(sale.kg));
+  const [pricePerKg, setPricePerKg] = useState(String(sale.pricePerKg));
+  const [vehicleId, setVehicleId] = useState(sale.vehicleId || '');
+  const [note, setNote] = useState(sale.note || '');
+
+  const amount = (parseFloat(kg) || 0) * (parseFloat(pricePerKg) || 0);
+
+  const submit = () => {
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    onSave({
+      ...sale, buyerId, date, grade, kg: parseFloat(kg) || 0, pricePerKg: parseFloat(pricePerKg) || 0,
+      amount, vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '', note,
+    });
+  };
+
+  return (
+    <Modal title={`Satış #${sale.makbuzNo || ''} — Düzenle`} onClose={onClose}>
+      <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
+        <div>
+          <label className="zk-label">Alıcı</label>
+          <select className="zk-select" value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
+            {buyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="zk-label">Tarih</label>
+          <input className="zk-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label className="zk-label">Sınıf / numara</label>
+        <input className="zk-input" value={grade} onChange={(e) => setGrade(e.target.value)} />
+      </div>
+      <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
+        <div>
+          <label className="zk-label">Kg</label>
+          <input className="zk-input" type="number" value={kg} onChange={(e) => setKg(e.target.value)} />
+        </div>
+        <div>
+          <label className="zk-label">Kg fiyatı</label>
+          <input className="zk-input" type="number" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label className="zk-label">Araç</label>
+        <select className="zk-select" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+          <option value="">Seçin...</option>
+          {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
+        </select>
+      </div>
+      <div style={{ marginBottom: 14 }}>
+        <label className="zk-label">Not</label>
+        <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 13, marginBottom: 14, background: COLORS.paper, borderRadius: 8, padding: 10, flexWrap: 'wrap', gap: 8,}}>
+        <span>Toplam tutar</span><span>{fmtTL(amount)}</span>
+      </div>
+      <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={submit}>Kaydet</button>
+    </Modal>
+  );
+}
+
+function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt, vehicles }) {
   const [query, setQuery] = useState('');
   const [buyerFilter, setBuyerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -2018,6 +2384,14 @@ function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt
     await storageSet('zk:sales', next);
   };
 
+  const [editingSale, setEditingSale] = useState(null);
+  const saveEditedSale = async (updated) => {
+    const next = sales.map((x) => (x.id === updated.id ? updated : x));
+    setSales(next);
+    await storageSet('zk:sales', next);
+    setEditingSale(null);
+  };
+
   return (
     <div>
       <div className="zk-h1">Satış Geçmişi</div>
@@ -2047,7 +2421,7 @@ function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt
                 const b = buyers.find((x) => x.id === s.buyerId);
                 const waPhone = b ? formatPhoneForWhatsApp(b.phone) : null;
                 return (
-                  <tr key={s.id}>
+                  <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => setEditingSale(s)}>
                     <td>{s.makbuzNo ? `#${s.makbuzNo}` : '—'}</td>
                     <td>{fmtDate(s.date)}</td>
                     <td>{b ? b.name : '—'}</td>
@@ -2056,7 +2430,8 @@ function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt
                     <td>{fmtTL(s.pricePerKg)}/kg</td>
                     <td>{fmtTL(s.amount)}</td>
                     <td style={{ color: COLORS.inkSoft }}>{s.vehiclePlaka || '—'}</td>
-                    <td style={{ display: 'flex', gap: 6 }}>
+                    <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => setEditingSale(s)}><Pencil size={12} /></button>
                       {s.makbuzNo && <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintSaleReceipt(s)}><Printer size={12} /></button>}
                       {waPhone && s.makbuzNo && (
                         <a className="zk-btn" style={{ padding: '5px 9px', background: '#25D366', color: '#fff' }} href={`https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppSaleReceiptText(s, b, settings))}`} target="_blank" rel="noopener noreferrer">
@@ -2083,6 +2458,10 @@ function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt
           </>
         )}
       </div>
+
+      {editingSale && (
+        <EditSaleModal sale={editingSale} buyers={buyers} vehicles={vehicles} onClose={() => setEditingSale(null)} onSave={saveEditedSale} />
+      )}
     </div>
   );
 }
@@ -2150,7 +2529,7 @@ function ExpensesTab({ expenses, setExpenses, settings }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8,}}>
         <div>
           <div className="zk-h1">Giderler</div>
           <div className="zk-h1-sub">Nakliye, işçilik, depo gibi işletme giderleri</div>
@@ -2200,7 +2579,7 @@ function ExpensesTab({ expenses, setExpenses, settings }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {byCategory.map(([cat, amt]) => (
-                <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, flexWrap: 'wrap', gap: 8,}}>
                   <span className="zk-badge zk-badge-red">{cat}</span>
                   <span style={{ fontWeight: 600 }}>{fmtTL(amt)}</span>
                 </div>
@@ -2375,7 +2754,142 @@ function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCa
   );
 }
 
-function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintReceipt, settings }) {
+function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onClose, onSave }) {
+  const [farmerId, setFarmerId] = useState(purchase.farmerId);
+  const [date, setDate] = useState(purchase.date);
+  const [time, setTime] = useState(purchase.time || '');
+  const [personnelId, setPersonnelId] = useState(purchase.personnelId || '');
+  const [vehicleId, setVehicleId] = useState(purchase.vehicleId || '');
+  const [items, setItems] = useState((purchase.items || []).map((it) => ({ ...it })));
+  const [commissionRate, setCommissionRate] = useState(String(purchase.commissionRate ?? 0));
+  const [stopajOrani, setStopajOrani] = useState(String(purchase.stopajOrani ?? 0));
+  const [hammaliyeTutari, setHammaliyeTutari] = useState(String(purchase.hammaliyeTutari ?? 0));
+  const [nakliyeTutari, setNakliyeTutari] = useState(String(purchase.nakliyeTutari ?? 0));
+  const [cuvalKesintisi, setCuvalKesintisi] = useState(String(purchase.cuvalKesintisi ?? 0));
+  const [note, setNote] = useState(purchase.note || '');
+
+  const updateItem = (id, field, value) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value, amount: field === 'kg' || field === 'pricePerKg' ? (parseFloat(field === 'kg' ? value : it.kg) || 0) * (parseFloat(field === 'pricePerKg' ? value : it.pricePerKg) || 0) : it.amount } : it)));
+  };
+  const removeItem = (id) => setItems((prev) => prev.filter((it) => it.id !== id));
+  const addItem = () => setItems((prev) => [...prev, { id: uid(), grade: '', kg: 0, pricePerKg: 0, amount: 0 }]);
+
+  const netKg = items.reduce((s, it) => s + (parseFloat(it.kg) || 0), 0);
+  const amount = items.reduce((s, it) => s + (parseFloat(it.kg) || 0) * (parseFloat(it.pricePerKg) || 0), 0);
+  const commissionAmount = purchase.noDeduction ? 0 : amount * (parseFloat(commissionRate) || 0) / 100;
+  const stopajTutari = purchase.noDeduction ? 0 : (amount - commissionAmount) * (parseFloat(stopajOrani) || 0) / 100;
+  const bagkurTutari = purchase.applyBagkur && !purchase.noDeduction ? amount * (purchase.bagkurRate || 0) / 100 : (purchase.bagkurTutari || 0);
+  const netPayment = amount - commissionAmount - stopajTutari - bagkurTutari - (parseFloat(hammaliyeTutari) || 0) - (parseFloat(nakliyeTutari) || 0) - (parseFloat(cuvalKesintisi) || 0) - (purchase.fireTutari || 0);
+
+  const submit = () => {
+    const person = personnel.find((p) => p.id === personnelId);
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    onSave({
+      ...purchase,
+      farmerId, date, time, personnelId: personnelId || null, personnelName: person ? person.name : '',
+      vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '',
+      items: items.map((it) => ({ ...it, kg: parseFloat(it.kg) || 0, pricePerKg: parseFloat(it.pricePerKg) || 0, amount: (parseFloat(it.kg) || 0) * (parseFloat(it.pricePerKg) || 0) })),
+      netKg, amount,
+      commissionRate: parseFloat(commissionRate) || 0, commissionAmount,
+      stopajOrani: parseFloat(stopajOrani) || 0, stopajTutari,
+      bagkurTutari,
+      hammaliyeTutari: parseFloat(hammaliyeTutari) || 0,
+      nakliyeTutari: parseFloat(nakliyeTutari) || 0,
+      cuvalKesintisi: parseFloat(cuvalKesintisi) || 0,
+      netPayment, note,
+    });
+  };
+
+  return (
+    <Modal title={`Alım #${purchase.makbuzNo} — Düzenle`} onClose={onClose}>
+      <div style={{ maxHeight: '65vh', overflowY: 'auto', paddingRight: 4 }}>
+        <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
+          <div>
+            <label className="zk-label">Çiftçi</label>
+            <select className="zk-select" value={farmerId} onChange={(e) => setFarmerId(e.target.value)}>
+              {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="zk-label">Tarih / Saat</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input className="zk-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <input className="zk-input" type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ maxWidth: 100 }} />
+            </div>
+          </div>
+        </div>
+        <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 14 }}>
+          <div>
+            <label className="zk-label">Personel</label>
+            <select className="zk-select" value={personnelId} onChange={(e) => setPersonnelId(e.target.value)}>
+              <option value="">Seçin...</option>
+              {personnel.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="zk-label">Araç</label>
+            <select className="zk-select" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+              <option value="">Seçin...</option>
+              {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Tartım satırları</div>
+        {items.map((it) => (
+          <div key={it.id} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+            <input className="zk-input" style={{ flex: '2 1 100px' }} placeholder="Sınıf" value={it.grade} onChange={(e) => updateItem(it.id, 'grade', e.target.value)} />
+            <input className="zk-input" type="number" style={{ flex: '1 1 70px' }} placeholder="Kg" value={it.kg} onChange={(e) => updateItem(it.id, 'kg', e.target.value)} />
+            <input className="zk-input" type="number" style={{ flex: '1 1 70px' }} placeholder="Fiyat" value={it.pricePerKg} onChange={(e) => updateItem(it.id, 'pricePerKg', e.target.value)} />
+            <button className="zk-btn zk-btn-secondary" style={{ padding: '6px 8px' }} onClick={() => removeItem(it.id)}><Trash2 size={12} /></button>
+          </div>
+        ))}
+        <button className="zk-btn zk-btn-secondary" style={{ marginBottom: 14 }} onClick={addItem}><Plus size={12} /> Satır ekle</button>
+
+        {!purchase.noDeduction && (
+          <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
+            <div>
+              <label className="zk-label">Komisyon oranı (%)</label>
+              <input className="zk-input" type="number" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} />
+            </div>
+            <div>
+              <label className="zk-label">Stopaj oranı (%)</label>
+              <input className="zk-input" type="number" value={stopajOrani} onChange={(e) => setStopajOrani(e.target.value)} />
+            </div>
+          </div>
+        )}
+        <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 14 }}>
+          <div>
+            <label className="zk-label">Hammaliye (₺)</label>
+            <input className="zk-input" type="number" value={hammaliyeTutari} onChange={(e) => setHammaliyeTutari(e.target.value)} />
+          </div>
+          <div>
+            <label className="zk-label">Nakliye (₺)</label>
+            <input className="zk-input" type="number" value={nakliyeTutari} onChange={(e) => setNakliyeTutari(e.target.value)} />
+          </div>
+          <div>
+            <label className="zk-label">Çuval/kasa (₺)</label>
+            <input className="zk-input" type="number" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value)} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="zk-label">Not</label>
+          <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+
+        <div style={{ background: COLORS.paper, borderRadius: 8, padding: 10, marginBottom: 14, fontSize: 12.5 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,}}><span>Toplam kg</span><span>{fmtKg(netKg)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,}}><span>Brüt tutar</span><span>{fmtTL(amount)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginTop: 4, flexWrap: 'wrap', gap: 8,}}><span>Net ödeme</span><span>{fmtTL(netPayment)}</span></div>
+        </div>
+
+        <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={submit}>Kaydet</button>
+      </div>
+    </Modal>
+  );
+}
+
+function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, vehicles, onPrintReceipt, settings }) {
   const [query, setQuery] = useState('');
   const [farmerFilter, setFarmerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -2409,11 +2923,20 @@ function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintR
   const totalKg = filtered.reduce((s, p) => s + p.netKg, 0);
   const totalAmount = filtered.reduce((s, p) => s + p.netPayment, 0);
 
+  const [editingPurchase, setEditingPurchase] = useState(null);
+
   const removePurchase = async (p) => {
     if (!window.confirm(`#${p.makbuzNo} numaralı alım kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve çiftçinin cari hesabını etkiler.`)) return;
     const next = purchases.filter((x) => x.id !== p.id);
     setPurchases(next);
     await storageSet('zk:purchases', next);
+  };
+
+  const saveEditedPurchase = async (updated) => {
+    const next = purchases.map((x) => (x.id === updated.id ? updated : x));
+    setPurchases(next);
+    await storageSet('zk:purchases', next);
+    setEditingPurchase(null);
   };
 
   return (
@@ -2448,7 +2971,7 @@ function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintR
                 const f = farmers.find((x) => x.id === p.farmerId);
                 const waPhone = f ? formatPhoneForWhatsApp(f.phone) : null;
                 return (
-                  <tr key={p.id}>
+                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setEditingPurchase(p)}>
                     <td>#{p.makbuzNo}</td>
                     <td>{fmtDate(p.date)}{p.time ? ` · ${p.time}` : ''}</td>
                     <td>{f ? f.name : '—'}</td>
@@ -2457,7 +2980,8 @@ function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintR
                     <td style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{(p.items || []).map((it) => it.grade).join(', ')}</td>
                     <td>{fmtKg(p.netKg)}</td>
                     <td style={{ fontWeight: 600 }}>{fmtTL(p.netPayment)}</td>
-                    <td style={{ display: 'flex', gap: 6 }}>
+                    <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => setEditingPurchase(p)}><Pencil size={12} /></button>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintReceipt(p)}><Printer size={12} /></button>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => downloadReceiptPdf(p, f, settings)}><Download size={12} /></button>
                       {waPhone && (
@@ -2485,6 +3009,13 @@ function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintR
           </>
         )}
       </div>
+
+      {editingPurchase && (
+        <EditPurchaseModal
+          purchase={editingPurchase} farmers={farmers} personnel={personnel} vehicles={vehicles}
+          onClose={() => setEditingPurchase(null)} onSave={saveEditedPurchase}
+        />
+      )}
     </div>
   );
 }
@@ -3671,7 +4202,7 @@ function ReportArchiveSection({ reports, setReports }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {reports.map((r) => (
               <div key={r.id} className="zk-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, flexWrap: 'wrap', gap: 8,}}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 13.5 }}>{r.type}</div>
                     <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{fmtDate(r.date)} · {new Date(r.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div>
@@ -3922,7 +4453,7 @@ function CrateInventoryTab({ farmers, movements, setMovements, settings, setSett
 
       {viewFarmerId && (
         <div className="zk-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8,}}>
             <div style={{ fontSize: 13.5, fontWeight: 700 }}>
               {farmers.find((f) => f.id === viewFarmerId)?.name} — hareket geçmişi
             </div>
@@ -4257,7 +4788,7 @@ function ChecksNotesSection({ items, setItems }) {
   );
 }
 
-function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases, buyers, buyerPayments, setBuyerPayments, sales }) {
+function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases, buyers, buyerPayments, setBuyerPayments, sales, settings, onPrintPayment }) {
   const [type, setType] = useState('odeme');
   const [partyId, setPartyId] = useState('');
   const [amount, setAmount] = useState('');
@@ -4304,11 +4835,11 @@ function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases,
   const combined = useMemo(() => {
     const p = payments.map((x) => {
       const f = farmers.find((y) => y.id === x.farmerId);
-      return { ...x, kind: 'odeme', partyName: f ? f.name : '—' };
+      return { ...x, kind: 'odeme', partyName: f ? f.name : '—', partyPhone: f ? f.phone : '' };
     });
     const b = buyerPayments.map((x) => {
       const buyer = buyers.find((y) => y.id === x.buyerId);
-      return { ...x, kind: 'tahsilat', partyName: buyer ? buyer.name : '—' };
+      return { ...x, kind: 'tahsilat', partyName: buyer ? buyer.name : '—', partyPhone: buyer ? buyer.phone : '' };
     });
     let arr = [...p, ...b];
     if (query) arr = arr.filter((r) => r.partyName.toLowerCase().includes(query.toLowerCase()) || (r.note || '').toLowerCase().includes(query.toLowerCase()));
@@ -4332,6 +4863,36 @@ function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases,
       await storageSet('zk:buyerPayments', next);
     }
   };
+
+  const [editingRow, setEditingRow] = useState(null);
+  const [editDate, setEditDate] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editPayType, setEditPayType] = useState('odeme');
+
+  const startEdit = (row) => {
+    setEditingRow(row);
+    setEditDate(row.date);
+    setEditAmount(String(row.amount));
+    setEditNote(row.note || '');
+    setEditPayType(row.payType || 'odeme');
+  };
+
+  const saveEdit = async () => {
+    const amt = parseFloat(editAmount);
+    if (!amt || amt <= 0) return;
+    if (editingRow.kind === 'odeme') {
+      const next = payments.map((x) => (x.id === editingRow.id ? { ...x, date: editDate, amount: amt, note: editNote, payType: editPayType } : x));
+      setPayments(next);
+      await storageSet('zk:payments', next);
+    } else {
+      const next = buyerPayments.map((x) => (x.id === editingRow.id ? { ...x, date: editDate, amount: amt, note: editNote } : x));
+      setBuyerPayments(next);
+      await storageSet('zk:buyerPayments', next);
+    }
+    setEditingRow(null);
+  };
+
 
   return (
     <div>
@@ -4375,20 +4936,32 @@ function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases,
           <table className="zk-table">
             <thead><tr><th>Tarih</th><th>Tür</th><th>Kişi/firma</th><th>Tutar</th><th>Not</th><th></th></tr></thead>
             <tbody>
-              {paged.map((row) => (
-                <tr key={`${row.kind}-${row.id}`}>
-                  <td>{fmtDate(row.date)}</td>
-                  <td>
-                    <span className={`zk-badge ${row.kind === 'odeme' ? 'zk-badge-red' : 'zk-badge-olive'}`}>
-                      {row.kind === 'odeme' ? (row.payType === 'avans' ? 'Avans' : 'Ödeme') : 'Tahsilat'}
-                    </span>
-                  </td>
-                  <td>{row.partyName}</td>
-                  <td style={{ fontWeight: 600 }}>{fmtTL(row.amount)}</td>
-                  <td style={{ color: COLORS.inkSoft }}>{row.note || '—'}</td>
-                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(row)}><Trash2 size={12} /></button></td>
-                </tr>
-              ))}
+              {paged.map((row) => {
+                const waPhone = formatPhoneForWhatsApp(row.partyPhone);
+                return (
+                  <tr key={`${row.kind}-${row.id}`} style={{ cursor: 'pointer' }} onClick={() => startEdit(row)}>
+                    <td>{fmtDate(row.date)}</td>
+                    <td>
+                      <span className={`zk-badge ${row.kind === 'odeme' ? 'zk-badge-red' : 'zk-badge-olive'}`}>
+                        {row.kind === 'odeme' ? (row.payType === 'avans' ? 'Avans' : 'Ödeme') : 'Tahsilat'}
+                      </span>
+                    </td>
+                    <td>{row.partyName}</td>
+                    <td style={{ fontWeight: 600 }}>{fmtTL(row.amount)}</td>
+                    <td style={{ color: COLORS.inkSoft }}>{row.note || '—'}</td>
+                    <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => startEdit(row)}><Pencil size={12} /></button>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintPayment(row)}><Printer size={12} /></button>
+                      {waPhone && (
+                        <a className="zk-btn" style={{ padding: '5px 9px', background: '#25D366', color: '#fff' }} href={`https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppPaymentText(row, settings))}`} target="_blank" rel="noopener noreferrer">
+                          <MessageCircle size={12} />
+                        </a>
+                      )}
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => remove(row)}><Trash2 size={12} /></button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           <ListFooterControls
@@ -4403,11 +4976,38 @@ function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases,
           </>
         )}
       </div>
+
+      {editingRow && (
+        <Modal title={`${editingRow.partyName} — Düzenle`} onClose={() => setEditingRow(null)}>
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Tarih</label>
+            <input className="zk-input" type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+          </div>
+          {editingRow.kind === 'odeme' && (
+            <div style={{ marginBottom: 12 }}>
+              <label className="zk-label">Tür</label>
+              <select className="zk-select" value={editPayType} onChange={(e) => setEditPayType(e.target.value)}>
+                <option value="odeme">Ödeme</option>
+                <option value="avans">Avans</option>
+              </select>
+            </div>
+          )}
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Tutar (TL)</label>
+            <input className="zk-input" type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <label className="zk-label">Not</label>
+            <input className="zk-input" value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+          </div>
+          <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={saveEdit}>Kaydet</button>
+        </Modal>
+      )}
     </div>
   );
 }
 
-function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNotes, settings, setSettings, payments, setPayments, expenses, setExpenses, cashEntries, setCashEntries, farmers, purchases, buyers, buyerPayments, setBuyerPayments, sales }) {
+function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNotes, settings, setSettings, payments, setPayments, expenses, setExpenses, cashEntries, setCashEntries, farmers, purchases, buyers, buyerPayments, setBuyerPayments, sales, onPrintPayment }) {
   const [section, setSection] = useState('kasa');
   const sections = [
     { key: 'kasa', label: 'Kasa', icon: Banknote },
@@ -4431,7 +5031,7 @@ function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNo
         <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />
       )}
       {section === 'odeme' && (
-        <PaymentsCollectionsSection farmers={farmers} payments={payments} setPayments={setPayments} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} />
+        <PaymentsCollectionsSection farmers={farmers} payments={payments} setPayments={setPayments} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} settings={settings} onPrintPayment={onPrintPayment} />
       )}
       {section === 'giderler' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
       {section === 'banka' && <BankAccountsSection accounts={bankAccounts} setAccounts={setBankAccounts} />}
@@ -4693,7 +5293,7 @@ function StockOverview({ purchases, sales }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {stockByGrade.map(({ grade: g, stock }) => (
-              <div key={g} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+              <div key={g} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, flexWrap: 'wrap', gap: 8,}}>
                 <span className="zk-badge zk-badge-blue">{g}</span>
                 <span style={{ fontWeight: 600, color: stock < 0 ? COLORS.red : COLORS.ink }}>{fmtKg(stock)}</span>
               </div>
@@ -5948,7 +6548,7 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, ve
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8,}}>
         <div>
           <div className="zk-h1">Raporlar</div>
           <div className="zk-h1-sub">Toplam alım, satış ve kesinti özeti</div>
@@ -6235,7 +6835,7 @@ function VarietyEditor({ variety, onChange, onRemove }) {
 
   return (
     <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8,}}>
         <span style={{ fontWeight: 700, fontSize: 13.5 }}>{variety.name}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <label className="zk-checkbox-row" style={{ fontSize: 11.5 }}>
@@ -6905,7 +7505,7 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {[...autoBackups].reverse().map((b) => (
-                    <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: COLORS.paper, borderRadius: 8, padding: '8px 12px' }}>
+                    <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: COLORS.paper, borderRadius: 8, padding: '8px 12px', flexWrap: 'wrap', gap: 8,}}>
                       <span style={{ fontSize: 12.5 }}>{fmtDate(b.date)}{b.date === todayStr() ? ' (bugün)' : ''}</span>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 10px', fontSize: 11.5 }} onClick={() => onRestoreAutoBackup(b.key)}>
                         <Upload size={12} /> Bu yedeği geri yükle
@@ -6975,6 +7575,20 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
   );
 }
 
+function PrintRow({ label, value, bold, borderTop, borderStyle }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8,
+      fontWeight: bold ? 700 : 400,
+      borderTop: borderTop ? `1px ${borderStyle || 'dashed'} #000` : 'none',
+      paddingTop: borderTop ? 4 : 0, marginTop: borderTop ? 3 : 0,
+    }}>
+      <span style={{ flexShrink: 1, minWidth: 0, overflowWrap: 'break-word' }}>{label}</span>
+      <span style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>{value}</span>
+    </div>
+  );
+}
+
 function PrintArea({ purchase, farmer, settings }) {
   const [qrUrl, setQrUrl] = useState(null);
   useEffect(() => {
@@ -6985,7 +7599,11 @@ function PrintArea({ purchase, farmer, settings }) {
   if (!purchase || !farmer) return <div id="zk-print-area" />;
   return (
     <div id="zk-print-area">
-      <div style={{ fontFamily: "'Courier New', monospace", width: '100%', fontSize: 11, lineHeight: 1.5 }}>
+      <div style={{
+        fontFamily: "ui-monospace, 'Roboto Mono', 'DejaVu Sans Mono', 'Courier New', monospace",
+        width: '74mm', maxWidth: '74mm', boxSizing: 'border-box', fontSize: 11, lineHeight: 1.5,
+        overflowWrap: 'break-word', wordBreak: 'break-word',
+      }}>
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           {settings.logo && <img src={settings.logo} alt="Logo" style={{ maxWidth: 60, maxHeight: 60, marginBottom: 4 }} />}
           <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Zeytin Komisyonculuğu'}</div>
@@ -6994,7 +7612,7 @@ function PrintArea({ purchase, farmer, settings }) {
           {settings.taxNo && <div style={{ fontSize: 10 }}>VKN: {settings.taxNo}{settings.taxOffice ? ` · ${settings.taxOffice}` : ''}</div>}
         </div>
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '4px 0', marginBottom: 6, textAlign: 'center', fontWeight: 700 }}>
-          MÜSTAHSİL MAKBUZU No: {purchase.makbuzNo}
+          MÜSTAHSİL MAKBUZU<br />No: {purchase.makbuzNo}
         </div>
         <div>Tarih: {fmtDate(purchase.date)}{purchase.time ? ` · ${purchase.time}` : ''}</div>
         {purchase.personnelName && <div>Personel: {purchase.personnelName}</div>}
@@ -7002,58 +7620,39 @@ function PrintArea({ purchase, farmer, settings }) {
         {farmer.tcNo && <div>TC No: {farmer.tcNo}</div>}
         {farmer.address && <div>Adres: {farmer.address}</div>}
         <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-        <div style={{ fontWeight: 700, marginBottom: 2 }}>Ürün: Zeytin</div>
-        <table style={{ width: '100%', marginTop: 4 }}>
-          <tbody>
-            {purchase.items && purchase.items.map((it) => (
-              <tr key={it.id}>
-                <td>{it.grade}</td>
-                <td style={{ textAlign: 'right' }}>{fmtKg(it.kg)}</td>
-                <td style={{ textAlign: 'right' }}>×{fmtTL(it.pricePerKg)}</td>
-                <td style={{ textAlign: 'right' }}>{fmtTL(it.amount)}</td>
-              </tr>
-            ))}
-            <tr style={{ borderTop: '1px dashed #000' }}>
-              <td style={{ fontWeight: 700, paddingTop: 3 }}>Toplam</td>
-              <td style={{ textAlign: 'right', fontWeight: 700, paddingTop: 3 }}>{fmtKg(purchase.netKg)}</td>
-              <td></td>
-              <td style={{ textAlign: 'right', fontWeight: 700, paddingTop: 3 }}>{fmtTL(purchase.amount)}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Ürün: Zeytin</div>
+        {purchase.items && purchase.items.map((it) => (
+          <div key={it.id} style={{ marginBottom: 4 }}>
+            <div>{it.grade}</div>
+            <PrintRow label={`${fmtKg(it.kg)} × ${fmtTL(it.pricePerKg)}`} value={fmtTL(it.amount)} />
+          </div>
+        ))}
+        <PrintRow label="Toplam" value={`${fmtKg(purchase.netKg)} · ${fmtTL(purchase.amount)}`} bold borderTop />
         {(purchase.randiman || purchase.asit || purchase.nem) && (
           <>
             <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-            <table style={{ width: '100%' }}>
-              <tbody>
-                {purchase.randiman != null && <tr><td>Randıman</td><td style={{ textAlign: 'right' }}>%{purchase.randiman}</td></tr>}
-                {purchase.asit != null && <tr><td>Asit oranı</td><td style={{ textAlign: 'right' }}>%{purchase.asit}</td></tr>}
-                {purchase.nem != null && <tr><td>Nem oranı</td><td style={{ textAlign: 'right' }}>%{purchase.nem}</td></tr>}
-              </tbody>
-            </table>
+            {purchase.randiman != null && <PrintRow label="Randıman" value={`%${purchase.randiman}`} />}
+            {purchase.asit != null && <PrintRow label="Asit oranı" value={`%${purchase.asit}`} />}
+            {purchase.nem != null && <PrintRow label="Nem oranı" value={`%${purchase.nem}`} />}
           </>
         )}
         <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-        <table style={{ width: '100%' }}>
-          <tbody>
-            {purchase.fireTutari > 0 && <tr><td>Fire/İskonto (%{purchase.firePercent})</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.fireTutari)}</td></tr>}
-            {purchase.noDeduction ? (
-              <tr><td>Kesintisiz</td><td style={{ textAlign: 'right' }}>—</td></tr>
-            ) : (
-              <>
-                <tr><td>Komisyon (%{purchase.commissionRate})</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.commissionAmount)}</td></tr>
-                <tr><td>Stopaj (%{purchase.stopajOrani})</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.stopajTutari)}</td></tr>
-                {purchase.applyBagkur && <tr><td>BAĞ-KUR (%{purchase.bagkurRate})</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.bagkurTutari)}</td></tr>}
-              </>
-            )}
-            {purchase.hammaliyeTutari > 0 && <tr><td>Hammaliye</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.hammaliyeTutari)}</td></tr>}
-            {purchase.nakliyeTutari > 0 && <tr><td>Nakliye</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.nakliyeTutari)}</td></tr>}
-            {purchase.cuvalKesintisi > 0 && <tr><td>Çuval/kasa</td><td style={{ textAlign: 'right' }}>− {fmtTL(purchase.cuvalKesintisi)}</td></tr>}
-            <tr style={{ borderTop: '1px solid #000' }}><td style={{ fontWeight: 700, paddingTop: 4 }}>ÖDENEN NET</td><td style={{ textAlign: 'right', fontWeight: 700, paddingTop: 4 }}>{fmtTL(purchase.netPayment)}</td></tr>
-          </tbody>
-        </table>
+        {purchase.fireTutari > 0 && <PrintRow label={`Fire/İskonto (%${purchase.firePercent})`} value={`− ${fmtTL(purchase.fireTutari)}`} />}
+        {purchase.noDeduction ? (
+          <PrintRow label="Kesintisiz" value="—" />
+        ) : (
+          <>
+            <PrintRow label={`Komisyon (%${purchase.commissionRate})`} value={`− ${fmtTL(purchase.commissionAmount)}`} />
+            <PrintRow label={`Stopaj (%${purchase.stopajOrani})`} value={`− ${fmtTL(purchase.stopajTutari)}`} />
+            {purchase.applyBagkur && <PrintRow label={`BAĞ-KUR (%${purchase.bagkurRate})`} value={`− ${fmtTL(purchase.bagkurTutari)}`} />}
+          </>
+        )}
+        {purchase.hammaliyeTutari > 0 && <PrintRow label="Hammaliye" value={`− ${fmtTL(purchase.hammaliyeTutari)}`} />}
+        {purchase.nakliyeTutari > 0 && <PrintRow label="Nakliye" value={`− ${fmtTL(purchase.nakliyeTutari)}`} />}
+        {purchase.cuvalKesintisi > 0 && <PrintRow label="Çuval/kasa" value={`− ${fmtTL(purchase.cuvalKesintisi)}`} />}
+        <PrintRow label="ÖDENEN NET" value={fmtTL(purchase.netPayment)} bold borderTop borderStyle="solid" />
         {purchase.note && <div style={{ marginTop: 6 }}>Not: {purchase.note}</div>}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26, fontSize: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26, fontSize: 10, gap: 10, flexWrap: 'wrap',}}>
           <div>Satıcı İmza<br/>........................</div>
           <div>Alıcı İmza<br/>........................</div>
         </div>
@@ -7072,7 +7671,11 @@ function SalePrintArea({ sale, buyer, settings }) {
   if (!sale) return <div id="zk-print-area" />;
   return (
     <div id="zk-print-area">
-      <div style={{ fontFamily: "'Courier New', monospace", width: '100%', fontSize: 11, lineHeight: 1.5 }}>
+      <div style={{
+        fontFamily: "ui-monospace, 'Roboto Mono', 'DejaVu Sans Mono', 'Courier New', monospace",
+        width: '74mm', maxWidth: '74mm', boxSizing: 'border-box', fontSize: 11, lineHeight: 1.5,
+        overflowWrap: 'break-word', wordBreak: 'break-word',
+      }}>
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           {settings.logo && <img src={settings.logo} alt="Logo" style={{ maxWidth: 60, maxHeight: 60, marginBottom: 4 }} />}
           <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Zeytin Komisyonculuğu'}</div>
@@ -7081,29 +7684,52 @@ function SalePrintArea({ sale, buyer, settings }) {
           {settings.taxNo && <div style={{ fontSize: 10 }}>VKN: {settings.taxNo}{settings.taxOffice ? ` · ${settings.taxOffice}` : ''}</div>}
         </div>
         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '4px 0', marginBottom: 6, textAlign: 'center', fontWeight: 700 }}>
-          SATIŞ MAKBUZU No: {sale.makbuzNo}
+          SATIŞ MAKBUZU<br />No: {sale.makbuzNo}
         </div>
         <div>Tarih: {fmtDate(sale.date)}</div>
         <div>Alıcı: {buyer ? buyer.name : '—'}</div>
         {sale.vehiclePlaka && <div>Araç: {sale.vehiclePlaka}</div>}
         <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-        <table style={{ width: '100%', marginTop: 4 }}>
-          <tbody>
-            <tr>
-              <td>{sale.grade}</td>
-              <td style={{ textAlign: 'right' }}>{fmtKg(sale.kg)}</td>
-              <td style={{ textAlign: 'right' }}>×{fmtTL(sale.pricePerKg)}</td>
-              <td style={{ textAlign: 'right' }}>{fmtTL(sale.amount)}</td>
-            </tr>
-            <tr style={{ borderTop: '1px solid #000' }}>
-              <td style={{ fontWeight: 700, paddingTop: 4 }} colSpan={3}>TOPLAM</td>
-              <td style={{ textAlign: 'right', fontWeight: 700, paddingTop: 4 }}>{fmtTL(sale.amount)}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div style={{ marginBottom: 4 }}>
+          <div>{sale.grade}</div>
+          <PrintRow label={`${fmtKg(sale.kg)} × ${fmtTL(sale.pricePerKg)}`} value={fmtTL(sale.amount)} />
+        </div>
+        <PrintRow label="TOPLAM" value={fmtTL(sale.amount)} bold borderTop borderStyle="solid" />
         {sale.note && <div style={{ marginTop: 6 }}>Not: {sale.note}</div>}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26, fontSize: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26, fontSize: 10, gap: 10, flexWrap: 'wrap',}}>
           <div>Satan İmza<br/>........................</div>
+          <div>Alan İmza<br/>........................</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentPrintArea({ row, settings }) {
+  if (!row) return <div id="zk-print-area" />;
+  return (
+    <div id="zk-print-area">
+      <div style={{
+        fontFamily: "ui-monospace, 'Roboto Mono', 'DejaVu Sans Mono', 'Courier New', monospace",
+        width: '74mm', maxWidth: '74mm', boxSizing: 'border-box', fontSize: 11, lineHeight: 1.5,
+        overflowWrap: 'break-word', wordBreak: 'break-word',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 6 }}>
+          {settings.logo && <img src={settings.logo} alt="Logo" style={{ maxWidth: 60, maxHeight: 60, marginBottom: 4 }} />}
+          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Zeytin Komisyonculuğu'}</div>
+          {settings.address && <div style={{ fontSize: 10 }}>{settings.address}</div>}
+          {settings.phone && <div style={{ fontSize: 10 }}>Tel: {settings.phone}</div>}
+        </div>
+        <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '4px 0', marginBottom: 6, textAlign: 'center', fontWeight: 700 }}>
+          {row.kind === 'odeme' ? (row.payType === 'avans' ? 'AVANS MAKBUZU' : 'ÖDEME MAKBUZU') : 'TAHSİLAT MAKBUZU'}
+        </div>
+        <div>Tarih: {fmtDate(row.date)}</div>
+        <div>{row.kind === 'odeme' ? 'Çiftçi' : 'Alıcı'}: {row.partyName}</div>
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+        <PrintRow label="TUTAR" value={fmtTL(row.amount)} bold />
+        {row.note && <div style={{ marginTop: 6 }}>Not: {row.note}</div>}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26, fontSize: 10, gap: 10, flexWrap: 'wrap',}}>
+          <div>Veren İmza<br/>........................</div>
           <div>Alan İmza<br/>........................</div>
         </div>
       </div>
@@ -7873,6 +8499,84 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
   );
 }
 
+function CustomerDisplayView({ businessName, logo }) {
+  const [live, setLive] = useState(null);
+  const [doneFlash, setDoneFlash] = useState(null);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel('zk-customer-display');
+    ch.onmessage = (e) => {
+      const msg = e.data;
+      if (!msg) return;
+      if (msg.type === 'purchase_done' || msg.type === 'sale_done') {
+        setDoneFlash(msg);
+        setLive(null);
+        setTimeout(() => setDoneFlash(null), 6000);
+      } else {
+        setLive(msg);
+      }
+    };
+    return () => ch.close();
+  }, []);
+
+  const wrapStyle = {
+    minHeight: '100vh', width: '100%', background: '#1C1B17', color: '#F7F3E8',
+    fontFamily: "'Fraunces', Georgia, serif", display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', padding: '5vh 6vw', boxSizing: 'border-box',
+    textAlign: 'center',
+  };
+
+  if (doneFlash) {
+    return (
+      <div style={wrapStyle}>
+        <div style={{ fontSize: '4vw', marginBottom: 20 }}>✓</div>
+        <div style={{ fontSize: '3vw', fontWeight: 700, marginBottom: 16 }}>{doneFlash.partyName || ' '}</div>
+        <div style={{ fontSize: '2.2vw', color: '#C9A24B', marginBottom: 10 }}>{fmtKg(doneFlash.netKg)}</div>
+        <div style={{ fontSize: '5vw', fontWeight: 700 }}>{fmtTL(doneFlash.total)}</div>
+        <div style={{ fontSize: '1.6vw', marginTop: 30, color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
+      </div>
+    );
+  }
+
+  if (!live) {
+    return (
+      <div style={wrapStyle}>
+        {logo && <img src={logo} alt="Logo" style={{ maxWidth: '12vw', marginBottom: 24 }} />}
+        <div style={{ fontSize: '3.2vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
+        <div style={{ fontSize: '1.4vw', color: '#B8B2A0', marginTop: 20 }}>Tartım bekleniyor...</div>
+      </div>
+    );
+  }
+
+  const cl = live.currentLine;
+  return (
+    <div style={wrapStyle}>
+      <div style={{ fontSize: '1.6vw', color: '#B8B2A0', marginBottom: 6 }}>{live.dateTimeLabel}</div>
+      <div style={{ fontSize: '3.2vw', fontWeight: 700, marginBottom: '3vh' }}>{live.partyName || '—'}</div>
+
+      {cl && (cl.grade || cl.kg > 0) && (
+        <div style={{ marginBottom: '4vh' }}>
+          <div style={{ fontSize: '1.6vw', color: '#B8B2A0' }}>{cl.grade || 'Tartılıyor'}</div>
+          <div style={{ fontSize: '7vw', fontWeight: 700, lineHeight: 1.1 }}>{fmtKg(cl.kg)}</div>
+          {cl.pricePerKg > 0 && <div style={{ fontSize: '2vw', color: '#C9A24B' }}>{fmtTL(cl.pricePerKg)} / kg</div>}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '6vw', alignItems: 'baseline', borderTop: '2px solid #3A3831', paddingTop: '3vh', width: '100%', justifyContent: 'center' }}>
+        <div>
+          <div style={{ fontSize: '1.3vw', color: '#B8B2A0' }}>Toplam</div>
+          <div style={{ fontSize: '2.6vw', fontWeight: 700 }}>{fmtKg(live.netKg)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '1.3vw', color: '#B8B2A0' }}>Tutar</div>
+          <div style={{ fontSize: '3.6vw', fontWeight: 700, color: '#C9A24B' }}>{fmtTL(live.total)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ZeytinDefteri() {
   const [tab, setTab] = useState('dashboard');
   const [userEmail, setUserEmail] = useState(currentUser.email || '');
@@ -8016,6 +8720,11 @@ export default function ZeytinDefteri() {
     setTimeout(() => window.print(), 100);
   };
 
+  const handlePrintPayment = (row) => {
+    setPrintTarget({ type: 'payment', row });
+    setTimeout(() => window.print(), 100);
+  };
+
   const buildBackupPayload = () => ({
     farmers, purchases, payments, buyers, sales, settings, priceList, personnel, expenses, cashEntries, vehicles,
     vehicleMaintenance: maintenance, vehicleFuel: fuel, vehicleDocuments: documents, vehicleInsurance: insurance,
@@ -8132,6 +8841,7 @@ export default function ZeytinDefteri() {
     { key: 'cari', label: 'Cariler', icon: Wallet, group: 'Finans' },
     { key: 'manualPurchase', label: 'Alış', icon: Package, group: 'Finans' },
     { key: 'allPurchases', label: 'Alış Geçmişi', icon: ListChecks, group: 'Finans' },
+    { key: 'scaleSale', label: 'Kantarlı Satış', icon: ScaleIcon, group: 'Finans' },
     { key: 'sales', label: 'Satış', icon: ShoppingCart, group: 'Finans' },
     { key: 'salesHistory', label: 'Satış Geçmişi', icon: ListChecks, group: 'Finans' },
 
@@ -8149,7 +8859,7 @@ export default function ZeytinDefteri() {
     admin: null, user: null, // null = tum sekmelere erisim
     muhasebe: ['dashboard', 'accounting', 'cari', 'reports', 'allPurchases', 'settings'],
     kantar: ['dashboard', 'purchase', 'manualPurchase', 'cari', 'allPurchases'],
-    depo: ['dashboard', 'sales', 'salesHistory', 'crates', 'lab'],
+    depo: ['dashboard', 'scaleSale', 'sales', 'salesHistory', 'crates', 'lab'],
     sevkiyat: ['dashboard', 'shipments', 'vehicles'],
   };
   const allowedTabs = ROLE_TAB_ACCESS[currentUser.role];
@@ -8161,6 +8871,23 @@ export default function ZeytinDefteri() {
   if (!loaded) {
     return <div className="zk-app"><GlobalStyle /><div style={{ padding: 40, fontSize: 13, color: COLORS.inkSoft }}>Yükleniyor...</div></div>;
   }
+
+  if (typeof window !== 'undefined' && window.location.search.includes('display=customer')) {
+    return <CustomerDisplayView businessName={settings.businessName} logo={settings.logo} />;
+  }
+
+  const broadcastLive = (msg) => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    try {
+      const ch = new BroadcastChannel('zk-customer-display');
+      ch.postMessage(msg);
+      ch.close();
+    } catch (e) { /* musteri ekrani acik degilse sorun degil */ }
+  };
+
+  const openCustomerDisplay = () => {
+    window.open(window.location.pathname + '?display=customer', 'zk-customer-display-window', 'noopener');
+  };
 
   const fontZoom = { small: 0.92, normal: 1, large: 1.08 }[settings.fontSize] || 1;
 
@@ -8229,15 +8956,16 @@ export default function ZeytinDefteri() {
         <div className="zk-main">
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
 
-          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} />}
+          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} />}
           {tab === 'manualPurchase' && <ManualPurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} />}
           {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
 
-          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} />}
+          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} onPrintPayment={handlePrintPayment} />}
           {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
+          {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} vehicles={vehicles} onPrintReceipt={handlePrintReceipt} settings={settings} />}
+          {tab === 'scaleSale' && <ScaleSaleTab buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} purchases={purchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} />}
           {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} />}
-          {tab === 'salesHistory' && <SalesHistoryTab buyers={buyers} sales={sales} setSales={setSales} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} />}
+          {tab === 'salesHistory' && <SalesHistoryTab buyers={buyers} sales={sales} setSales={setSales} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} vehicles={vehicles} />}
 
           {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} />}
           {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
@@ -8250,7 +8978,8 @@ export default function ZeytinDefteri() {
         </div>
       </div>
       {printTarget?.type === 'sale' && <SalePrintArea sale={printTarget.sale} buyer={printTarget.buyer} settings={settings} />}
-      {(!printTarget || printTarget.type !== 'sale') && <PrintArea purchase={printTarget?.purchase} farmer={printTarget?.farmer} settings={settings} />}
+      {printTarget?.type === 'payment' && <PaymentPrintArea row={printTarget.row} settings={settings} />}
+      {(!printTarget || (printTarget.type !== 'sale' && printTarget.type !== 'payment')) && <PrintArea purchase={printTarget?.purchase} farmer={printTarget?.farmer} settings={settings} />}
       <VoiceAssistant farmers={farmers} setFarmers={setFarmers} priceList={priceList} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} reminders={reminders} setReminders={setReminders} settings={settings} />
     </div>
   );
