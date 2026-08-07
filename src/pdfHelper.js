@@ -94,6 +94,31 @@ async function buildPurchaseReceiptDoc(purchase, farmer, settings) {
     y += 4;
     doc.setFontSize(8);
   });
+
+  const gradeGroups = {};
+  (purchase.items || []).forEach((it) => {
+    if (!gradeGroups[it.grade]) gradeGroups[it.grade] = { kg: 0, amount: 0 };
+    gradeGroups[it.grade].kg += it.kg;
+    gradeGroups[it.grade].amount += it.amount;
+  });
+  const gradeNames = Object.keys(gradeGroups);
+  if ((purchase.items || []).length > 1) {
+    y += 1;
+    doc.line(4, y, 76, y);
+    y += 4;
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(8);
+    line('Sınıf bazında toplam');
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(7.5);
+    gradeNames.forEach((g) => {
+      doc.text(g, 5, y);
+      doc.text(`${fmtKgTr(gradeGroups[g].kg)}  ${tl(gradeGroups[g].amount, decimals)}`, 75, y, { align: 'right' });
+      y += 4;
+    });
+    doc.setFontSize(8);
+  }
+
   doc.setFont('Roboto', 'bold');
   doc.text('Toplam', 5, y);
   doc.text(`${fmtKgTr(purchase.netKg)}  ${tl(purchase.amount, decimals)}`, 75, y, { align: 'right' });

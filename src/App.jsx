@@ -1357,6 +1357,25 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                     <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removeLine(it.id)}><X size={12} /></button></td>
                   </tr>
                 ))}
+                {(() => {
+                  const groups = {};
+                  items.forEach((it) => {
+                    if (!groups[it.grade]) groups[it.grade] = { kg: 0, amount: 0 };
+                    groups[it.grade].kg += it.kg;
+                    groups[it.grade].amount += it.amount;
+                  });
+                  const gradeNames = Object.keys(groups);
+                  if (items.length <= 1) return null;
+                  return gradeNames.map((g) => (
+                    <tr key={g} style={{ background: COLORS.paper }}>
+                      <td colSpan={3} style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{g} toplam</td>
+                      <td style={{ fontWeight: 600, fontSize: 11.5 }}>{fmtKg(groups[g].kg)}</td>
+                      <td></td>
+                      <td style={{ fontWeight: 600, fontSize: 11.5 }}>{fmtTL(groups[g].amount)}</td>
+                      <td></td>
+                    </tr>
+                  ));
+                })()}
                 <tr>
                   <td style={{ fontWeight: 700 }}>Toplam</td>
                   <td></td>
@@ -2086,6 +2105,27 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
                   </div>
                 </div>
               ))}
+              {(() => {
+                const groups = {};
+                items.forEach((it) => {
+                  if (!groups[it.grade]) groups[it.grade] = { kg: 0, amount: 0 };
+                  groups[it.grade].kg += it.kg;
+                  groups[it.grade].amount += it.amount;
+                });
+                const gradeNames = Object.keys(groups);
+                if (items.length <= 1) return null;
+                return (
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${COLORS.border}` }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: COLORS.inkSoft, marginBottom: 4 }}>Sınıf bazında toplam</div>
+                    {gradeNames.map((g) => (
+                      <div key={g} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
+                        <span>{g}</span>
+                        <span style={{ fontWeight: 600 }}>{fmtKg(groups[g].kg)} · {fmtTL(groups[g].amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -7667,6 +7707,25 @@ function PrintArea({ purchase, farmer, settings }) {
             <PrintRow label={`${fmtKg(it.kg)} × ${fmtTL(it.pricePerKg)}`} value={fmtTL(it.amount)} />
           </div>
         ))}
+        {(() => {
+          const groups = {};
+          (purchase.items || []).forEach((it) => {
+            if (!groups[it.grade]) groups[it.grade] = { kg: 0, amount: 0 };
+            groups[it.grade].kg += it.kg;
+            groups[it.grade].amount += it.amount;
+          });
+          const gradeNames = Object.keys(groups);
+          if ((purchase.items || []).length <= 1) return null;
+          return (
+            <>
+              <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>Sınıf bazında toplam</div>
+              {gradeNames.map((g) => (
+                <PrintRow key={g} label={g} value={`${fmtKg(groups[g].kg)} · ${fmtTL(groups[g].amount)}`} />
+              ))}
+            </>
+          );
+        })()}
         <PrintRow label="Toplam" value={`${fmtKg(purchase.netKg)} · ${fmtTL(purchase.amount)}`} bold borderTop />
         {(purchase.randiman || purchase.asit || purchase.nem) && (
           <>
