@@ -36,13 +36,17 @@ export default function AuthGate({ children }) {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
 
+  const isCustomerDisplay = typeof window !== 'undefined' && window.location.search.includes('display=customer');
+
   useEffect(() => {
+    if (isCustomerDisplay) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [isCustomerDisplay]);
 
   useEffect(() => {
+    if (isCustomerDisplay) return;
     if (!session) { setUserRecord(session === null ? null : undefined); return; }
     const email = session.user?.email;
     if (!email) { setUserRecord(null); return; }
@@ -69,7 +73,7 @@ export default function AuthGate({ children }) {
         setUserRecord(null);
       }
     });
-  }, [session]);
+  }, [session, isCustomerDisplay]);
 
   const signIn = () => {
     supabase.auth.signInWithOAuth({
@@ -82,6 +86,10 @@ export default function AuthGate({ children }) {
     currentUser.email = null;
     supabase.auth.signOut();
   };
+
+  if (isCustomerDisplay) {
+    return children;
+  }
 
   if (session === undefined || (session && userRecord === undefined)) {
     return (

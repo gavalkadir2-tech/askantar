@@ -960,7 +960,27 @@ function FarmersTab({ farmers, setFarmers, purchases, payments, setTab, setSelec
   );
 }
 
-function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles, broadcastLive, openCustomerDisplay }) {
+function CustomerDisplayButtons({ openCustomerDisplay, customerDisplayUrl }) {
+  const [copied, setCopied] = useState(false);
+  if (!openCustomerDisplay) return null;
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(customerDisplayUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) { /* pano erisimi yoksa sessizce gec */ }
+  };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      <button className="zk-btn zk-btn-secondary" onClick={openCustomerDisplay}><Tv size={14} /> Müşteri ekranını aç</button>
+      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 10px', fontSize: 11.5 }} onClick={copyLink} title="Başka bir cihazda (akıllı TV, tablet) açmak için bağlantıyı kopyala">
+        {copied ? <CheckCircle2 size={12} /> : <Repeat size={12} />} {copied ? 'Kopyalandı' : 'Bağlantıyı kopyala'}
+      </button>
+    </div>
+  );
+}
+
+function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles, broadcastLive, openCustomerDisplay, customerDisplayUrl }) {
   const [farmerId, setFarmerId] = useState('');
   const [showAddFarmer, setShowAddFarmer] = useState(false);
   const [personnelId, setPersonnelId] = useState('');
@@ -1220,9 +1240,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
           <div className="zk-h1">Alım</div>
           <div className="zk-h1-sub">Elekten çıkan her sınıfı ayrı tartıp ekleyin, sonunda toplam üzerinden hesaplansın</div>
         </div>
-        {openCustomerDisplay && (
-          <button className="zk-btn zk-btn-secondary" onClick={openCustomerDisplay}><Tv size={14} /> Müşteri ekranını aç</button>
-        )}
+        {openCustomerDisplay && <CustomerDisplayButtons openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} />}
       </div>
 
       <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} compact />
@@ -1858,7 +1876,7 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
   );
 }
 
-function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList, personnel, vehicles, settings, onPrintSaleReceipt, broadcastLive, openCustomerDisplay }) {
+function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList, personnel, vehicles, settings, onPrintSaleReceipt, broadcastLive, openCustomerDisplay, customerDisplayUrl }) {
   const [buyerId, setBuyerId] = useState('');
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [personnelId, setPersonnelId] = useState('');
@@ -1992,9 +2010,7 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
           <div className="zk-h1">Kantarlı Satış</div>
           <div className="zk-h1-sub">Kantar/tartı bağlantısıyla canlı tartım yaparak satış kaydı oluşturun</div>
         </div>
-        {openCustomerDisplay && (
-          <button className="zk-btn zk-btn-secondary" onClick={openCustomerDisplay}><Tv size={14} /> Müşteri ekranını aç</button>
-        )}
+        {openCustomerDisplay && <CustomerDisplayButtons openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} />}
       </div>
 
       <div style={{ maxWidth: 640 }}>
@@ -8521,7 +8537,7 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
   );
 }
 
-function CustomerDisplayView({ businessName, logo }) {
+function CustomerDisplayView({ businessName, logo, channelId }) {
   const [live, setLive] = useState(null);
   const [doneFlash, setDoneFlash] = useState(null);
   const [clock, setClock] = useState(new Date());
@@ -8531,22 +8547,32 @@ function CustomerDisplayView({ businessName, logo }) {
     return () => clearInterval(t);
   }, []);
 
+  const handleMsg = (msg) => {
+    if (!msg) return;
+    if (msg.type === 'purchase_done' || msg.type === 'sale_done') {
+      setDoneFlash(msg);
+      setLive(null);
+      setTimeout(() => setDoneFlash(null), 7000);
+    } else {
+      setLive(msg);
+    }
+  };
+
+  // Ayni cihaz / ayni tarayici oturumu (kablo ile TV'ye baglanti, ekran yansitma).
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
-    const ch = new BroadcastChannel('zk-customer-display');
-    ch.onmessage = (e) => {
-      const msg = e.data;
-      if (!msg) return;
-      if (msg.type === 'purchase_done' || msg.type === 'sale_done') {
-        setDoneFlash(msg);
-        setLive(null);
-        setTimeout(() => setDoneFlash(null), 7000);
-      } else {
-        setLive(msg);
-      }
-    };
+    const ch = new BroadcastChannel('zk-customer-display' + (channelId ? '-' + channelId : ''));
+    ch.onmessage = (e) => handleMsg(e.data);
     return () => ch.close();
-  }, []);
+  }, [channelId]);
+
+  // Aginda bagimsiz/uzak cihaz (akilli TV, farkli tarayici) - Supabase Realtime uzerinden.
+  useEffect(() => {
+    if (typeof supabase === 'undefined' || !channelId) return;
+    const ch = supabase.channel(`zk-display-${channelId}`);
+    ch.on('broadcast', { event: 'update' }, (payload) => handleMsg(payload.payload)).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [channelId]);
 
   const rootStyle = {
     minHeight: '100vh', width: '100%', background: '#1C1B17', color: '#F7F3E8',
@@ -8560,10 +8586,10 @@ function CustomerDisplayView({ businessName, logo }) {
   const Header = () => (
     <div style={headerStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.2vw' }}>
-        {logo && <img src={logo} alt="Logo" style={{ maxHeight: '4.5vh' }} />}
-        <div style={{ fontSize: '1.9vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
+        {logo && <img src={logo} alt="Logo" style={{ maxHeight: '5vh' }} />}
+        <div style={{ fontSize: '2.2vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
       </div>
-      <div style={{ fontSize: '1.6vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: '2vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
         {clock.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </div>
     </div>
@@ -8574,11 +8600,10 @@ function CustomerDisplayView({ businessName, logo }) {
       <div style={rootStyle}>
         <Header />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '4vh 6vw' }}>
-          <div style={{ fontSize: '5vw', color: '#7FB27A', marginBottom: 14 }}>✓</div>
-          <div style={{ fontSize: '2.6vw', fontWeight: 700, marginBottom: 10 }}>{doneFlash.partyName || ' '}</div>
-          <div style={{ fontSize: '1.8vw', color: '#C9A24B', marginBottom: 14 }}>{fmtKg(doneFlash.netKg)}</div>
-          <div style={{ fontSize: '4.5vw', fontWeight: 700 }}>{fmtTL(doneFlash.total)}</div>
-          <div style={{ fontSize: '1.4vw', marginTop: 26, color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
+          <div style={{ fontSize: '9vw', color: '#7FB27A', marginBottom: '2vh' }}>✓</div>
+          <div style={{ fontSize: '5vw', fontWeight: 700, marginBottom: '2vh' }}>{doneFlash.partyName || ' '}</div>
+          <div style={{ fontSize: '4vw', color: '#C9A24B', fontWeight: 700 }}>{fmtKg(doneFlash.netKg)}</div>
+          <div style={{ fontSize: '2vw', marginTop: '4vh', color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
         </div>
       </div>
     );
@@ -8589,8 +8614,8 @@ function CustomerDisplayView({ businessName, logo }) {
       <div style={rootStyle}>
         <Header />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          {logo && <img src={logo} alt="Logo" style={{ maxWidth: '10vw', marginBottom: 20, opacity: 0.85 }} />}
-          <div style={{ fontSize: '1.6vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
+          {logo && <img src={logo} alt="Logo" style={{ maxWidth: '14vw', marginBottom: '3vh', opacity: 0.85 }} />}
+          <div style={{ fontSize: '2.2vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
         </div>
       </div>
     );
@@ -8598,81 +8623,46 @@ function CustomerDisplayView({ businessName, logo }) {
 
   const cl = live.currentLine;
   const hasCurrentLine = cl && (cl.grade || cl.kg > 0);
-  const ded = live.deductions;
-  const dedRows = ded ? [
-    ['Komisyon', ded.komisyon], ['Stopaj', ded.stopaj], ['BAĞ-KUR', ded.bagkur],
-    ['Hammaliye', ded.hammaliye], ['Nakliye', ded.nakliye], ['Çuval/kasa', ded.cuval], ['Fire/İskonto', ded.fire],
-  ].filter(([, v]) => v > 0) : [];
 
   return (
     <div style={rootStyle}>
       <Header />
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        {/* Sol: canli tartim + taraf bilgisi */}
-        <div style={{ flex: '1.1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3vh 3vw', borderRight: '1px solid #3A3831', textAlign: 'center' }}>
-          <div style={{ fontSize: '2.6vw', fontWeight: 700, marginBottom: '1vh' }}>{live.partyName || '—'}</div>
-          <div style={{ fontSize: '1.2vw', color: '#B8B2A0', marginBottom: '3vh' }}>
-            {[live.personnelName, live.vehiclePlaka].filter(Boolean).join(' · ') || live.dateTimeLabel}
-          </div>
-
-          {hasCurrentLine ? (
-            <>
-              <div style={{ fontSize: '1.5vw', color: '#C9A24B', marginBottom: 4 }}>{cl.grade || 'Tartılıyor'}</div>
-              <div style={{ fontSize: '9vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
-              {cl.pricePerKg > 0 && <div style={{ fontSize: '1.8vw', marginTop: 10, color: '#D8D2C0' }}>{fmtTL(cl.pricePerKg)} / kg</div>}
-              {(live.randiman || live.asit || live.nem) && (
-                <div style={{ display: 'flex', gap: '2vw', marginTop: '2.5vh', fontSize: '1.1vw', color: '#B8B2A0' }}>
-                  {live.randiman != null && <span>Randıman %{live.randiman}</span>}
-                  {live.asit != null && <span>Asit %{live.asit}</span>}
-                  {live.nem != null && <span>Nem %{live.nem}</span>}
-                </div>
-              )}
-            </>
-          ) : (
-            <div style={{ fontSize: '1.6vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
-          )}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3vh 5vw', textAlign: 'center', minHeight: 0 }}>
+        <div style={{ fontSize: '3.6vw', fontWeight: 700, marginBottom: '1vh' }}>{live.partyName || '—'}</div>
+        <div style={{ fontSize: '1.5vw', color: '#B8B2A0', marginBottom: '4vh' }}>
+          {[live.personnelName, live.vehiclePlaka].filter(Boolean).join(' · ') || live.dateTimeLabel}
         </div>
 
-        {/* Sag: kalem listesi + toplamlar */}
-        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', padding: '3vh 3vw', minHeight: 0 }}>
-          <div style={{ fontSize: '1.3vw', color: '#B8B2A0', marginBottom: '1.5vh' }}>Tartılan kalemler</div>
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {live.items.length === 0 ? (
-              <div style={{ fontSize: '1.3vw', color: '#6E6A5E' }}>Henüz eklenmiş kalem yok.</div>
-            ) : (
-              live.items.map((it, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '1vw', fontSize: '1.35vw', padding: '0.8vh 0', borderBottom: '1px solid #2C2A24' }}>
-                  <span style={{ color: '#D8D2C0' }}>{it.grade} · {fmtKg(it.kg)}</span>
-                  <span style={{ fontWeight: 600, flexShrink: 0 }}>{fmtTL(it.amount)}</span>
-                </div>
-              ))
-            )}
-          </div>
-
-          {dedRows.length > 0 && (
-            <div style={{ borderTop: '1px solid #3A3831', marginTop: '1.5vh', paddingTop: '1.2vh' }}>
-              {dedRows.map(([label, val]) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1vw', color: '#B8B2A0', padding: '0.3vh 0' }}>
-                  <span>{label}</span><span>− {fmtTL(val)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ borderTop: '2px solid #3A3831', marginTop: '1.5vh', paddingTop: '1.5vh' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.4vw', color: '#B8B2A0', marginBottom: 6 }}>
-              <span>Toplam kg</span><span>{fmtKg(live.netKg)}</span>
-            </div>
-            {dedRows.length > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.4vw', color: '#B8B2A0', marginBottom: 6 }}>
-                <span>Brüt tutar</span><span>{fmtTL(live.grossAmount)}</span>
+        {hasCurrentLine ? (
+          <>
+            <div style={{ fontSize: '2.4vw', color: '#C9A24B', marginBottom: '1vh' }}>{cl.grade || 'Tartılıyor'}</div>
+            <div style={{ fontSize: '13vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
+            {(live.randiman != null || live.asit != null || live.nem != null) && (
+              <div style={{ display: 'flex', gap: '3vw', marginTop: '3vh', fontSize: '1.5vw', color: '#B8B2A0' }}>
+                {live.randiman != null && <span>Randıman %{live.randiman}</span>}
+                {live.asit != null && <span>Asit %{live.asit}</span>}
+                {live.nem != null && <span>Nem %{live.nem}</span>}
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '2.4vw', fontWeight: 700, color: '#C9A24B' }}>
-              <span>{dedRows.length > 0 ? 'Net ödenecek' : 'Toplam tutar'}</span>
-              <span>{fmtTL(live.netAmount)}</span>
-            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: '2.2vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
+        )}
+      </div>
+
+      <div style={{ borderTop: '2px solid #3A3831', padding: '3vh 5vw', flexShrink: 0 }}>
+        {live.items.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.2vw', justifyContent: 'center', marginBottom: '3vh' }}>
+            {live.items.map((it, i) => (
+              <div key={i} style={{ background: '#2A2822', borderRadius: 10, padding: '1.2vh 1.6vw', fontSize: '1.5vw' }}>
+                {it.grade} · <strong>{fmtKg(it.kg)}</strong>
+              </div>
+            ))}
           </div>
+        )}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '1.6vw', color: '#B8B2A0', marginBottom: '0.5vh' }}>Toplam</div>
+          <div style={{ fontSize: '4.5vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
         </div>
       </div>
     </div>
@@ -8730,6 +8720,7 @@ export default function ZeytinDefteri() {
   const [crateMovements, setCrateMovements] = useState([]);
   const [personnelAttendance, setPersonnelAttendance] = useState([]);
   const [buyerPayments, setBuyerPayments] = useState([]);
+  const displayChannelRef = useRef(null);
   const [personnelPayments, setPersonnelPayments] = useState([]);
   const [labResults, setLabResults] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
@@ -8892,6 +8883,22 @@ export default function ZeytinDefteri() {
     if (loaded) runAutoBackupIfNeeded();
   }, [loaded]);
 
+  useEffect(() => {
+    if (!loaded || settings.displayChannelId) return;
+    const id = uid() + uid();
+    const next = { ...settings, displayChannelId: id };
+    setSettings(next);
+    storageSet('zk:settings', next);
+  }, [loaded, settings.displayChannelId]);
+
+  useEffect(() => {
+    if (typeof supabase === 'undefined' || !settings.displayChannelId) return;
+    const ch = supabase.channel(`zk-display-${settings.displayChannelId}`);
+    ch.subscribe();
+    displayChannelRef.current = ch;
+    return () => { supabase.removeChannel(ch); displayChannelRef.current = null; };
+  }, [settings.displayChannelId]);
+
   const backupData = () => {
     const payload = buildBackupPayload();
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -8975,20 +8982,31 @@ export default function ZeytinDefteri() {
   }
 
   if (typeof window !== 'undefined' && window.location.search.includes('display=customer')) {
-    return <CustomerDisplayView businessName={settings.businessName} logo={settings.logo} />;
+    const params = new URLSearchParams(window.location.search);
+    return <CustomerDisplayView businessName={settings.businessName} logo={settings.logo} channelId={params.get('ch') || settings.displayChannelId} />;
   }
 
+  const displayChannelId = settings.displayChannelId || null;
+
   const broadcastLive = (msg) => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    try {
-      const ch = new BroadcastChannel('zk-customer-display');
-      ch.postMessage(msg);
-      ch.close();
-    } catch (e) { /* musteri ekrani acik degilse sorun degil */ }
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const ch = new BroadcastChannel('zk-customer-display' + (displayChannelId ? '-' + displayChannelId : ''));
+        ch.postMessage(msg);
+        ch.close();
+      } catch (e) { /* musteri ekrani acik degilse sorun degil */ }
+    }
+    if (typeof supabase !== 'undefined' && displayChannelRef.current) {
+      try { displayChannelRef.current.send({ type: 'broadcast', event: 'update', payload: msg }); } catch (e) { /* aginda sorun olabilir, sessizce gec */ }
+    }
   };
 
+  const customerDisplayUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname}?display=customer${displayChannelId ? `&ch=${displayChannelId}` : ''}`
+    : '';
+
   const openCustomerDisplay = () => {
-    window.open(window.location.pathname + '?display=customer', 'zk-customer-display-window', 'noopener');
+    window.open(customerDisplayUrl, 'zk-customer-display-window', 'noopener');
   };
 
   const fontZoom = { small: 0.92, normal: 1, large: 1.08 }[settings.fontSize] || 1;
@@ -9058,14 +9076,14 @@ export default function ZeytinDefteri() {
         <div className="zk-main">
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
 
-          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} />}
+          {tab === 'purchase' && <PurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} />}
           {tab === 'manualPurchase' && <ManualPurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} />}
           {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
 
           {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} onPrintPayment={handlePrintPayment} />}
           {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} vehicles={vehicles} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'scaleSale' && <ScaleSaleTab buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} purchases={purchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} />}
+          {tab === 'scaleSale' && <ScaleSaleTab buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} purchases={purchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} />}
           {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} />}
           {tab === 'salesHistory' && <SalesHistoryTab buyers={buyers} sales={sales} setSales={setSales} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} vehicles={vehicles} />}
 
