@@ -8646,11 +8646,11 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
 
   const Header = () => (
     <div style={headerStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2vw' }}>
-        {logo && <img src={logo} alt="Logo" style={{ maxHeight: '5vh' }} />}
-        <div style={{ fontSize: '2.2vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5vw' }}>
+        {logo && <img src={logo} alt="Logo" style={{ maxHeight: '6vh' }} />}
+        <div style={{ fontSize: '2.8vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
       </div>
-      <div style={{ fontSize: '2vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: '2.6vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
         {clock.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </div>
     </div>
@@ -8661,10 +8661,10 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
       <div style={rootStyle}>
         <Header />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '4vh 6vw' }}>
-          <div style={{ fontSize: '9vw', color: '#7FB27A', marginBottom: '2vh' }}>✓</div>
-          <div style={{ fontSize: '5vw', fontWeight: 700, marginBottom: '2vh' }}>{doneFlash.partyName || ' '}</div>
-          <div style={{ fontSize: '4vw', color: '#C9A24B', fontWeight: 700 }}>{fmtKg(doneFlash.netKg)}</div>
-          <div style={{ fontSize: '2vw', marginTop: '4vh', color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
+          <div style={{ fontSize: '10vw', color: '#7FB27A', marginBottom: '2vh' }}>✓</div>
+          <div style={{ fontSize: '6vw', fontWeight: 700, marginBottom: '2vh' }}>{doneFlash.partyName || ' '}</div>
+          <div style={{ fontSize: '5vw', color: '#C9A24B', fontWeight: 700 }}>{fmtKg(doneFlash.netKg)}</div>
+          <div style={{ fontSize: '2.4vw', marginTop: '4vh', color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
         </div>
       </div>
     );
@@ -8676,7 +8676,7 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
         <Header />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           {logo && <img src={logo} alt="Logo" style={{ maxWidth: '14vw', marginBottom: '3vh', opacity: 0.85 }} />}
-          <div style={{ fontSize: '2.2vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
+          <div style={{ fontSize: '2.6vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
         </div>
       </div>
     );
@@ -8688,18 +8688,20 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
   return (
     <div style={rootStyle}>
       <Header />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3vh 5vw', textAlign: 'center', minHeight: 0 }}>
-        <div style={{ fontSize: '3.6vw', fontWeight: 700, marginBottom: '1vh' }}>{live.partyName || '—'}</div>
-        <div style={{ fontSize: '1.5vw', color: '#B8B2A0', marginBottom: '4vh' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2vh 5vw', textAlign: 'center', minHeight: 0 }}>
+        <div style={{ fontSize: '4.2vw', fontWeight: 700, marginBottom: '0.8vh' }}>{live.partyName || '—'}</div>
+        <div style={{ fontSize: '1.8vw', color: '#B8B2A0', marginBottom: '2.5vh' }}>
           {[live.personnelName, live.vehiclePlaka].filter(Boolean).join(' · ') || live.dateTimeLabel}
         </div>
 
         {hasCurrentLine ? (
           <>
-            <div style={{ fontSize: '2.4vw', color: '#C9A24B', marginBottom: '1vh' }}>{cl.grade || 'Tartılıyor'}</div>
-            <div style={{ fontSize: '13vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2.5vw' }}>
+              <div style={{ fontSize: '15vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
+              <div style={{ fontSize: '3.2vw', fontWeight: 700, color: '#C9A24B', maxWidth: '22vw', textAlign: 'left', lineHeight: 1.2 }}>{cl.grade || 'Tartılıyor'}</div>
+            </div>
             {(live.randiman != null || live.asit != null || live.nem != null) && (
-              <div style={{ display: 'flex', gap: '3vw', marginTop: '3vh', fontSize: '1.5vw', color: '#B8B2A0' }}>
+              <div style={{ display: 'flex', gap: '3vw', marginTop: '2.5vh', fontSize: '1.8vw', color: '#B8B2A0' }}>
                 {live.randiman != null && <span>Randıman %{live.randiman}</span>}
                 {live.asit != null && <span>Asit %{live.asit}</span>}
                 {live.nem != null && <span>Nem %{live.nem}</span>}
@@ -8707,11 +8709,11 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
             )}
           </>
         ) : (
-          <div style={{ fontSize: '2.2vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
+          <div style={{ fontSize: '2.6vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
         )}
       </div>
 
-      <div style={{ borderTop: '2px solid #3A3831', padding: '3vh 5vw', flexShrink: 0 }}>
+      <div style={{ borderTop: '2px solid #3A3831', padding: '2.5vh 5vw', flexShrink: 0 }}>
         {live.items.length > 0 && (() => {
           const groups = {};
           const order = [];
@@ -8720,19 +8722,19 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
             groups[it.grade] += it.kg;
           });
           return (
-            <div style={{ marginBottom: '3vh', maxWidth: '46vw', marginLeft: 'auto', marginRight: 'auto' }}>
+            <div style={{ marginBottom: '2.5vh', maxWidth: '64vw', marginLeft: 'auto', marginRight: 'auto' }}>
               {order.map((g) => (
-                <div key={g} style={{ display: 'flex', justifyContent: 'space-between', gap: '2vw', fontSize: '1.8vw', padding: '0.8vh 0', borderBottom: '1px solid #2C2A24' }}>
-                  <span style={{ color: '#D8D2C0' }}>{g}</span>
-                  <span style={{ fontWeight: 700 }}>{fmtKg(groups[g])}</span>
+                <div key={g} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw', fontSize: '2.4vw', padding: '1vh 0', borderBottom: '1px solid #2C2A24' }}>
+                  <span style={{ fontWeight: 700, minWidth: '9vw', textAlign: 'right' }}>{fmtKg(groups[g])}</span>
+                  <span style={{ color: '#D8D2C0', textAlign: 'left', flex: 1 }}>{g}</span>
                 </div>
               ))}
             </div>
           );
         })()}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '1.6vw', color: '#B8B2A0', marginBottom: '0.5vh' }}>Toplam</div>
-          <div style={{ fontSize: '4.5vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw' }}>
+          <div style={{ fontSize: '6vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
+          <div style={{ fontSize: '2.4vw', color: '#B8B2A0' }}>Toplam</div>
         </div>
       </div>
     </div>
