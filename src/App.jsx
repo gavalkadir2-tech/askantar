@@ -1299,7 +1299,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
           <div style={{ background: COLORS.paper, borderRadius: 10, padding: 12, marginBottom: 14 }}>
             <div className="zk-label" style={{ marginBottom: 8 }}>Tartım satırı ekle</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'end' }}>
-              <div style={{ flex: '1 1 140px' }}>
+              <div style={{ flex: '1 1 140px', minWidth: 0 }}>
                 <label className="zk-label">Tür</label>
                 <select className="zk-select" value={lineVariety} onChange={(e) => setLineVariety(e.target.value)}>
                   {priceList.length === 0 && <option value="">Fiyat listesi boş</option>}
@@ -1307,7 +1307,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                 </select>
               </div>
               {selectedVariety?.hasGrades && (
-                <div style={{ flex: '1 1 120px' }}>
+                <div style={{ flex: '1 1 120px', minWidth: 0 }}>
                   <label className="zk-label">Numara</label>
                   <select className="zk-select" value={lineGradeName} onChange={(e) => setLineGradeName(e.target.value)}>
                     {selectedVariety.grades.length === 0 && <option value="">Numara yok</option>}
@@ -1315,25 +1315,25 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                   </select>
                 </div>
               )}
-              <div style={{ flex: '1 1 100px' }}>
+              <div style={{ flex: '1 1 100px', minWidth: 0 }}>
                 <label className="zk-label">Ölçülen (kg)</label>
                 <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
               </div>
-              <div style={{ flex: '1 1 150px' }}>
+              <div style={{ flex: '1 1 130px', minWidth: 0 }}>
                 <label className="zk-label">Kasa</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
-                  <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
-                    {crateCount} kasa
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                  <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>
+                    {crateCount}
                   </div>
-                  <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
+                  <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
                 </div>
               </div>
-              <div style={{ flex: '1 1 100px' }}>
+              <div style={{ flex: '1 1 100px', minWidth: 0 }}>
                 <label className="zk-label">Fiyat/kg</label>
                 <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
               </div>
-              <button className="zk-btn zk-btn-gold" onClick={addLine}><Plus size={14} /> Ekle</button>
+              <button className="zk-btn zk-btn-gold" style={{ flexShrink: 0 }} onClick={addLine}><Plus size={14} /> Ekle</button>
             </div>
             {lineKg && (
               <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginTop: 8 }}>
@@ -2089,21 +2089,33 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
           </div>
 
           <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Tartım satırı ekle</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-            <select className="zk-select" style={{ flex: '2 1 160px' }} value={lineGrade} onChange={(e) => setLineGrade(e.target.value)}>
-              <option value="">Sınıf seçin...</option>
-              {stockByGrade.filter((g) => g.stock > 0.01).map((g) => <option key={g.grade} value={g.grade}>{g.grade} · stokta {fmtKg(g.stock)}</option>)}
-            </select>
-            <input className="zk-input" type="number" placeholder="Ölçülen (kg)" style={{ flex: '1 1 120px' }} value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} />
-            <div style={{ flex: '1 1 150px', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40, minHeight: 44 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
-              <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
-                {crateCount} kasa
-              </div>
-              <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40, minHeight: 44 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 4, alignItems: 'end' }}>
+            <div style={{ flex: '2 1 160px', minWidth: 0 }}>
+              <label className="zk-label">Sınıf</label>
+              <select className="zk-select" value={lineGrade} onChange={(e) => setLineGrade(e.target.value)}>
+                <option value="">Seçin...</option>
+                {stockByGrade.filter((g) => g.stock > 0.01).map((g) => <option key={g.grade} value={g.grade}>{g.grade} · stokta {fmtKg(g.stock)}</option>)}
+              </select>
             </div>
-            <input className="zk-input" type="number" placeholder="Kg fiyatı" style={{ flex: '1 1 100px' }} value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} />
-            <button className="zk-btn zk-btn-gold" onClick={addLine}><Plus size={14} /> Ekle</button>
+            <div style={{ flex: '1 1 110px', minWidth: 0 }}>
+              <label className="zk-label">Ölçülen (kg)</label>
+              <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
+            </div>
+            <div style={{ flex: '1 1 130px', minWidth: 0 }}>
+              <label className="zk-label">Kasa</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
+                <div style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>
+                  {crateCount}
+                </div>
+                <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
+              </div>
+            </div>
+            <div style={{ flex: '1 1 100px', minWidth: 0 }}>
+              <label className="zk-label">Fiyat/kg</label>
+              <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
+            </div>
+            <button className="zk-btn zk-btn-gold" style={{ flexShrink: 0 }} onClick={addLine}><Plus size={14} /> Ekle</button>
           </div>
           {lineKg && (
             <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 8 }}>
