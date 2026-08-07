@@ -6898,6 +6898,11 @@ function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchase
   const [typedText, setTypedText] = useState('');
   const recognitionRef = useRef(null);
   const logEndRef = useRef(null);
+  const dragStateRef = useRef({ dragging: false, moved: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+  const [bubblePos, setBubblePos] = useState(() => {
+    if (typeof window !== 'undefined') return { x: window.innerWidth - 76, y: window.innerHeight - 86 };
+    return { x: 300, y: 300 };
+  });
 
   const speechSupported = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
   const aiEnabled = !!(settings && (settings.aiVoiceEnabled || settings.groqApiKey));
@@ -6952,6 +6957,46 @@ function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchase
   const stopListening = () => {
     recognitionRef.current?.stop();
     setListening(false);
+  };
+
+  const clampBubblePos = (x, y) => {
+    const size = 56;
+    const margin = 8;
+    const maxX = window.innerWidth - size - margin;
+    const maxY = window.innerHeight - size - margin;
+    return { x: Math.min(Math.max(margin, x), Math.max(margin, maxX)), y: Math.min(Math.max(margin, y), Math.max(margin, maxY)) };
+  };
+
+  const onBubblePointerDown = (e) => {
+    dragStateRef.current = {
+      dragging: true, moved: false,
+      startX: e.clientX, startY: e.clientY,
+      origX: bubblePos.x, origY: bubblePos.y,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onBubblePointerMove = (e) => {
+    const ds = dragStateRef.current;
+    if (!ds.dragging) return;
+    const dx = e.clientX - ds.startX;
+    const dy = e.clientY - ds.startY;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) ds.moved = true;
+    if (ds.moved) setBubblePos(clampBubblePos(ds.origX + dx, ds.origY + dy));
+  };
+
+  const onBubblePointerUp = () => {
+    const wasMoved = dragStateRef.current.moved;
+    dragStateRef.current.dragging = false;
+    dragStateRef.current.moved = false;
+    if (wasMoved) return;
+    if (open) {
+      if (listening) stopListening();
+      setOpen(false);
+    } else {
+      setOpen(true);
+      startListening();
+    }
   };
 
   const confirmSave = async () => {
@@ -7023,13 +7068,16 @@ function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchase
   return (
     <>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onPointerDown={onBubblePointerDown}
+        onPointerMove={onBubblePointerMove}
+        onPointerUp={onBubblePointerUp}
         style={{
-          position: 'fixed', bottom: 20, right: 20, zIndex: 150,
+          position: 'fixed', left: bubblePos.x, top: bubblePos.y, zIndex: 150,
           width: 56, height: 56, borderRadius: '50%', border: 'none',
-          background: COLORS.olive, color: '#fff', cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(43,42,37,0.35)',
+          background: listening ? COLORS.red : COLORS.olive, color: '#fff', cursor: 'grab',
+          boxShadow: listening ? '0 0 0 6px rgba(196,74,58,0.18), 0 4px 16px rgba(43,42,37,0.35)' : '0 4px 16px rgba(43,42,37,0.35)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          touchAction: 'none', userSelect: 'none', transition: 'background 0.15s, box-shadow 0.15s',
         }}
         aria-label="Sesli asistan"
       >
@@ -7038,7 +7086,10 @@ function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchase
 
       {open && (
         <div style={{
-          position: 'fixed', bottom: 86, right: 20, zIndex: 150,
+          position: 'fixed',
+          left: Math.min(bubblePos.x, window.innerWidth - 340 - 8),
+          top: bubblePos.y > window.innerHeight / 2 ? bubblePos.y - 490 : bubblePos.y + 66,
+          zIndex: 150,
           width: 340, maxWidth: 'calc(100vw - 40px)', maxHeight: '65vh',
           background: '#fff', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden', border: `1px solid ${COLORS.border}`,
