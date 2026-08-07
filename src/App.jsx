@@ -1320,11 +1320,11 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                 <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
               </div>
               <div style={{ flex: '1 1 150px' }}>
-                <label className="zk-label">Dara (kasa)</label>
+                <label className="zk-label">Kasa</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
                   <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
-                    {crateCount} kasa<div style={{ fontSize: 10.5, color: COLORS.inkSoft, fontWeight: 400 }}>{fmtKg(lineDara)}</div>
+                    {crateCount} kasa
                   </div>
                   <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
                 </div>
@@ -2098,7 +2098,7 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
             <div style={{ flex: '1 1 150px', display: 'flex', alignItems: 'center', gap: 6 }}>
               <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40, minHeight: 44 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
               <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
-                {crateCount} kasa<div style={{ fontSize: 10.5, color: COLORS.inkSoft, fontWeight: 400 }}>Dara: {fmtKg(lineDara)}</div>
+                {crateCount} kasa
               </div>
               <button className="zk-btn zk-btn-secondary" style={{ padding: '0 12px', minWidth: 40, minHeight: 44 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
             </div>
@@ -8696,10 +8696,12 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
     const groups = {};
     const order = [];
     (items || []).forEach((it) => {
-      if (!groups[it.grade]) { groups[it.grade] = 0; order.push(it.grade); }
-      groups[it.grade] += it.kg;
+      if (!groups[it.grade]) { groups[it.grade] = { kg: 0, count: 0, crates: 0 }; order.push(it.grade); }
+      groups[it.grade].kg += it.kg;
+      groups[it.grade].count += 1;
+      groups[it.grade].crates += it.crateCount || 0;
     });
-    return order.map((g) => ({ grade: g, kg: groups[g] }));
+    return order.map((g) => ({ grade: g, ...groups[g] }));
   };
 
   const Header = () => (
@@ -8762,62 +8764,55 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
     <div style={rootStyle}>
       <Header />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        {/* Sol: canli tartim + taraf bilgisi */}
-        <div style={{ flex: '1.1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2vh 2.5vw', borderRight: '1px solid #3A3831', textAlign: 'center', minWidth: 0 }}>
-          <div style={{ fontSize: '3.6vw', fontWeight: 700, marginBottom: '0.8vh' }}>{live.partyName || '—'}</div>
-          <div style={{ fontSize: '1.8vw', color: '#B8B2A0', marginBottom: '2.5vh' }}>{live.dateTimeLabel}</div>
+        {/* Sol: canli tartim + taraf bilgisi + en altta genel toplam */}
+        <div style={{ flex: '1.1 1 0', display: 'flex', flexDirection: 'column', padding: '2vh 2.5vw', borderRight: '1px solid #3A3831', minWidth: 0, minHeight: 0 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 0 }}>
+            <div style={{ fontSize: '3.6vw', fontWeight: 700, marginBottom: '2vh' }}>{live.partyName || '—'}</div>
 
-          {hasCurrentLine ? (
-            <>
-              <div style={{ fontSize: '13vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
-              <div style={{ fontSize: '3vw', fontWeight: 700, color: '#C9A24B', marginTop: '1.5vh' }}>{cl.grade || 'Tartılıyor'}</div>
-              {(live.randiman != null || live.asit != null || live.nem != null) && (
-                <div style={{ display: 'flex', gap: '2.5vw', marginTop: '2.5vh', fontSize: '1.6vw', color: '#B8B2A0' }}>
-                  {live.randiman != null && <span>Randıman %{live.randiman}</span>}
-                  {live.asit != null && <span>Asit %{live.asit}</span>}
-                  {live.nem != null && <span>Nem %{live.nem}</span>}
-                </div>
-              )}
-            </>
-          ) : (
-            <div style={{ fontSize: '2.4vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
+            {hasCurrentLine ? (
+              <>
+                <div style={{ fontSize: '13vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
+                <div style={{ fontSize: '3vw', fontWeight: 700, color: '#C9A24B', marginTop: '1.5vh' }}>{cl.grade || 'Tartılıyor'}</div>
+                {(live.randiman != null || live.asit != null || live.nem != null) && (
+                  <div style={{ display: 'flex', gap: '2.5vw', marginTop: '2.5vh', fontSize: '1.6vw', color: '#B8B2A0' }}>
+                    {live.randiman != null && <span>Randıman %{live.randiman}</span>}
+                    {live.asit != null && <span>Asit %{live.asit}</span>}
+                    {live.nem != null && <span>Nem %{live.nem}</span>}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: '2.4vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
+            )}
+          </div>
+
+          {live.items.length > 0 && (
+            <div style={{ textAlign: 'center', borderTop: '2px solid #3A3831', paddingTop: '2vh', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '1.5vw' }}>
+                <div style={{ fontSize: '2.2vw', color: '#B8B2A0' }}>Toplam</div>
+                <div style={{ fontSize: '5.5vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Sag: her tartim tek tek (tur, numara, kg, kasa adeti) + tur/numara toplamlari.
-            Ikisi de tek bir olculen kutu icinde, ekrana sigmayinca birlikte kuculur. */}
+        {/* Sag: sinif/numara bazinda ozet - her satirda tartim sayisi, kasa toplami, kg toplami.
+            6-7 satira gore tasarlandi, daha fazlasi olursa yazi otomatik kuculur. */}
         <div style={{ flex: '0.9 1 0', display: 'flex', flexDirection: 'column', padding: '2vh 2.5vw', minHeight: 0, minWidth: 0 }}>
-          <div style={{ fontSize: '1.8vw', color: '#B8B2A0', marginBottom: '1vh', flexShrink: 0 }}>Tartılan kasalar</div>
+          <div style={{ fontSize: '1.8vw', color: '#B8B2A0', marginBottom: '1.5vh', flexShrink: 0 }}>Sınıf / numara özeti</div>
           <div ref={rightContainerRef} style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
             <div ref={rightContentRef}>
-              {live.items.length === 0 ? (
+              {gradeTotals.length === 0 ? (
                 <div style={{ fontSize: '1.8vw', color: '#6E6A5E' }}>Henüz kasa eklenmedi.</div>
               ) : (
-                <>
-                  {live.items.map((it, i) => (
-                    <div key={i} style={{ padding: `${rightFontVw * 0.35}vh 0`, borderBottom: '1px solid #2C2A24' }}>
-                      <div style={{ fontSize: `${rightFontVw}vw`, color: '#D8D2C0', marginBottom: '0.2vh' }}>
-                        {it.grade}{it.crateCount > 0 ? ` · ${it.crateCount} kasa` : ''}
-                      </div>
-                      <div style={{ fontSize: `${rightFontVw * 1.5}vw`, fontWeight: 700 }}>{fmtKg(it.kg)}</div>
+                gradeTotals.map((g) => (
+                  <div key={g.grade} style={{ padding: `${rightFontVw * 0.45}vh 0`, borderBottom: '1px solid #2C2A24' }}>
+                    <div style={{ fontSize: `${rightFontVw}vw`, color: '#D8D2C0', marginBottom: '0.2vh' }}>
+                      {g.grade} · {g.count} tartım · {g.crates} kasa
                     </div>
-                  ))}
-                  {gradeTotals.length > 0 && (
-                    <div style={{ borderTop: '2px solid #3A3831', marginTop: `${rightFontVw * 0.6}vh`, paddingTop: `${rightFontVw * 0.6}vh` }}>
-                      <div style={{ fontSize: `${rightFontVw * 0.8}vw`, color: '#B8B2A0', marginBottom: `${rightFontVw * 0.3}vh` }}>Sınıf toplamları</div>
-                      {gradeTotals.map((g) => (
-                        <div key={g.grade} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1vw', padding: `${rightFontVw * 0.25}vh 0` }}>
-                          <span style={{ fontSize: `${rightFontVw}vw`, color: '#D8D2C0' }}>{g.grade}</span>
-                          <span style={{ fontSize: `${rightFontVw * 1.2}vw`, fontWeight: 700, color: '#C9A24B' }}>{fmtKg(g.kg)}</span>
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1vw', marginTop: `${rightFontVw * 0.4}vh`, paddingTop: `${rightFontVw * 0.4}vh`, borderTop: `1px solid #2C2A24` }}>
-                        <span style={{ fontSize: `${rightFontVw}vw`, color: '#B8B2A0' }}>Toplam</span>
-                        <span style={{ fontSize: `${rightFontVw * 1.6}vw`, fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</span>
-                      </div>
-                    </div>
-                  )}
-                </>
+                    <div style={{ fontSize: `${rightFontVw * 1.6}vw`, fontWeight: 700, color: '#C9A24B' }}>{fmtKg(g.kg)}</div>
+                  </div>
+                ))
               )}
             </div>
           </div>
