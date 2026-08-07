@@ -1,5 +1,21 @@
 import jsPDF from 'jspdf';
 
+// jsPDF'in yerleşik "helvetica" fontu Türkçe karakterleri (İ, ı, ğ, ş, ç, ö, ü)
+// doğru göstermiyor (örn. "MÜSTAHSİL" -> "MÜSTAHS0L" gibi bozuluyor). Bunun yerine
+// Türkçe karakterleri tam destekleyen Roboto fontunu PDF içine gömüyoruz.
+// Font dosyaları büyük olduğu için (~1.3MB), uygulamanın ilk açılışını yavaşlatmamak
+// adına sadece bir PDF indirilirken (bu fonksiyon çağrıldığında) yükleniyor.
+async function registerTurkishFont(doc) {
+  const [{ RobotoRegularBase64 }, { RobotoBoldBase64 }] = await Promise.all([
+    import('./fonts/RobotoRegular.js'),
+    import('./fonts/RobotoBold.js'),
+  ]);
+  doc.addFileToVFS('Roboto-Regular.ttf', RobotoRegularBase64);
+  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
+  doc.addFileToVFS('Roboto-Bold.ttf', RobotoBoldBase64);
+  doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold');
+}
+
 function tl(n, decimals) {
   const num = Number(n) || 0;
   const d = decimals ?? 2;
@@ -13,17 +29,18 @@ function fmtKgTr(n) {
   return (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' kg';
 }
 
-export function downloadReceiptPdf(purchase, farmer, settings) {
+export async function downloadReceiptPdf(purchase, farmer, settings) {
   const decimals = (settings && settings.decimalPlaces) ?? 2;
   const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+  await registerTurkishFont(doc);
   const cx = 40;
   let y = 8;
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Roboto', 'bold');
   doc.setFontSize(11);
   doc.text((settings && settings.businessName) || 'Zeytin Komisyonculuğu', cx, y, { align: 'center' });
   y += 5;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Roboto', 'normal');
   doc.setFontSize(7.5);
   if (settings && settings.address) { doc.text(settings.address, cx, y, { align: 'center' }); y += 3.5; }
   if (settings && settings.phone) { doc.text(`Tel: ${settings.phone}`, cx, y, { align: 'center' }); y += 3.5; }
@@ -33,14 +50,14 @@ export function downloadReceiptPdf(purchase, farmer, settings) {
   doc.setLineDashPattern([1, 1], 0);
   doc.line(4, y, 76, y);
   y += 4;
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Roboto', 'bold');
   doc.setFontSize(9.5);
   doc.text(`MÜSTAHSİL MAKBUZU No: ${purchase.makbuzNo}`, cx, y, { align: 'center' });
   y += 5;
   doc.line(4, y, 76, y);
   y += 5;
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Roboto', 'normal');
   doc.setFontSize(8);
   const line = (text) => { doc.text(text, 5, y); y += 4; };
   line(`Tarih: ${fmtDateTr(purchase.date)}${purchase.time ? ' · ' + purchase.time : ''}`);
@@ -52,9 +69,9 @@ export function downloadReceiptPdf(purchase, farmer, settings) {
   y += 1;
   doc.line(4, y, 76, y);
   y += 4;
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Roboto', 'bold');
   line('Ürün: Zeytin');
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Roboto', 'normal');
   (purchase.items || []).forEach((it) => {
     doc.setFontSize(7.5);
     line(`${it.grade}`);
@@ -63,11 +80,11 @@ export function downloadReceiptPdf(purchase, farmer, settings) {
     y += 4;
     doc.setFontSize(8);
   });
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Roboto', 'bold');
   doc.text('Toplam', 5, y);
   doc.text(`${fmtKgTr(purchase.netKg)}  ${tl(purchase.amount, decimals)}`, 75, y, { align: 'right' });
   y += 5;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Roboto', 'normal');
   doc.line(4, y, 76, y);
   y += 4;
 
@@ -86,14 +103,14 @@ export function downloadReceiptPdf(purchase, farmer, settings) {
   y += 1;
   doc.line(4, y, 76, y);
   y += 5;
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Roboto', 'bold');
   doc.setFontSize(9.5);
   doc.text('ÖDENEN NET', 5, y);
   doc.text(tl(purchase.netPayment, decimals), 75, y, { align: 'right' });
   y += 8;
 
   if (purchase.note) {
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('Roboto', 'normal');
     doc.setFontSize(7.5);
     doc.text(`Not: ${purchase.note}`, 5, y, { maxWidth: 70 });
     y += 6;
