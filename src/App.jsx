@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient.js';
 import { currentUser } from './currentUser.js';
@@ -8602,6 +8602,7 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
   const [live, setLive] = useState(null);
   const [doneFlash, setDoneFlash] = useState(null);
   const [clock, setClock] = useState(new Date());
+  const doneTimeoutRef = useRef(null);
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
@@ -8610,11 +8611,15 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
 
   const handleMsg = (msg) => {
     if (!msg) return;
+    if (doneTimeoutRef.current) { clearTimeout(doneTimeoutRef.current); doneTimeoutRef.current = null; }
     if (msg.type === 'purchase_done' || msg.type === 'sale_done') {
       setDoneFlash(msg);
       setLive(null);
-      setTimeout(() => setDoneFlash(null), 30000);
+      doneTimeoutRef.current = setTimeout(() => { setDoneFlash(null); doneTimeoutRef.current = null; }, 30000);
     } else {
+      // Yeni bir çiftçi/alıcı için canlı tartım başladıysa, 30 saniyeyi beklemeden
+      // "işlem tamamlandı" ekranını hemen kapatıp yeni işleme geç.
+      setDoneFlash(null);
       setLive(msg);
     }
   };
@@ -8634,6 +8639,28 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
     ch.on('broadcast', { event: 'update' }, (payload) => handleMsg(payload.payload)).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [channelId]);
+
+  // Sag taraftaki "tartilan kasalar" listesi buyudukce, sayfa kaymasi/tasmasi
+  // olmadan ekrana sigmasi icin yazi boyutunu kademeli olarak kucultuyoruz.
+  const RIGHT_MAX_VW = 2.6;
+  const RIGHT_MIN_VW = 0.9;
+  const rightContainerRef = useRef(null);
+  const rightContentRef = useRef(null);
+  const [rightFontVw, setRightFontVw] = useState(RIGHT_MAX_VW);
+  const itemsKey = live ? live.items.map((it) => `${it.grade}-${it.kg}-${it.crateCount || 0}`).join('|') : '';
+
+  useLayoutEffect(() => {
+    setRightFontVw(RIGHT_MAX_VW);
+  }, [itemsKey]);
+
+  useLayoutEffect(() => {
+    const container = rightContainerRef.current;
+    const content = rightContentRef.current;
+    if (!container || !content) return;
+    if (content.scrollHeight > container.clientHeight && rightFontVw > RIGHT_MIN_VW) {
+      setRightFontVw((v) => Math.max(RIGHT_MIN_VW, +(v - 0.1).toFixed(2)));
+    }
+  }, [rightFontVw, itemsKey]);
 
   const rootStyle = {
     minHeight: '100vh', width: '100%', background: '#1C1B17', color: '#F7F3E8',
@@ -8656,11 +8683,11 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
 
   const Header = () => (
     <div style={headerStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5vw' }}>
-        {logo && <img src={logo} alt="Logo" style={{ maxHeight: '6vh' }} />}
-        <div style={{ fontSize: '3.4vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2vw' }}>
+        {logo && <img src={logo} alt="Logo" style={{ maxHeight: '5vh' }} />}
+        <div style={{ fontSize: '2.4vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
       </div>
-      <div style={{ fontSize: '3.2vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: '2.2vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
         {clock.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {clock.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </div>
     </div>
@@ -8671,24 +8698,24 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
     return (
       <div style={rootStyle}>
         <Header />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '3vh 6vw' }}>
-          <div style={{ fontSize: '9vw', color: '#7FB27A', marginBottom: '1.5vh' }}>✓</div>
-          <div style={{ fontSize: '6vw', fontWeight: 700, marginBottom: '3vh' }}>{doneFlash.partyName || ' '}</div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '2vh 6vw', minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ fontSize: '7vw', color: '#7FB27A', marginBottom: '1vh', flexShrink: 0 }}>✓</div>
+          <div style={{ fontSize: '4.4vw', fontWeight: 700, marginBottom: '2vh', flexShrink: 0 }}>{doneFlash.partyName || ' '}</div>
           {doneGroups.length > 0 && (
-            <div style={{ marginBottom: '3vh', width: '100%', maxWidth: '60vw' }}>
+            <div style={{ marginBottom: '2vh', width: '100%', maxWidth: '60vw', overflowY: 'auto', flex: '0 1 auto' }}>
               {doneGroups.map((g) => (
-                <div key={g.grade} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw', fontSize: '3.6vw', padding: '1.2vh 0', borderBottom: '1px solid #3A3831' }}>
-                  <span style={{ fontWeight: 700, minWidth: '13vw', textAlign: 'right' }}>{fmtKg(g.kg)}</span>
+                <div key={g.grade} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw', fontSize: '2.6vw', padding: '0.8vh 0', borderBottom: '1px solid #3A3831' }}>
+                  <span style={{ fontWeight: 700, minWidth: '10vw', textAlign: 'right' }}>{fmtKg(g.kg)}</span>
                   <span style={{ color: '#D8D2C0', textAlign: 'left', flex: 1 }}>{g.grade}</span>
                 </div>
               ))}
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '2vw' }}>
-            <div style={{ fontSize: '3vw', color: '#B8B2A0' }}>Toplam</div>
-            <div style={{ fontSize: '8vw', color: '#C9A24B', fontWeight: 700 }}>{fmtKg(doneFlash.netKg)}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '1.5vw', flexShrink: 0 }}>
+            <div style={{ fontSize: '2.2vw', color: '#B8B2A0' }}>Toplam</div>
+            <div style={{ fontSize: '6vw', color: '#C9A24B', fontWeight: 700 }}>{fmtKg(doneFlash.netKg)}</div>
           </div>
-          <div style={{ fontSize: '2.8vw', marginTop: '3vh', color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
+          <div style={{ fontSize: '2vw', marginTop: '2vh', color: '#B8B2A0', flexShrink: 0 }}>İşlem tamamlandı, teşekkür ederiz</div>
         </div>
       </div>
     );
@@ -8699,8 +8726,8 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
       <div style={rootStyle}>
         <Header />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          {logo && <img src={logo} alt="Logo" style={{ maxWidth: '14vw', marginBottom: '3vh', opacity: 0.85 }} />}
-          <div style={{ fontSize: '3.4vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
+          {logo && <img src={logo} alt="Logo" style={{ maxWidth: '12vw', marginBottom: '3vh', opacity: 0.85 }} />}
+          <div style={{ fontSize: '2.4vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
         </div>
       </div>
     );
@@ -8716,15 +8743,15 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* Sol: canli tartim + taraf bilgisi */}
         <div style={{ flex: '1.1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2vh 2.5vw', borderRight: '1px solid #3A3831', textAlign: 'center', minWidth: 0 }}>
-          <div style={{ fontSize: '4.8vw', fontWeight: 700, marginBottom: '0.8vh' }}>{live.partyName || '—'}</div>
-          <div style={{ fontSize: '2.4vw', color: '#B8B2A0', marginBottom: '3vh' }}>{live.dateTimeLabel}</div>
+          <div style={{ fontSize: '3.6vw', fontWeight: 700, marginBottom: '0.8vh' }}>{live.partyName || '—'}</div>
+          <div style={{ fontSize: '1.8vw', color: '#B8B2A0', marginBottom: '2.5vh' }}>{live.dateTimeLabel}</div>
 
           {hasCurrentLine ? (
             <>
-              <div style={{ fontSize: '17vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
-              <div style={{ fontSize: '4vw', fontWeight: 700, color: '#C9A24B', marginTop: '1.5vh' }}>{cl.grade || 'Tartılıyor'}</div>
+              <div style={{ fontSize: '13vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
+              <div style={{ fontSize: '3vw', fontWeight: 700, color: '#C9A24B', marginTop: '1.5vh' }}>{cl.grade || 'Tartılıyor'}</div>
               {(live.randiman != null || live.asit != null || live.nem != null) && (
-                <div style={{ display: 'flex', gap: '2.5vw', marginTop: '2.5vh', fontSize: '2vw', color: '#B8B2A0' }}>
+                <div style={{ display: 'flex', gap: '2.5vw', marginTop: '2.5vh', fontSize: '1.6vw', color: '#B8B2A0' }}>
                   {live.randiman != null && <span>Randıman %{live.randiman}</span>}
                   {live.asit != null && <span>Asit %{live.asit}</span>}
                   {live.nem != null && <span>Nem %{live.nem}</span>}
@@ -8732,44 +8759,46 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
               )}
             </>
           ) : (
-            <div style={{ fontSize: '3vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
+            <div style={{ fontSize: '2.4vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
           )}
         </div>
 
-        {/* Sag: her tartim tek tek (tur, numara, kg, kasa adeti) - makbuzdaki alim satirlarinin ayni bicimi */}
+        {/* Sag: her tartim tek tek (tur, numara, kg, kasa adeti) - liste uzadikca yazi otomatik kuculur */}
         <div style={{ flex: '0.9 1 0', display: 'flex', flexDirection: 'column', padding: '2.5vh 2.5vw', minHeight: 0, minWidth: 0 }}>
-          <div style={{ fontSize: '2.4vw', color: '#B8B2A0', marginBottom: '1.5vh', flexShrink: 0 }}>Tartılan kasalar</div>
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {live.items.length === 0 ? (
-              <div style={{ fontSize: '2.4vw', color: '#6E6A5E' }}>Henüz kasa eklenmedi.</div>
-            ) : (
-              live.items.map((it, i) => (
-                <div key={i} style={{ padding: '1.4vh 0', borderBottom: '1px solid #2C2A24' }}>
-                  <div style={{ fontSize: '2.6vw', color: '#D8D2C0', marginBottom: '0.3vh' }}>
-                    {it.grade}{it.crateCount > 0 ? ` · ${it.crateCount} kasa` : ''}
+          <div style={{ fontSize: '1.8vw', color: '#B8B2A0', marginBottom: '1.2vh', flexShrink: 0 }}>Tartılan kasalar</div>
+          <div ref={rightContainerRef} style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+            <div ref={rightContentRef}>
+              {live.items.length === 0 ? (
+                <div style={{ fontSize: '1.8vw', color: '#6E6A5E' }}>Henüz kasa eklenmedi.</div>
+              ) : (
+                live.items.map((it, i) => (
+                  <div key={i} style={{ padding: `${rightFontVw * 0.35}vh 0`, borderBottom: '1px solid #2C2A24' }}>
+                    <div style={{ fontSize: `${rightFontVw}vw`, color: '#D8D2C0', marginBottom: '0.2vh' }}>
+                      {it.grade}{it.crateCount > 0 ? ` · ${it.crateCount} kasa` : ''}
+                    </div>
+                    <div style={{ fontSize: `${rightFontVw * 1.5}vw`, fontWeight: 700 }}>{fmtKg(it.kg)}</div>
                   </div>
-                  <div style={{ fontSize: '4vw', fontWeight: 700 }}>{fmtKg(it.kg)}</div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Alt: tur/numara bazinda toplam kilo (tum genislik) */}
       {gradeTotals.length > 0 && (
-        <div style={{ borderTop: '2px solid #3A3831', padding: '2.5vh 4vw', flexShrink: 0 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2vw', justifyContent: 'center', marginBottom: '2vh' }}>
+        <div style={{ borderTop: '2px solid #3A3831', padding: '2vh 4vw', flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5vw', justifyContent: 'center', marginBottom: '1.5vh' }}>
             {gradeTotals.map((g) => (
-              <div key={g.grade} style={{ display: 'flex', alignItems: 'baseline', gap: '1vw', background: '#2A2822', borderRadius: 10, padding: '1.4vh 2vw' }}>
-                <span style={{ fontSize: '3.4vw', fontWeight: 700 }}>{fmtKg(g.kg)}</span>
-                <span style={{ fontSize: '2.2vw', color: '#D8D2C0' }}>{g.grade}</span>
+              <div key={g.grade} style={{ display: 'flex', alignItems: 'baseline', gap: '0.8vw', background: '#2A2822', borderRadius: 10, padding: '1vh 1.6vw' }}>
+                <span style={{ fontSize: '2.6vw', fontWeight: 700 }}>{fmtKg(g.kg)}</span>
+                <span style={{ fontSize: '1.7vw', color: '#D8D2C0' }}>{g.grade}</span>
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw' }}>
-            <div style={{ fontSize: '3vw', color: '#B8B2A0' }}>Toplam</div>
-            <div style={{ fontSize: '6.5vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '1.5vw' }}>
+            <div style={{ fontSize: '2.2vw', color: '#B8B2A0' }}>Toplam</div>
+            <div style={{ fontSize: '5vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
           </div>
         </div>
       )}
