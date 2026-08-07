@@ -4,7 +4,7 @@ import jsPDF from 'jspdf';
 // doğru göstermiyor (örn. "MÜSTAHSİL" -> "MÜSTAHS0L" gibi bozuluyor). Bunun yerine
 // Türkçe karakterleri tam destekleyen Roboto fontunu PDF içine gömüyoruz.
 // Font dosyaları büyük olduğu için (~1.3MB), uygulamanın ilk açılışını yavaşlatmamak
-// adına sadece bir PDF indirilirken (bu fonksiyon çağrıldığında) yükleniyor.
+// adına sadece bir makbuz oluşturulurken (bu fonksiyon çağrıldığında) yükleniyor.
 async function registerTurkishFont(doc) {
   const [{ RobotoRegularBase64 }, { RobotoBoldBase64 }] = await Promise.all([
     import('./fonts/RobotoRegular.js'),
@@ -29,7 +29,21 @@ function fmtKgTr(n) {
   return (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' kg';
 }
 
-export async function downloadReceiptPdf(purchase, farmer, settings) {
+// "Yazdır" butonu: tarayıcının kendi print/HTML motoruna güvenmek yerine (font
+// ikamesi ve sayfa genişliği sorunlarına yol açıyordu), aynı Roboto gömülü PDF'i
+// yeni bir sekmede açıp otomatik yazdırma diyaloğunu tetikliyoruz. Böylece
+// "Yazdır" ve "PDF indir" her zaman birebir aynı, doğru görünen çıktıyı üretir.
+function printDoc(doc) {
+  try {
+    doc.autoPrint();
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+  } catch (e) {
+    doc.save('makbuz.pdf');
+  }
+}
+
+async function buildPurchaseReceiptDoc(purchase, farmer, settings) {
   const decimals = (settings && settings.decimalPlaces) ?? 2;
   const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
   await registerTurkishFont(doc);
@@ -123,5 +137,156 @@ export async function downloadReceiptPdf(purchase, farmer, settings) {
   doc.line(5, y + 4, 30, y + 4);
   doc.line(50, y + 4, 75, y + 4);
 
+  return doc;
+}
+
+export async function downloadReceiptPdf(purchase, farmer, settings) {
+  const doc = await buildPurchaseReceiptDoc(purchase, farmer, settings);
   doc.save(`makbuz-${purchase.makbuzNo}.pdf`);
+}
+
+export async function printReceiptPdf(purchase, farmer, settings) {
+  const doc = await buildPurchaseReceiptDoc(purchase, farmer, settings);
+  printDoc(doc);
+}
+
+async function buildSaleReceiptDoc(sale, buyer, settings) {
+  const decimals = (settings && settings.decimalPlaces) ?? 2;
+  const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
+  await registerTurkishFont(doc);
+  const cx = 40;
+  let y = 8;
+
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(11);
+  doc.text((settings && settings.businessName) || 'Zeytin Komisyonculuğu', cx, y, { align: 'center' });
+  y += 5;
+  doc.setFont('Roboto', 'normal');
+  doc.setFontSize(7.5);
+  if (settings && settings.address) { doc.text(settings.address, cx, y, { align: 'center' }); y += 3.5; }
+  if (settings && settings.phone) { doc.text(`Tel: ${settings.phone}`, cx, y, { align: 'center' }); y += 3.5; }
+  if (settings && settings.taxNo) { doc.text(`VKN: ${settings.taxNo}${settings.taxOffice ? ' · ' + settings.taxOffice : ''}`, cx, y, { align: 'center' }); y += 3.5; }
+
+  y += 2;
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(4, y, 76, y);
+  y += 4;
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(9.5);
+  doc.text(`SATIŞ MAKBUZU No: ${sale.makbuzNo}`, cx, y, { align: 'center' });
+  y += 5;
+  doc.line(4, y, 76, y);
+  y += 5;
+
+  doc.setFont('Roboto', 'normal');
+  doc.setFontSize(8);
+  const line = (text) => { doc.text(text, 5, y); y += 4; };
+  line(`Tarih: ${fmtDateTr(sale.date)}`);
+  line(`Alıcı: ${buyer ? buyer.name : '—'}`);
+  if (sale.vehiclePlaka) line(`Araç: ${sale.vehiclePlaka}`);
+
+  y += 1;
+  doc.line(4, y, 76, y);
+  y += 4;
+  doc.setFontSize(7.5);
+  line(`${sale.grade}`);
+  doc.text(`${fmtKgTr(sale.kg)} x ${tl(sale.pricePerKg, decimals)}`, 5, y);
+  doc.text(tl(sale.amount, decimals), 75, y, { align: 'right' });
+  y += 5;
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(9.5);
+  doc.line(4, y, 76, y);
+  y += 5;
+  doc.text('TOPLAM', 5, y);
+  doc.text(tl(sale.amount, decimals), 75, y, { align: 'right' });
+  y += 8;
+
+  if (sale.note) {
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Not: ${sale.note}`, 5, y, { maxWidth: 70 });
+    y += 6;
+  }
+
+  y += 10;
+  doc.setFontSize(7.5);
+  doc.text('Satan İmza', 5, y);
+  doc.text('Alan İmza', 75, y, { align: 'right' });
+  doc.line(5, y + 4, 30, y + 4);
+  doc.line(50, y + 4, 75, y + 4);
+
+  return doc;
+}
+
+export async function downloadSaleReceiptPdf(sale, buyer, settings) {
+  const doc = await buildSaleReceiptDoc(sale, buyer, settings);
+  doc.save(`satis-${sale.makbuzNo}.pdf`);
+}
+
+export async function printSaleReceiptPdf(sale, buyer, settings) {
+  const doc = await buildSaleReceiptDoc(sale, buyer, settings);
+  printDoc(doc);
+}
+
+async function buildPaymentReceiptDoc(row, settings) {
+  const decimals = (settings && settings.decimalPlaces) ?? 2;
+  const doc = new jsPDF({ unit: 'mm', format: [80, 100] });
+  await registerTurkishFont(doc);
+  const cx = 40;
+  let y = 8;
+
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(11);
+  doc.text((settings && settings.businessName) || 'Zeytin Komisyonculuğu', cx, y, { align: 'center' });
+  y += 6;
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(4, y, 76, y);
+  y += 4;
+  doc.setFontSize(9.5);
+  const title = row.kind === 'odeme' ? (row.payType === 'avans' ? 'AVANS MAKBUZU' : 'ÖDEME MAKBUZU') : 'TAHSİLAT MAKBUZU';
+  doc.text(title, cx, y, { align: 'center' });
+  y += 5;
+  doc.line(4, y, 76, y);
+  y += 5;
+
+  doc.setFont('Roboto', 'normal');
+  doc.setFontSize(8);
+  const line = (text) => { doc.text(text, 5, y); y += 4; };
+  line(`Tarih: ${fmtDateTr(row.date)}`);
+  line(`${row.kind === 'odeme' ? 'Çiftçi' : 'Alıcı'}: ${row.partyName}`);
+
+  y += 1;
+  doc.line(4, y, 76, y);
+  y += 5;
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(9.5);
+  doc.text('TUTAR', 5, y);
+  doc.text(tl(row.amount, decimals), 75, y, { align: 'right' });
+  y += 8;
+
+  if (row.note) {
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Not: ${row.note}`, 5, y, { maxWidth: 70 });
+    y += 6;
+  }
+
+  y += 10;
+  doc.setFontSize(7.5);
+  doc.text('Veren İmza', 5, y);
+  doc.text('Alan İmza', 75, y, { align: 'right' });
+  doc.line(5, y + 4, 30, y + 4);
+  doc.line(50, y + 4, 75, y + 4);
+
+  return doc;
+}
+
+export async function downloadPaymentReceiptPdf(row, settings) {
+  const doc = await buildPaymentReceiptDoc(row, settings);
+  doc.save(`odeme-${row.date}.pdf`);
+}
+
+export async function printPaymentReceiptPdf(row, settings) {
+  const doc = await buildPaymentReceiptDoc(row, settings);
+  printDoc(doc);
 }
