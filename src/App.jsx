@@ -3986,21 +3986,7 @@ function BankAccountsSection({ accounts, setAccounts }) {
   );
 }
 
-function buildWhatsAppCheckNoteText(item, settings) {
-  const lines = [];
-  lines.push(`*${settings?.businessName || 'Zeytin Komisyonculuğu'}*`);
-  lines.push(`${item.type === 'çek' ? 'Çek' : 'Senet'} vade hatırlatması`);
-  lines.push('');
-  lines.push(`${item.direction === 'alınan' ? 'Alınan' : 'Verilen'}: ${item.party}`);
-  lines.push(`Tutar: ${fmtTL(item.amount)}`);
-  lines.push(`Vade tarihi: ${fmtDate(item.dueDate)}`);
-  if (item.note) lines.push(`Not: ${item.note}`);
-  lines.push('');
-  lines.push('Bilginize sunarız.');
-  return lines.join('\n');
-}
-
-function ChecksNotesSection({ items, setItems, settings }) {
+function ChecksNotesSection({ items, setItems }) {
   const [editingId, setEditingId] = useState(null);
   const [type, setType] = useState('çek');
   const [direction, setDirection] = useState('alınan');
@@ -4088,15 +4074,6 @@ function ChecksNotesSection({ items, setItems, settings }) {
                     <span className={`zk-badge ${i.status === 'Tahsil Edildi' ? 'zk-badge-olive' : i.status === 'Karşılıksız' ? 'zk-badge-red' : 'zk-badge-gold'}`}>{i.status}</span>
                   </td>
                   <td style={{ display: 'flex', gap: 6 }}>
-                    {i.status === 'Bekliyor' && (
-                      <a
-                        className="zk-btn" style={{ padding: '4px 8px', background: '#25D366', color: '#fff' }}
-                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(buildWhatsAppCheckNoteText(i, settings))}`}
-                        target="_blank" rel="noopener noreferrer" title="WhatsApp'ta vade hatırlat"
-                      >
-                        <MessageCircle size={12} />
-                      </a>
-                    )}
                     <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEdit(i)}><Pencil size={12} /></button>
                     <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(i.id)}><Trash2 size={12} /></button>
                   </td>
@@ -4134,7 +4111,7 @@ function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNo
       )}
       {section === 'giderler' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
       {section === 'banka' && <BankAccountsSection accounts={bankAccounts} setAccounts={setBankAccounts} />}
-      {section === 'cek' && <ChecksNotesSection items={checksNotes} setItems={setChecksNotes} settings={settings} />}
+      {section === 'cek' && <ChecksNotesSection items={checksNotes} setItems={setChecksNotes} />}
     </div>
   );
 }
@@ -5358,7 +5335,7 @@ function LedgerTab({ farmers, purchases, payments, setPayments, selectedFarmerId
   );
 }
 
-function ReportsTab({ farmers, purchases, sales, buyers, expenses }) {
+function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, vehicles, personnelAttendance, personnelPayments }) {
   const [range, setRange] = useState('month');
   const currentYear = new Date().getFullYear();
   const [fromA, setFromA] = useState(`${currentYear}-01-01`);
@@ -5456,6 +5433,65 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses }) {
     return arr;
   }, [purchases, farmers, perfSortOrder]);
   const supplierPerfPaged = usePagedList(supplierPerformance, 10);
+
+  const [personnelPerfSortOrder, setPersonnelPerfSortOrder] = useState('kg_desc');
+  const personnelPerformance = useMemo(() => {
+    const map = {};
+    purchases.forEach((p) => {
+      if (!p.personnelId) return;
+      if (!map[p.personnelId]) map[p.personnelId] = { kg: 0, amount: 0, count: 0, dates: [] };
+      map[p.personnelId].kg += p.netKg;
+      map[p.personnelId].amount += p.netPayment;
+      map[p.personnelId].count += 1;
+      map[p.personnelId].dates.push(p.date);
+    });
+    const wageMap = {};
+    (personnelAttendance || []).forEach((a) => { wageMap[a.personnelId] = (wageMap[a.personnelId] || 0) + a.amount; });
+    const paidMap = {};
+    (personnelPayments || []).forEach((pay) => { paidMap[pay.personnelId] = (paidMap[pay.personnelId] || 0) + pay.amount; });
+    const arr = (personnel || []).map((per) => {
+      const v = map[per.id] || { kg: 0, amount: 0, count: 0, dates: [] };
+      const lastDate = v.dates.length ? v.dates.sort().slice(-1)[0] : null;
+      const earned = wageMap[per.id] || 0;
+      const paid = paidMap[per.id] || 0;
+      return { personnelId: per.id, name: per.name, kg: v.kg, amount: v.amount, count: v.count, lastDate, earned, paid, remaining: earned - paid };
+    });
+    if (personnelPerfSortOrder === 'count_desc') arr.sort((a, b) => b.count - a.count);
+    else if (personnelPerfSortOrder === 'amount_desc') arr.sort((a, b) => b.amount - a.amount);
+    else arr.sort((a, b) => b.kg - a.kg);
+    return arr;
+  }, [purchases, personnel, personnelAttendance, personnelPayments, personnelPerfSortOrder]);
+  const personnelPerfPaged = usePagedList(personnelPerformance, 10);
+
+  const [vehiclePerfSortOrder, setVehiclePerfSortOrder] = useState('kg_desc');
+  const vehiclePerformance = useMemo(() => {
+    const pickupMap = {};
+    purchases.forEach((p) => {
+      if (!p.vehicleId) return;
+      if (!pickupMap[p.vehicleId]) pickupMap[p.vehicleId] = { kg: 0, count: 0, dates: [] };
+      pickupMap[p.vehicleId].kg += p.netKg;
+      pickupMap[p.vehicleId].count += 1;
+      pickupMap[p.vehicleId].dates.push(p.date);
+    });
+    const deliveryMap = {};
+    sales.forEach((s) => {
+      if (!s.vehicleId) return;
+      if (!deliveryMap[s.vehicleId]) deliveryMap[s.vehicleId] = { kg: 0, count: 0 };
+      deliveryMap[s.vehicleId].kg += s.kg;
+      deliveryMap[s.vehicleId].count += 1;
+    });
+    const arr = (vehicles || []).map((v) => {
+      const pu = pickupMap[v.id] || { kg: 0, count: 0, dates: [] };
+      const de = deliveryMap[v.id] || { kg: 0, count: 0 };
+      const lastDate = pu.dates.length ? pu.dates.sort().slice(-1)[0] : null;
+      return { vehicleId: v.id, plaka: v.plaka, pickupKg: pu.kg, pickupCount: pu.count, deliveryKg: de.kg, deliveryCount: de.count, kg: pu.kg + de.kg, lastDate };
+    });
+    if (vehiclePerfSortOrder === 'delivery_desc') arr.sort((a, b) => b.deliveryKg - a.deliveryKg);
+    else if (vehiclePerfSortOrder === 'trips_desc') arr.sort((a, b) => (b.pickupCount + b.deliveryCount) - (a.pickupCount + a.deliveryCount));
+    else arr.sort((a, b) => b.kg - a.kg);
+    return arr;
+  }, [purchases, sales, vehicles, vehiclePerfSortOrder]);
+  const vehiclePerfPaged = usePagedList(vehiclePerformance, 10);
 
   const chartData = byFarmer.slice(0, 8).map((row) => {
     const f = farmers.find((x) => x.id === row.farmerId);
@@ -5683,6 +5719,100 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses }) {
               { value: 'avgDelivery_desc', label: 'Ort. teslimat: Büyük → Küçük' },
             ]}
             page={supplierPerfPaged.page} setPage={supplierPerfPaged.setPage} totalPages={supplierPerfPaged.totalPages} totalCount={supplierPerfPaged.totalCount}
+          />
+          </>
+        )}
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700 }}>👷 Personel performans skorlaması</div>
+            <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 2 }}>Tüm zamanlar — kantarda yaptıkları alımlar ve hakediş durumu</div>
+          </div>
+        </div>
+        {personnelPerformance.length === 0 ? (
+          <div className="zk-empty">Henüz personel eklenmedi.</div>
+        ) : (
+          <>
+          <table className="zk-table">
+            <thead><tr><th>#</th><th>Personel</th><th>Alım sayısı</th><th>Toplandığı kg</th><th>Çiftçilere ödenen</th><th>Kalan alacağı</th><th>Son alım</th></tr></thead>
+            <tbody>
+              {personnelPerfPaged.paged.map((row, i) => {
+                const rank = (personnelPerfPaged.page - 1) * 10 + i + 1;
+                return (
+                  <tr key={row.personnelId}>
+                    <td style={{ fontWeight: 700, color: rank <= 3 ? COLORS.gold : COLORS.inkSoft }}>
+                      {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{row.name}</td>
+                    <td>{row.count}</td>
+                    <td>{fmtKg(row.kg)}</td>
+                    <td style={{ color: COLORS.inkSoft }}>{fmtTL(row.amount)}</td>
+                    <td>
+                      {row.remaining > 0
+                        ? <span className="zk-badge zk-badge-red">{fmtTL(row.remaining)}</span>
+                        : <span className="zk-badge zk-badge-olive">Kapalı</span>}
+                    </td>
+                    <td style={{ color: COLORS.inkSoft }}>{row.lastDate ? fmtDate(row.lastDate) : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <ListFooterControls
+            sortOrder={personnelPerfSortOrder} setSortOrder={setPersonnelPerfSortOrder}
+            sortOptions={[
+              { value: 'kg_desc', label: 'Toplandığı kg: Büyük → Küçük' },
+              { value: 'count_desc', label: 'Alım sayısı: Büyük → Küçük' },
+              { value: 'amount_desc', label: 'Çiftçilere ödenen: Büyük → Küçük' },
+            ]}
+            page={personnelPerfPaged.page} setPage={personnelPerfPaged.setPage} totalPages={personnelPerfPaged.totalPages} totalCount={personnelPerfPaged.totalCount}
+          />
+          </>
+        )}
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700 }}>🚚 Araç performans skorlaması</div>
+            <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 2 }}>Tüm zamanlar — topladığı ve teslim ettiği hacim</div>
+          </div>
+        </div>
+        {vehiclePerformance.length === 0 ? (
+          <div className="zk-empty">Henüz araç eklenmedi.</div>
+        ) : (
+          <>
+          <table className="zk-table">
+            <thead><tr><th>#</th><th>Plaka</th><th>Alım sefer</th><th>Topladığı kg</th><th>Satış sefer</th><th>Teslim ettiği kg</th><th>Son alım</th></tr></thead>
+            <tbody>
+              {vehiclePerfPaged.paged.map((row, i) => {
+                const rank = (vehiclePerfPaged.page - 1) * 10 + i + 1;
+                return (
+                  <tr key={row.vehicleId}>
+                    <td style={{ fontWeight: 700, color: rank <= 3 ? COLORS.gold : COLORS.inkSoft }}>
+                      {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{row.plaka}</td>
+                    <td>{row.pickupCount}</td>
+                    <td>{fmtKg(row.pickupKg)}</td>
+                    <td>{row.deliveryCount}</td>
+                    <td style={{ color: COLORS.inkSoft }}>{fmtKg(row.deliveryKg)}</td>
+                    <td style={{ color: COLORS.inkSoft }}>{row.lastDate ? fmtDate(row.lastDate) : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <ListFooterControls
+            sortOrder={vehiclePerfSortOrder} setSortOrder={setVehiclePerfSortOrder}
+            sortOptions={[
+              { value: 'kg_desc', label: 'Toplam kg: Büyük → Küçük' },
+              { value: 'delivery_desc', label: 'Teslim ettiği kg: Büyük → Küçük' },
+              { value: 'trips_desc', label: 'Sefer sayısı: Büyük → Küçük' },
+            ]}
+            page={vehiclePerfPaged.page} setPage={vehiclePerfPaged.setPage} totalPages={vehiclePerfPaged.totalPages} totalCount={vehiclePerfPaged.totalCount}
           />
           </>
         )}
@@ -7612,7 +7742,7 @@ export default function ZeytinDefteri() {
           {tab === 'lab' && <LabTab farmers={farmers} purchases={purchases} results={labResults} setResults={setLabResults} />}
 
           {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
-          {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} />}
+          {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} personnel={personnel} vehicles={vehicles} personnelAttendance={personnelAttendance} personnelPayments={personnelPayments} />}
           {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} autoBackups={autoBackups} onRestoreAutoBackup={restoreFromAutoBackup} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} />}
         </div>
       </div>
