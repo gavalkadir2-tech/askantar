@@ -1146,8 +1146,8 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
       personnelName: person ? person.name : '',
       vehiclePlaka: vehicle ? vehicle.plaka : '',
       dateTimeLabel,
-      items: items.map((it) => ({ grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount })),
-      currentLine: { grade: lineLabel, kg: lineNetKg, pricePerKg: linePriceVal },
+      items: items.map((it) => ({ grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount, crateCount: it.crateCount })),
+      currentLine: { grade: lineLabel, kg: lineNetKg, pricePerKg: linePriceVal, crateCount },
       netKg: netKg + lineNetKg,
       grossAmount: amount + lineNetKg * linePriceVal,
       deductions: noDeduction ? null : {
@@ -1230,7 +1230,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     setRandiman(''); setAsit(''); setNem(''); setFirePercent('');
     setHammaliyeTutari(''); setNakliyeTutari(''); setCuvalKesintisi(''); setPhoto('');
     setManualDateTime(false);
-    if (broadcastLive) broadcastLive({ type: 'purchase_done', partyName: farmer ? farmer.name : '', netKg, total: netPayment });
+    if (broadcastLive) broadcastLive({ type: 'purchase_done', partyName: farmer ? farmer.name : '', netKg, total: netPayment, items: record.items.map((it) => ({ grade: it.grade, kg: it.kg })) });
   };
 
   return (
@@ -2019,7 +2019,7 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
     await storageSet('zk:sales', next);
     setLastSavedBatch(newRecords);
     setItems([]);
-    if (broadcastLive) broadcastLive({ type: 'sale_done', partyName: buyer ? buyer.name : '', netKg, total: totalAmount });
+    if (broadcastLive) broadcastLive({ type: 'sale_done', partyName: buyer ? buyer.name : '', netKg, total: totalAmount, items: newRecords.map((r) => ({ grade: r.grade, kg: r.kg })) });
   };
 
   return (
@@ -8613,7 +8613,7 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
     if (msg.type === 'purchase_done' || msg.type === 'sale_done') {
       setDoneFlash(msg);
       setLive(null);
-      setTimeout(() => setDoneFlash(null), 7000);
+      setTimeout(() => setDoneFlash(null), 30000);
     } else {
       setLive(msg);
     }
@@ -8644,27 +8644,51 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
     padding: '2vh 4vw', borderBottom: '1px solid #3A3831', flexShrink: 0,
   };
 
+  const groupByGrade = (items) => {
+    const groups = {};
+    const order = [];
+    (items || []).forEach((it) => {
+      if (!groups[it.grade]) { groups[it.grade] = 0; order.push(it.grade); }
+      groups[it.grade] += it.kg;
+    });
+    return order.map((g) => ({ grade: g, kg: groups[g] }));
+  };
+
   const Header = () => (
     <div style={headerStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5vw' }}>
         {logo && <img src={logo} alt="Logo" style={{ maxHeight: '6vh' }} />}
-        <div style={{ fontSize: '2.8vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
+        <div style={{ fontSize: '3vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
       </div>
-      <div style={{ fontSize: '2.6vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
-        {clock.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      <div style={{ fontSize: '2.8vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
+        {clock.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {clock.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </div>
     </div>
   );
 
   if (doneFlash) {
+    const doneGroups = groupByGrade(doneFlash.items);
     return (
       <div style={rootStyle}>
         <Header />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '4vh 6vw' }}>
-          <div style={{ fontSize: '10vw', color: '#7FB27A', marginBottom: '2vh' }}>✓</div>
-          <div style={{ fontSize: '6vw', fontWeight: 700, marginBottom: '2vh' }}>{doneFlash.partyName || ' '}</div>
-          <div style={{ fontSize: '5vw', color: '#C9A24B', fontWeight: 700 }}>{fmtKg(doneFlash.netKg)}</div>
-          <div style={{ fontSize: '2.4vw', marginTop: '4vh', color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '3vh 6vw' }}>
+          <div style={{ fontSize: '8vw', color: '#7FB27A', marginBottom: '1.5vh' }}>✓</div>
+          <div style={{ fontSize: '5vw', fontWeight: 700, marginBottom: '3vh' }}>{doneFlash.partyName || ' '}</div>
+          {doneGroups.length > 0 && (
+            <div style={{ marginBottom: '3vh', width: '100%', maxWidth: '54vw' }}>
+              {doneGroups.map((g) => (
+                <div key={g.grade} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw', fontSize: '3vw', padding: '1vh 0', borderBottom: '1px solid #3A3831' }}>
+                  <span style={{ fontWeight: 700, minWidth: '11vw', textAlign: 'right' }}>{fmtKg(g.kg)}</span>
+                  <span style={{ color: '#D8D2C0', textAlign: 'left', flex: 1 }}>{g.grade}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '2vw' }}>
+            <div style={{ fontSize: '2.6vw', color: '#B8B2A0' }}>Toplam</div>
+            <div style={{ fontSize: '7vw', color: '#C9A24B', fontWeight: 700 }}>{fmtKg(doneFlash.netKg)}</div>
+          </div>
+          <div style={{ fontSize: '2.4vw', marginTop: '3vh', color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
         </div>
       </div>
     );
@@ -8676,7 +8700,7 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
         <Header />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           {logo && <img src={logo} alt="Logo" style={{ maxWidth: '14vw', marginBottom: '3vh', opacity: 0.85 }} />}
-          <div style={{ fontSize: '2.6vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
+          <div style={{ fontSize: '3vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
         </div>
       </div>
     );
@@ -8684,59 +8708,69 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
 
   const cl = live.currentLine;
   const hasCurrentLine = cl && (cl.grade || cl.kg > 0);
+  const gradeTotals = groupByGrade(live.items);
 
   return (
     <div style={rootStyle}>
       <Header />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2vh 5vw', textAlign: 'center', minHeight: 0 }}>
-        <div style={{ fontSize: '4.2vw', fontWeight: 700, marginBottom: '0.8vh' }}>{live.partyName || '—'}</div>
-        <div style={{ fontSize: '1.8vw', color: '#B8B2A0', marginBottom: '2.5vh' }}>
-          {[live.personnelName, live.vehiclePlaka].filter(Boolean).join(' · ') || live.dateTimeLabel}
-        </div>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {/* Sol: canli tartim + taraf bilgisi */}
+        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2vh 3vw', borderRight: '1px solid #3A3831', textAlign: 'center', minWidth: 0 }}>
+          <div style={{ fontSize: '4.2vw', fontWeight: 700, marginBottom: '0.8vh' }}>{live.partyName || '—'}</div>
+          <div style={{ fontSize: '2vw', color: '#B8B2A0', marginBottom: '3vh' }}>{live.dateTimeLabel}</div>
 
-        {hasCurrentLine ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2.5vw' }}>
-              <div style={{ fontSize: '15vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
-              <div style={{ fontSize: '3.2vw', fontWeight: 700, color: '#C9A24B', maxWidth: '22vw', textAlign: 'left', lineHeight: 1.2 }}>{cl.grade || 'Tartılıyor'}</div>
-            </div>
-            {(live.randiman != null || live.asit != null || live.nem != null) && (
-              <div style={{ display: 'flex', gap: '3vw', marginTop: '2.5vh', fontSize: '1.8vw', color: '#B8B2A0' }}>
-                {live.randiman != null && <span>Randıman %{live.randiman}</span>}
-                {live.asit != null && <span>Asit %{live.asit}</span>}
-                {live.nem != null && <span>Nem %{live.nem}</span>}
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ fontSize: '2.6vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
-        )}
-      </div>
-
-      <div style={{ borderTop: '2px solid #3A3831', padding: '2.5vh 5vw', flexShrink: 0 }}>
-        {live.items.length > 0 && (() => {
-          const groups = {};
-          const order = [];
-          live.items.forEach((it) => {
-            if (!groups[it.grade]) { groups[it.grade] = 0; order.push(it.grade); }
-            groups[it.grade] += it.kg;
-          });
-          return (
-            <div style={{ marginBottom: '2.5vh', maxWidth: '64vw', marginLeft: 'auto', marginRight: 'auto' }}>
-              {order.map((g) => (
-                <div key={g} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw', fontSize: '2.4vw', padding: '1vh 0', borderBottom: '1px solid #2C2A24' }}>
-                  <span style={{ fontWeight: 700, minWidth: '9vw', textAlign: 'right' }}>{fmtKg(groups[g])}</span>
-                  <span style={{ color: '#D8D2C0', textAlign: 'left', flex: 1 }}>{g}</span>
+          {hasCurrentLine ? (
+            <>
+              <div style={{ fontSize: '16vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
+              <div style={{ fontSize: '3.4vw', fontWeight: 700, color: '#C9A24B', marginTop: '1.5vh' }}>{cl.grade || 'Tartılıyor'}</div>
+              {(live.randiman != null || live.asit != null || live.nem != null) && (
+                <div style={{ display: 'flex', gap: '2.5vw', marginTop: '2.5vh', fontSize: '1.8vw', color: '#B8B2A0' }}>
+                  {live.randiman != null && <span>Randıman %{live.randiman}</span>}
+                  {live.asit != null && <span>Asit %{live.asit}</span>}
+                  {live.nem != null && <span>Nem %{live.nem}</span>}
                 </div>
-              ))}
-            </div>
-          );
-        })()}
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw' }}>
-          <div style={{ fontSize: '6vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
-          <div style={{ fontSize: '2.4vw', color: '#B8B2A0' }}>Toplam</div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: '2.6vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
+          )}
+        </div>
+
+        {/* Sag: her tartim tek tek (tur, numara, kasa adeti) */}
+        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', padding: '2.5vh 3vw', minHeight: 0, minWidth: 0 }}>
+          <div style={{ fontSize: '2.2vw', color: '#B8B2A0', marginBottom: '1.5vh', flexShrink: 0 }}>Tartılan kasalar</div>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {live.items.length === 0 ? (
+              <div style={{ fontSize: '2.2vw', color: '#6E6A5E' }}>Henüz kasa eklenmedi.</div>
+            ) : (
+              live.items.map((it, i) => (
+                <div key={i} style={{ fontSize: '3.2vw', padding: '1.2vh 0', borderBottom: '1px solid #2C2A24' }}>
+                  <span style={{ color: '#F7F3E8', fontWeight: 700 }}>{it.grade}</span>
+                  {it.crateCount > 0 && <span style={{ color: '#C9A24B' }}> · {it.crateCount} kasa</span>}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Alt: tur/numara bazinda toplam kilo (tum genislik) */}
+      {gradeTotals.length > 0 && (
+        <div style={{ borderTop: '2px solid #3A3831', padding: '2.5vh 4vw', flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2vw', justifyContent: 'center', marginBottom: gradeTotals.length ? '2vh' : 0 }}>
+            {gradeTotals.map((g) => (
+              <div key={g.grade} style={{ display: 'flex', alignItems: 'baseline', gap: '1vw', background: '#2A2822', borderRadius: 10, padding: '1.2vh 1.8vw' }}>
+                <span style={{ fontSize: '2.6vw', fontWeight: 700 }}>{fmtKg(g.kg)}</span>
+                <span style={{ fontSize: '1.8vw', color: '#D8D2C0' }}>{g.grade}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2vw' }}>
+            <div style={{ fontSize: '2.6vw', color: '#B8B2A0' }}>Toplam</div>
+            <div style={{ fontSize: '5.5vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
