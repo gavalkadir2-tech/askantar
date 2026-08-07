@@ -17,16 +17,23 @@ import {
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-function usePagedList(items, pageSize = 10) {
+function nextReceiptNo(records, configuredNext) {
+  const maxExisting = records.reduce((m, r) => Math.max(m, r.makbuzNo || 0), 0);
+  return Math.max(maxExisting, (configuredNext || 1) - 1) + 1;
+}
+
+function usePagedList(items, defaultPageSize = 20) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeRaw] = useState(defaultPageSize);
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const clampedPage = Math.min(Math.max(1, page), totalPages);
   useEffect(() => { if (page !== clampedPage) setPage(clampedPage); }, [clampedPage]);
+  const setPageSize = (n) => { setPageSizeRaw(n); setPage(1); };
   const paged = items.slice((clampedPage - 1) * pageSize, clampedPage * pageSize);
-  return { page: clampedPage, setPage, totalPages, paged, totalCount: items.length };
+  return { page: clampedPage, setPage, pageSize, setPageSize, totalPages, paged, totalCount: items.length };
 }
 
-function ListFooterControls({ sortOrder, setSortOrder, sortOptions, page, setPage, totalPages, totalCount }) {
+function ListFooterControls({ sortOrder, setSortOrder, sortOptions, page, setPage, pageSize, setPageSize, totalPages, totalCount }) {
   if (totalCount === 0) return null;
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
@@ -35,7 +42,15 @@ function ListFooterControls({ sortOrder, setSortOrder, sortOptions, page, setPag
           {sortOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       ) : <span />}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {setPageSize && (
+          <select className="zk-select" style={{ width: 'auto', minWidth: 90, minHeight: 34, padding: '5px 8px', fontSize: 12 }} value={pageSize} onChange={(e) => setPageSize(parseInt(e.target.value, 10))}>
+            <option value={10}>10 / sayfa</option>
+            <option value={20}>20 / sayfa</option>
+            <option value={50}>50 / sayfa</option>
+            <option value={100}>100 / sayfa</option>
+          </select>
+        )}
         <span style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{totalCount} kayıt · Sayfa {page}/{totalPages}</span>
         <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 10px', fontSize: 12 }} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft size={14} /> Önceki</button>
         <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 10px', fontSize: 12 }} disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Sonraki <ChevronRight size={14} /></button>
@@ -484,6 +499,21 @@ function buildWhatsAppReceiptText(purchase, farmer, settings) {
   }
   lines.push(`*Ödenecek net: ${fmtTL(purchase.netPayment)}*`);
   if (purchase.note) lines.push(`Not: ${purchase.note}`);
+  lines.push('');
+  lines.push('Teşekkür ederiz.');
+  return lines.join('\n');
+}
+
+function buildWhatsAppSaleReceiptText(sale, buyer, settings) {
+  const lines = [];
+  lines.push(`*${settings?.businessName || 'Zeytin Komisyonculuğu'}*`);
+  lines.push(`Satış Makbuzu No: ${sale.makbuzNo}`);
+  lines.push(`Tarih: ${fmtDate(sale.date)}`);
+  lines.push(`Sayın ${buyer ? buyer.name : ''},`);
+  lines.push('');
+  lines.push(`${sale.grade}: ${fmtKg(sale.kg)} × ${fmtTL(sale.pricePerKg)}/kg`);
+  lines.push(`*Toplam tutar: ${fmtTL(sale.amount)}*`);
+  if (sale.note) lines.push(`Not: ${sale.note}`);
   lines.push('');
   lines.push('Teşekkür ederiz.');
   return lines.join('\n');
@@ -1098,7 +1128,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     const vehicle = vehicles.find((v) => v.id === vehicleId);
     const record = {
       id: uid(),
-      makbuzNo: purchases.length + 1,
+      makbuzNo: nextReceiptNo(purchases, settings.purchaseReceiptNext),
       farmerId,
       date,
       time: timeLabel,
@@ -1432,7 +1462,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
   );
 }
 
-function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel }) {
+function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, settings, onPrintSaleReceipt, buyerPayments, setBuyerPayments }) {
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState(null);
   const [buyerName, setBuyerName] = useState('');
@@ -1447,9 +1477,12 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
   const [note, setNote] = useState('');
   const [vehicleId, setVehicleId] = useState('');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
-  const [viewingBuyerId, setViewingBuyerId] = useState('');
+  const [lastSaved, setLastSaved] = useState(null);
   const [collectionAmount, setCollectionAmount] = useState('');
   const [collectionNote, setCollectionNote] = useState('');
+  const [viewingBuyerId, setViewingBuyerId] = useState('');
+  const [detailCollectionAmount, setDetailCollectionAmount] = useState('');
+  const [detailCollectionNote, setDetailCollectionNote] = useState('');
 
   const totalPurchasedKg = purchases.reduce((s, p) => s + p.netKg, 0);
   const totalSoldKg = sales.reduce((s, s2) => s + s2.kg, 0);
@@ -1517,11 +1550,34 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
   const saveSale = async () => {
     if (!canSave) return;
     const vehicle = vehicles.find((v) => v.id === vehicleId);
-    const record = { id: uid(), buyerId, date, grade, kg: parseFloat(kg), pricePerKg: parseFloat(pricePerKg), amount, note, vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '', createdAt: Date.now() };
+    const record = {
+      id: uid(), makbuzNo: nextReceiptNo(sales, settings?.salesReceiptNext), buyerId, date, grade,
+      kg: parseFloat(kg), pricePerKg: parseFloat(pricePerKg), amount, note,
+      vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '', createdAt: Date.now(),
+    };
     const next = [...sales, record];
     setSales(next);
     await storageSet('zk:sales', next);
+    setLastSaved(record);
     setKg(''); setPricePerKg(''); setNote('');
+  };
+
+  const buyerBalances = useMemo(() => {
+    const map = {};
+    buyers.forEach((b) => { map[b.id] = 0; });
+    sales.forEach((s) => { map[s.buyerId] = (map[s.buyerId] || 0) + s.amount; });
+    (buyerPayments || []).forEach((p) => { map[p.buyerId] = (map[p.buyerId] || 0) - p.amount; });
+    return map;
+  }, [buyers, sales, buyerPayments]);
+
+  const addCollection = async (buyerId2) => {
+    const amt = parseFloat(collectionAmount);
+    if (!amt || amt <= 0) return;
+    const record = { id: uid(), buyerId: buyerId2, date: todayStr(), amount: amt, note: collectionNote, createdAt: Date.now() };
+    const next = [...(buyerPayments || []), record];
+    setBuyerPayments(next);
+    await storageSet('zk:buyerPayments', next);
+    setCollectionAmount(''); setCollectionNote('');
   };
 
   return (
@@ -1593,30 +1649,123 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
           {grade && parseFloat(kg) > availableForGrade && kg && (
             <div style={{ fontSize: 11.5, color: COLORS.red, marginTop: 8 }}>Bu sınıfta stoktan fazla miktar girdiniz.</div>
           )}
+
+          {lastSaved && (() => {
+            const lastSavedBuyer = buyers.find((b) => b.id === lastSaved.buyerId);
+            const waPhone = lastSavedBuyer ? formatPhoneForWhatsApp(lastSavedBuyer.phone) : null;
+            const waHref = waPhone
+              ? `https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppSaleReceiptText(lastSaved, lastSavedBuyer, settings))}`
+              : null;
+            return (
+              <div style={{ marginTop: 12, background: COLORS.oliveSoft, padding: '10px 12px', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: COLORS.olive }}>Satış #{lastSaved.makbuzNo} kaydedildi.</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="zk-btn zk-btn-secondary" onClick={() => onPrintSaleReceipt(lastSaved)}><Printer size={13} /> Yazdır</button>
+                    {waHref ? (
+                      <a className="zk-btn" style={{ background: '#25D366', color: '#fff' }} href={waHref} target="_blank" rel="noopener noreferrer">
+                        <MessageCircle size={13} /> WhatsApp'tan gönder
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: 11, color: COLORS.inkSoft, alignSelf: 'center' }}>Alıcının telefonu kayıtlı değil</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', borderTop: `1px dashed ${COLORS.border}`, paddingTop: 8 }}>
+                  <span style={{ fontSize: 11.5, color: COLORS.inkSoft }}>Hemen tahsilat al:</span>
+                  <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ maxWidth: 130 }} value={collectionAmount} onChange={(e) => setCollectionAmount(e.target.value)} />
+                  <input className="zk-input" placeholder="Not (opsiyonel)" style={{ maxWidth: 150 }} value={collectionNote} onChange={(e) => setCollectionNote(e.target.value)} />
+                  <button className="zk-btn zk-btn-primary" style={{ padding: '6px 12px' }} onClick={() => addCollection(lastSaved.buyerId)}>Tahsilatı kaydet</button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
+      {viewingBuyerId ? (() => {
+        const buyer = buyers.find((b) => b.id === viewingBuyerId);
+        if (!buyer) return null;
+        const buyerSales = sales.filter((s) => s.buyerId === viewingBuyerId).sort((a, b) => b.createdAt - a.createdAt);
+        const buyerColls = (buyerPayments || []).filter((p) => p.buyerId === viewingBuyerId).sort((a, b) => b.createdAt - a.createdAt);
+        const bal = buyerBalances[viewingBuyerId] || 0;
+        const addDetailCollection = async () => {
+          const amt = parseFloat(detailCollectionAmount);
+          if (!amt || amt <= 0) return;
+          const record = { id: uid(), buyerId: viewingBuyerId, date: todayStr(), amount: amt, note: detailCollectionNote, createdAt: Date.now() };
+          const next = [...(buyerPayments || []), record];
+          setBuyerPayments(next);
+          await storageSet('zk:buyerPayments', next);
+          setDetailCollectionAmount(''); setDetailCollectionNote('');
+        };
+        return (
+          <div className="zk-card" style={{ marginTop: 16 }}>
+            <button className="zk-btn zk-btn-secondary" style={{ marginBottom: 14 }} onClick={() => setViewingBuyerId('')}>← Alıcılar listesine dön</button>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{buyer.name}</div>
+            <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 14 }}>{buyer.phone || 'Telefon kayıtlı değil'}</div>
+            <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', marginBottom: 16 }}>
+              <StatCard label="Toplam satış" value={fmtTL(buyerSales.reduce((s, x) => s + x.amount, 0))} />
+              <StatCard label="Toplam tahsilat" value={fmtTL(buyerColls.reduce((s, x) => s + x.amount, 0))} tone={COLORS.blue} />
+              <StatCard label="Kalan bakiye" value={fmtTL(bal)} tone={bal > 0 ? COLORS.red : COLORS.olive} />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 16, background: COLORS.paper, borderRadius: 8, padding: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Tahsilat ekle:</span>
+              <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ maxWidth: 140 }} value={detailCollectionAmount} onChange={(e) => setDetailCollectionAmount(e.target.value)} />
+              <input className="zk-input" placeholder="Not (opsiyonel)" style={{ maxWidth: 160 }} value={detailCollectionNote} onChange={(e) => setDetailCollectionNote(e.target.value)} />
+              <button className="zk-btn zk-btn-primary" onClick={addDetailCollection}>Ekle</button>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Hareketler</div>
+            {[...buyerSales.map((s) => ({ ...s, kind: 'satış' })), ...buyerColls.map((c) => ({ ...c, kind: 'tahsilat' }))]
+              .sort((a, b) => b.createdAt - a.createdAt).length === 0 ? (
+              <div className="zk-empty">Henüz hareket yok.</div>
+            ) : (
+              <table className="zk-table">
+                <thead><tr><th>Tarih</th><th>Tür</th><th>Tutar</th><th>Not</th></tr></thead>
+                <tbody>
+                  {[...buyerSales.map((s) => ({ ...s, kind: 'satış' })), ...buyerColls.map((c) => ({ ...c, kind: 'tahsilat' }))]
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .map((row) => (
+                      <tr key={`${row.kind}-${row.id}`}>
+                        <td>{fmtDate(row.date)}</td>
+                        <td><span className={`zk-badge ${row.kind === 'satış' ? 'zk-badge-blue' : 'zk-badge-olive'}`}>{row.kind === 'satış' ? 'Satış' : 'Tahsilat'}</span></td>
+                        <td style={{ fontWeight: 600 }}>{row.kind === 'satış' ? fmtTL(row.amount) : `− ${fmtTL(row.amount)}`}</td>
+                        <td style={{ color: COLORS.inkSoft }}>{row.note || (row.kind === 'satış' ? row.grade : '') || '—'}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })() : (
       <div className="zk-card" style={{ marginTop: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Alıcılar</div>
+        <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: -4, marginBottom: 10 }}>Bir alıcıya tıklayarak bakiyesini ve tahsilat geçmişini görebilirsiniz.</div>
         {buyers.length === 0 ? (
           <div className="zk-empty">Henüz alıcı eklenmedi.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {buyers.map((b) => (
-              <div key={b.id} className="zk-farmer-row">
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{b.name}</div>
-                  {b.phone && <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{b.phone}</div>}
+            {buyers.map((b) => {
+              const bal = buyerBalances[b.id] || 0;
+              return (
+                <div key={b.id} className="zk-farmer-row">
+                  <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => setViewingBuyerId(b.id)}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{b.name}</div>
+                    {b.phone && <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{b.phone}</div>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {bal > 0 && <span className="zk-badge zk-badge-red">{fmtTL(bal)} bekliyor</span>}
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => setEditingBuyer(b)}><Pencil size={12} /></button>
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeBuyer(b)}><Trash2 size={12} /></button>
+                    <ChevronRight size={16} color={COLORS.inkSoft} style={{ cursor: 'pointer' }} onClick={() => setViewingBuyerId(b.id)} />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => setEditingBuyer(b)}><Pencil size={12} /></button>
-                  <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeBuyer(b)}><Trash2 size={12} /></button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+      )}
 
       {showAddBuyer && (
         <Modal title="Yeni alıcı ekle" onClose={() => setShowAddBuyer(false)}>
@@ -1694,7 +1843,7 @@ function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases, price
     const vehicle = vehicles.find((v) => v.id === vehicleId);
     const record = {
       id: uid(),
-      makbuzNo: purchases.length + 1,
+      makbuzNo: nextReceiptNo(purchases, settings.purchaseReceiptNext),
       farmerId,
       date,
       time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
@@ -1831,7 +1980,7 @@ function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases, price
   );
 }
 
-function SalesHistoryTab({ buyers, sales, setSales }) {
+function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt }) {
   const [query, setQuery] = useState('');
   const [buyerFilter, setBuyerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -1857,7 +2006,7 @@ function SalesHistoryTab({ buyers, sales, setSales }) {
     return arr;
   }, [sales, buyerFilter, fromDate, toDate, query, buyers, sortOrder]);
 
-  const { page, setPage, totalPages, paged, totalCount } = usePagedList(filtered, 15);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filtered);
 
   const totalKg = filtered.reduce((s, s2) => s + s2.kg, 0);
   const totalAmount = filtered.reduce((s, s2) => s + s2.amount, 0);
@@ -1892,12 +2041,14 @@ function SalesHistoryTab({ buyers, sales, setSales }) {
         ) : (
           <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Alıcı</th><th>Sınıf</th><th>Kg</th><th>Fiyat</th><th>Tutar</th><th>Araç</th><th></th></tr></thead>
+            <thead><tr><th>No</th><th>Tarih</th><th>Alıcı</th><th>Sınıf</th><th>Kg</th><th>Fiyat</th><th>Tutar</th><th>Araç</th><th></th></tr></thead>
             <tbody>
               {paged.map((s) => {
                 const b = buyers.find((x) => x.id === s.buyerId);
+                const waPhone = b ? formatPhoneForWhatsApp(b.phone) : null;
                 return (
                   <tr key={s.id}>
+                    <td>{s.makbuzNo ? `#${s.makbuzNo}` : '—'}</td>
                     <td>{fmtDate(s.date)}</td>
                     <td>{b ? b.name : '—'}</td>
                     <td><span className="zk-badge zk-badge-blue">{s.grade || '—'}</span></td>
@@ -1905,7 +2056,15 @@ function SalesHistoryTab({ buyers, sales, setSales }) {
                     <td>{fmtTL(s.pricePerKg)}/kg</td>
                     <td>{fmtTL(s.amount)}</td>
                     <td style={{ color: COLORS.inkSoft }}>{s.vehiclePlaka || '—'}</td>
-                    <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removeSale(s)}><Trash2 size={12} /></button></td>
+                    <td style={{ display: 'flex', gap: 6 }}>
+                      {s.makbuzNo && <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintSaleReceipt(s)}><Printer size={12} /></button>}
+                      {waPhone && s.makbuzNo && (
+                        <a className="zk-btn" style={{ padding: '5px 9px', background: '#25D366', color: '#fff' }} href={`https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppSaleReceiptText(s, b, settings))}`} target="_blank" rel="noopener noreferrer">
+                          <MessageCircle size={12} />
+                        </a>
+                      )}
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => removeSale(s)}><Trash2 size={12} /></button>
+                    </td>
                   </tr>
                 );
               })}
@@ -1919,7 +2078,7 @@ function SalesHistoryTab({ buyers, sales, setSales }) {
               { value: 'kg_desc', label: 'Kg: Büyük → Küçük' },
               { value: 'amount_desc', label: 'Tutar: Büyük → Küçük' },
             ]}
-            page={page} setPage={setPage} totalPages={totalPages} totalCount={totalCount}
+            page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
           />
           </>
         )}
@@ -1939,16 +2098,20 @@ function ExpensesTab({ expenses, setExpenses, settings }) {
   const [note, setNote] = useState('');
   const [range, setRange] = useState('month');
   const [sortOrder, setSortOrder] = useState('date_desc');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
     const now = new Date();
     return expenses.filter((e) => {
       const d = new Date(e.date);
-      if (range === 'today') return e.date === todayStr();
-      if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      if (range === 'today' && e.date !== todayStr()) return false;
+      if (range === 'month' && !(d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear())) return false;
+      if (categoryFilter && e.category !== categoryFilter) return false;
+      if (query && !(e.note || '').toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [expenses, range]);
+  }, [expenses, range, categoryFilter, query]);
 
   const sortedFiltered = useMemo(() => {
     const arr = [...filtered];
@@ -1958,7 +2121,7 @@ function ExpensesTab({ expenses, setExpenses, settings }) {
     return arr;
   }, [filtered, sortOrder]);
 
-  const { page, setPage, totalPages, paged, totalCount } = usePagedList(sortedFiltered, 15);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedFiltered);
 
   const total = filtered.reduce((s, e) => s + e.amount, 0);
 
@@ -2049,6 +2212,13 @@ function ExpensesTab({ expenses, setExpenses, settings }) {
 
       <div className="zk-card" style={{ marginTop: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Gider kayıtları</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+          <input className="zk-input" style={{ flex: '2 1 180px' }} placeholder="Nota göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="zk-select" style={{ flex: '1 1 150px' }} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">Tüm kategoriler</option>
+            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
         {filtered.length === 0 ? (
           <div className="zk-empty">Kayıt yok.</div>
         ) : (
@@ -2074,7 +2244,7 @@ function ExpensesTab({ expenses, setExpenses, settings }) {
               { value: 'date_asc', label: 'Tarih: Eski → Yeni' },
               { value: 'amount_desc', label: 'Tutar: Büyük → Küçük' },
             ]}
-            page={page} setPage={setPage} totalPages={totalPages} totalCount={totalCount}
+            page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
           />
           </>
         )}
@@ -2234,7 +2404,7 @@ function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintR
     return arr;
   }, [purchases, farmerFilter, fromDate, toDate, query, farmers, sortOrder]);
 
-  const { page, setPage, totalPages, paged, totalCount } = usePagedList(filtered, 15);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filtered);
 
   const totalKg = filtered.reduce((s, p) => s + p.netKg, 0);
   const totalAmount = filtered.reduce((s, p) => s + p.netPayment, 0);
@@ -2310,7 +2480,7 @@ function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, onPrintR
               { value: 'kg_desc', label: 'Kg: Büyük → Küçük' },
               { value: 'amount_desc', label: 'Tutar: Büyük → Küçük' },
             ]}
-            page={page} setPage={setPage} totalPages={totalPages} totalCount={totalCount}
+            page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
           />
           </>
         )}
@@ -4087,10 +4257,161 @@ function ChecksNotesSection({ items, setItems }) {
   );
 }
 
-function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNotes, settings, setSettings, payments, expenses, setExpenses, cashEntries, setCashEntries, farmers }) {
+function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases, buyers, buyerPayments, setBuyerPayments, sales }) {
+  const [type, setType] = useState('odeme');
+  const [partyId, setPartyId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [payType, setPayType] = useState('odeme');
+  const [query, setQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState('date_desc');
+
+  const farmerBalances = useMemo(() => {
+    const map = {};
+    farmers.forEach((f) => { map[f.id] = 0; });
+    purchases.forEach((p) => { map[p.farmerId] = (map[p.farmerId] || 0) + p.netPayment; });
+    payments.forEach((pay) => { map[pay.farmerId] = (map[pay.farmerId] || 0) - pay.amount; });
+    return map;
+  }, [farmers, purchases, payments]);
+
+  const buyerBalances = useMemo(() => {
+    const map = {};
+    buyers.forEach((b) => { map[b.id] = 0; });
+    sales.forEach((s) => { map[s.buyerId] = (map[s.buyerId] || 0) + s.amount; });
+    buyerPayments.forEach((p) => { map[p.buyerId] = (map[p.buyerId] || 0) - p.amount; });
+    return map;
+  }, [buyers, sales, buyerPayments]);
+
+  const canSave = partyId && parseFloat(amount) > 0;
+
+  const save = async () => {
+    if (!canSave) return;
+    const amt = parseFloat(amount);
+    if (type === 'odeme') {
+      const record = { id: uid(), farmerId: partyId, date: todayStr(), amount: amt, note, payType, createdAt: Date.now() };
+      const next = [...payments, record];
+      setPayments(next);
+      await storageSet('zk:payments', next);
+    } else {
+      const record = { id: uid(), buyerId: partyId, date: todayStr(), amount: amt, note, createdAt: Date.now() };
+      const next = [...buyerPayments, record];
+      setBuyerPayments(next);
+      await storageSet('zk:buyerPayments', next);
+    }
+    setAmount(''); setNote(''); setPartyId('');
+  };
+
+  const combined = useMemo(() => {
+    const p = payments.map((x) => {
+      const f = farmers.find((y) => y.id === x.farmerId);
+      return { ...x, kind: 'odeme', partyName: f ? f.name : '—' };
+    });
+    const b = buyerPayments.map((x) => {
+      const buyer = buyers.find((y) => y.id === x.buyerId);
+      return { ...x, kind: 'tahsilat', partyName: buyer ? buyer.name : '—' };
+    });
+    let arr = [...p, ...b];
+    if (query) arr = arr.filter((r) => r.partyName.toLowerCase().includes(query.toLowerCase()) || (r.note || '').toLowerCase().includes(query.toLowerCase()));
+    if (sortOrder === 'date_asc') arr.sort((a, b2) => a.createdAt - b2.createdAt);
+    else if (sortOrder === 'amount_desc') arr.sort((a, b2) => b2.amount - a.amount);
+    else arr.sort((a, b2) => b2.createdAt - a.createdAt);
+    return arr;
+  }, [payments, buyerPayments, farmers, buyers, query, sortOrder]);
+
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(combined);
+
+  const remove = async (row) => {
+    if (!window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+    if (row.kind === 'odeme') {
+      const next = payments.filter((x) => x.id !== row.id);
+      setPayments(next);
+      await storageSet('zk:payments', next);
+    } else {
+      const next = buyerPayments.filter((x) => x.id !== row.id);
+      setBuyerPayments(next);
+      await storageSet('zk:buyerPayments', next);
+    }
+  };
+
+  return (
+    <div>
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni ödeme / tahsilat</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button className={`zk-btn ${type === 'odeme' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setType('odeme'); setPartyId(''); }}>
+            Çiftçiye ödeme
+          </button>
+          <button className={`zk-btn ${type === 'tahsilat' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setType('tahsilat'); setPartyId(''); }}>
+            Alıcıdan tahsilat
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <select className="zk-select" style={{ flex: '2 1 200px' }} value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+            <option value="">{type === 'odeme' ? 'Çiftçi seçin...' : 'Alıcı seçin...'}</option>
+            {(type === 'odeme' ? farmers : buyers).map((p) => {
+              const bal = type === 'odeme' ? (farmerBalances[p.id] || 0) : (buyerBalances[p.id] || 0);
+              return <option key={p.id} value={p.id}>{p.name}{bal > 0 ? ` (${fmtTL(bal)} bekliyor)` : ''}</option>;
+            })}
+          </select>
+          {type === 'odeme' && (
+            <select className="zk-select" style={{ flex: '1 1 130px' }} value={payType} onChange={(e) => setPayType(e.target.value)}>
+              <option value="odeme">Ödeme</option>
+              <option value="avans">Avans</option>
+            </select>
+          )}
+          <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 130px' }} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="zk-input" placeholder="Not (opsiyonel)" style={{ flex: '1 1 150px' }} value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="zk-btn zk-btn-primary" disabled={!canSave} onClick={save}>Kaydet</button>
+        </div>
+      </div>
+
+      <div className="zk-card">
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Ödeme & tahsilat geçmişi</div>
+        <input className="zk-input" placeholder="İsim veya nota göre ara..." style={{ marginBottom: 12, maxWidth: 320 }} value={query} onChange={(e) => setQuery(e.target.value)} />
+        {combined.length === 0 ? (
+          <div className="zk-empty">Henüz kayıt yok.</div>
+        ) : (
+          <>
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>Tür</th><th>Kişi/firma</th><th>Tutar</th><th>Not</th><th></th></tr></thead>
+            <tbody>
+              {paged.map((row) => (
+                <tr key={`${row.kind}-${row.id}`}>
+                  <td>{fmtDate(row.date)}</td>
+                  <td>
+                    <span className={`zk-badge ${row.kind === 'odeme' ? 'zk-badge-red' : 'zk-badge-olive'}`}>
+                      {row.kind === 'odeme' ? (row.payType === 'avans' ? 'Avans' : 'Ödeme') : 'Tahsilat'}
+                    </span>
+                  </td>
+                  <td>{row.partyName}</td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(row.amount)}</td>
+                  <td style={{ color: COLORS.inkSoft }}>{row.note || '—'}</td>
+                  <td><button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => remove(row)}><Trash2 size={12} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ListFooterControls
+            sortOrder={sortOrder} setSortOrder={setSortOrder}
+            sortOptions={[
+              { value: 'date_desc', label: 'Tarih: Yeni → Eski' },
+              { value: 'date_asc', label: 'Tarih: Eski → Yeni' },
+              { value: 'amount_desc', label: 'Tutar: Büyük → Küçük' },
+            ]}
+            page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
+          />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNotes, settings, setSettings, payments, setPayments, expenses, setExpenses, cashEntries, setCashEntries, farmers, purchases, buyers, buyerPayments, setBuyerPayments, sales }) {
   const [section, setSection] = useState('kasa');
   const sections = [
     { key: 'kasa', label: 'Kasa', icon: Banknote },
+    { key: 'odeme', label: 'Ödeme & Tahsilat', icon: Wallet },
     { key: 'giderler', label: 'Giderler', icon: Receipt },
     { key: 'banka', label: 'Banka Hesapları', icon: Landmark },
     { key: 'cek', label: 'Çek & Senet', icon: CreditCard },
@@ -4098,7 +4419,7 @@ function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNo
   return (
     <div>
       <div className="zk-h1">Muhasebe</div>
-      <div className="zk-h1-sub">Kasa, giderler, banka hesapları ve çek/senet takibi</div>
+      <div className="zk-h1-sub">Kasa, ödeme/tahsilat, giderler, banka hesapları ve çek/senet takibi</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
         {sections.map((s) => (
           <button key={s.key} className={`zk-btn ${section === s.key ? 'zk-btn-primary' : 'zk-btn-secondary'}`} onClick={() => setSection(s.key)}>
@@ -4109,9 +4430,12 @@ function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setChecksNo
       {section === 'kasa' && (
         <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />
       )}
+      {section === 'odeme' && (
+        <PaymentsCollectionsSection farmers={farmers} payments={payments} setPayments={setPayments} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} />
+      )}
       {section === 'giderler' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
       {section === 'banka' && <BankAccountsSection accounts={bankAccounts} setAccounts={setBankAccounts} />}
-      {section === 'cek' && <ChecksNotesSection items={checksNotes} setItems={setChecksNotes} />}
+      {section === 'cek' && <ChecksNotesSection items={checksNotes} setItems={setChecksNotes} settings={settings} />}
     </div>
   );
 }
@@ -4399,6 +4723,9 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   const [earnNote, setEarnNote] = useState('');
   const [vehicleSortOrder, setVehicleSortOrder] = useState('plaka_asc');
   const [personnelSortOrder, setPersonnelSortOrder] = useState('name_asc');
+  const [vehicleQuery, setVehicleQuery] = useState('');
+  const [personnelQuery, setPersonnelQuery] = useState('');
+  const [personnelPayTypeFilter, setPersonnelPayTypeFilter] = useState('');
 
   const addVehicle = async (data) => {
     if (!data.plaka || !data.plaka.trim()) return;
@@ -4515,13 +4842,18 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   }, [vehicles, purchases, sales]);
 
   const sortedVehicles = useMemo(() => {
-    const arr = [...vehicles];
+    let arr = vehicles.filter((v) => {
+      if (!vehicleQuery) return true;
+      const q = vehicleQuery.toLowerCase();
+      return v.plaka.toLowerCase().includes(q) || (v.marka || '').toLowerCase().includes(q);
+    });
+    arr = [...arr];
     if (vehicleSortOrder === 'plaka_desc') arr.sort((a, b) => b.plaka.localeCompare(a.plaka, 'tr'));
     else if (vehicleSortOrder === 'kg_desc') arr.sort((a, b) => (vehicleStats[b.id]?.pickupKg || 0) - (vehicleStats[a.id]?.pickupKg || 0));
     else arr.sort((a, b) => a.plaka.localeCompare(b.plaka, 'tr'));
     return arr;
-  }, [vehicles, vehicleSortOrder, vehicleStats]);
-  const vehiclesPaged = usePagedList(sortedVehicles, 10);
+  }, [vehicles, vehicleSortOrder, vehicleStats, vehicleQuery]);
+  const vehiclesPaged = usePagedList(sortedVehicles);
 
   const personnelStats = useMemo(() => {
     const map = {};
@@ -4541,7 +4873,13 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   }, [personnel, personnelAttendance, personnelPayments]);
 
   const sortedPersonnel = useMemo(() => {
-    const arr = [...personnel];
+    let arr = personnel.filter((p) => {
+      if (personnelPayTypeFilter && (p.payType || 'yevmiye') !== personnelPayTypeFilter) return false;
+      if (!personnelQuery) return true;
+      const q = personnelQuery.toLowerCase();
+      return p.name.toLowerCase().includes(q) || (p.role || '').toLowerCase().includes(q) || (p.phone || '').includes(personnelQuery);
+    });
+    arr = [...arr];
     if (personnelSortOrder === 'name_desc') arr.sort((a, b) => b.name.localeCompare(a.name, 'tr'));
     else if (personnelSortOrder === 'balance_desc') arr.sort((a, b) => {
       const balA = (wageBalances[a.id]?.earned || 0) - (wageBalances[a.id]?.paid || 0);
@@ -4550,8 +4888,8 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
     });
     else arr.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
     return arr;
-  }, [personnel, personnelSortOrder, wageBalances]);
-  const personnelPaged = usePagedList(sortedPersonnel, 10);
+  }, [personnel, personnelSortOrder, wageBalances, personnelQuery, personnelPayTypeFilter]);
+  const personnelPaged = usePagedList(sortedPersonnel);
 
   const todayAttendanceIds = new Set(personnelAttendance.filter((a) => a.date === todayStr()).map((a) => a.personnelId));
 
@@ -4614,12 +4952,18 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
 
       {view === 'vehicles' && !selectedVehicle && (
         <div className="zk-card" style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700 }}>Araç listesi</div>
             <button className="zk-btn zk-btn-gold" onClick={() => setShowAddVehicle(true)}><Plus size={14} /> Araç ekle</button>
           </div>
-          {vehicles.length === 0 ? (
-            <div className="zk-empty"><Truck size={26} className="zk-empty-icon" /><br/>Henüz araç eklenmedi.</div>
+          {vehicles.length > 0 && (
+            <div style={{ position: 'relative', marginBottom: 12, maxWidth: 280 }}>
+              <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: COLORS.inkSoft }} />
+              <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="Plaka veya marka ara..." value={vehicleQuery} onChange={(e) => setVehicleQuery(e.target.value)} />
+            </div>
+          )}
+          {sortedVehicles.length === 0 ? (
+            <div className="zk-empty"><Truck size={26} className="zk-empty-icon" /><br/>{vehicles.length === 0 ? 'Henüz araç eklenmedi.' : 'Aramanızla eşleşen araç bulunamadı.'}</div>
           ) : (
             <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -4655,7 +4999,7 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
                 { value: 'plaka_desc', label: 'Plaka: Z → A' },
                 { value: 'kg_desc', label: 'Toplanan kg: Büyük → Küçük' },
               ]}
-              page={vehiclesPaged.page} setPage={vehiclesPaged.setPage} totalPages={vehiclesPaged.totalPages} totalCount={vehiclesPaged.totalCount}
+              page={vehiclesPaged.page} setPage={vehiclesPaged.setPage} pageSize={vehiclesPaged.pageSize} setPageSize={vehiclesPaged.setPageSize} totalPages={vehiclesPaged.totalPages} totalCount={vehiclesPaged.totalCount}
             />
             </>
           )}
@@ -4794,12 +5138,25 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
             </div>
           )}
           <div className="zk-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700 }}>Personel listesi</div>
             <button className="zk-btn zk-btn-gold" onClick={() => setShowAddPersonnel(true)}><Plus size={14} /> Personel ekle</button>
           </div>
-          {personnel.length === 0 ? (
-            <div className="zk-empty"><IdCard size={26} className="zk-empty-icon" /><br/>Henüz personel eklenmedi.</div>
+          {personnel.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              <div style={{ position: 'relative', flex: '2 1 200px', maxWidth: 280 }}>
+                <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: COLORS.inkSoft }} />
+                <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="İsim, görev veya telefon ara..." value={personnelQuery} onChange={(e) => setPersonnelQuery(e.target.value)} />
+              </div>
+              <select className="zk-select" style={{ flex: '1 1 140px', maxWidth: 170 }} value={personnelPayTypeFilter} onChange={(e) => setPersonnelPayTypeFilter(e.target.value)}>
+                <option value="">Tüm ödeme türleri</option>
+                <option value="yevmiye">Yövmiyeli</option>
+                <option value="maas">Maaşlı</option>
+              </select>
+            </div>
+          )}
+          {sortedPersonnel.length === 0 ? (
+            <div className="zk-empty"><IdCard size={26} className="zk-empty-icon" /><br/>{personnel.length === 0 ? 'Henüz personel eklenmedi.' : 'Aramanızla eşleşen personel bulunamadı.'}</div>
           ) : (
             <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -4843,7 +5200,7 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
                 { value: 'name_desc', label: 'İsim: Z → A' },
                 { value: 'balance_desc', label: 'Alacağı: Büyük → Küçük' },
               ]}
-              page={personnelPaged.page} setPage={personnelPaged.setPage} totalPages={personnelPaged.totalPages} totalCount={personnelPaged.totalCount}
+              page={personnelPaged.page} setPage={personnelPaged.setPage} pageSize={personnelPaged.pageSize} setPageSize={personnelPaged.setPageSize} totalPages={personnelPaged.totalPages} totalCount={personnelPaged.totalCount}
             />
             </>
           )}
@@ -5024,6 +5381,8 @@ function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, 
   const [viewingLedger, setViewingLedger] = useState(false);
   const [query, setQuery] = useState('');
   const [sortOrder, setSortOrder] = useState('name_asc');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [balanceFilter, setBalanceFilter] = useState('');
 
   const farmerBalances = useMemo(() => {
     const map = {};
@@ -5036,14 +5395,17 @@ function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, 
   const combined = useMemo(() => {
     const f = farmers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, type: 'tedarikci', raw: x }));
     const b = buyers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, type: 'cari', raw: x }));
-    const arr = [...f, ...b].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()));
+    let arr = [...f, ...b].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()) || (c.phone || '').includes(query));
+    if (typeFilter) arr = arr.filter((c) => c.type === typeFilter);
+    if (balanceFilter === 'has') arr = arr.filter((c) => c.type === 'tedarikci' && (farmerBalances[c.id] || 0) > 0);
+    else if (balanceFilter === 'closed') arr = arr.filter((c) => c.type !== 'tedarikci' || (farmerBalances[c.id] || 0) <= 0);
     if (sortOrder === 'name_desc') arr.sort((a, b2) => b2.name.localeCompare(a.name, 'tr'));
     else if (sortOrder === 'balance_desc') arr.sort((a, b2) => (farmerBalances[b2.id] || 0) - (farmerBalances[a.id] || 0));
     else arr.sort((a, b2) => a.name.localeCompare(b2.name, 'tr'));
     return arr;
-  }, [farmers, buyers, query, sortOrder, farmerBalances]);
+  }, [farmers, buyers, query, sortOrder, typeFilter, balanceFilter, farmerBalances]);
 
-  const { page, setPage, totalPages, paged, totalCount } = usePagedList(combined, 15);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(combined);
 
   const openLedger = (farmerId) => { setSelectedFarmerId(farmerId); setViewingLedger(true); };
   const closeLedger = () => { setViewingLedger(false); setSelectedFarmerId(''); };
@@ -5122,9 +5484,21 @@ function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, 
         <button className="zk-btn zk-btn-primary" onClick={() => setShowAdd(true)}><Plus size={14} /> Cari ekle</button>
       </div>
 
-      <div style={{ position: 'relative', marginBottom: 14, maxWidth: 320 }}>
-        <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: COLORS.inkSoft }} />
-        <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="Cari ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        <div style={{ position: 'relative', flex: '2 1 220px', maxWidth: 320 }}>
+          <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: COLORS.inkSoft }} />
+          <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="İsim veya telefon ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        <select className="zk-select" style={{ flex: '1 1 140px', maxWidth: 170 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <option value="">Tümü (tedarikçi + cari)</option>
+          <option value="tedarikci">Sadece tedarikçi</option>
+          <option value="cari">Sadece cari</option>
+        </select>
+        <select className="zk-select" style={{ flex: '1 1 160px', maxWidth: 190 }} value={balanceFilter} onChange={(e) => setBalanceFilter(e.target.value)}>
+          <option value="">Tüm bakiyeler</option>
+          <option value="has">Alacağı olanlar</option>
+          <option value="closed">Bakiyesi kapalı olanlar</option>
+        </select>
       </div>
 
       <div className="zk-card">
@@ -5186,7 +5560,7 @@ function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, 
               { value: 'name_desc', label: 'İsim: Z → A' },
               { value: 'balance_desc', label: 'Bakiye: Büyük → Küçük' },
             ]}
-            page={page} setPage={setPage} totalPages={totalPages} totalCount={totalCount}
+            page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
           />
           </>
         )}
@@ -5432,7 +5806,7 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, ve
     else arr.sort((a, b) => b.kg - a.kg);
     return arr;
   }, [purchases, farmers, perfSortOrder]);
-  const supplierPerfPaged = usePagedList(supplierPerformance, 10);
+  const supplierPerfPaged = usePagedList(supplierPerformance);
 
   const [personnelPerfSortOrder, setPersonnelPerfSortOrder] = useState('kg_desc');
   const personnelPerformance = useMemo(() => {
@@ -5461,7 +5835,7 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, ve
     else arr.sort((a, b) => b.kg - a.kg);
     return arr;
   }, [purchases, personnel, personnelAttendance, personnelPayments, personnelPerfSortOrder]);
-  const personnelPerfPaged = usePagedList(personnelPerformance, 10);
+  const personnelPerfPaged = usePagedList(personnelPerformance);
 
   const [vehiclePerfSortOrder, setVehiclePerfSortOrder] = useState('kg_desc');
   const vehiclePerformance = useMemo(() => {
@@ -5491,7 +5865,7 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, ve
     else arr.sort((a, b) => b.kg - a.kg);
     return arr;
   }, [purchases, sales, vehicles, vehiclePerfSortOrder]);
-  const vehiclePerfPaged = usePagedList(vehiclePerformance, 10);
+  const vehiclePerfPaged = usePagedList(vehiclePerformance);
 
   const chartData = byFarmer.slice(0, 8).map((row) => {
     const f = farmers.find((x) => x.id === row.farmerId);
@@ -5718,7 +6092,7 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, ve
               { value: 'count_desc', label: 'Teslimat sayısı: Büyük → Küçük' },
               { value: 'avgDelivery_desc', label: 'Ort. teslimat: Büyük → Küçük' },
             ]}
-            page={supplierPerfPaged.page} setPage={supplierPerfPaged.setPage} totalPages={supplierPerfPaged.totalPages} totalCount={supplierPerfPaged.totalCount}
+            page={supplierPerfPaged.page} setPage={supplierPerfPaged.setPage} pageSize={supplierPerfPaged.pageSize} setPageSize={supplierPerfPaged.setPageSize} totalPages={supplierPerfPaged.totalPages} totalCount={supplierPerfPaged.totalCount}
           />
           </>
         )}
@@ -5767,7 +6141,7 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, ve
               { value: 'count_desc', label: 'Alım sayısı: Büyük → Küçük' },
               { value: 'amount_desc', label: 'Çiftçilere ödenen: Büyük → Küçük' },
             ]}
-            page={personnelPerfPaged.page} setPage={personnelPerfPaged.setPage} totalPages={personnelPerfPaged.totalPages} totalCount={personnelPerfPaged.totalCount}
+            page={personnelPerfPaged.page} setPage={personnelPerfPaged.setPage} pageSize={personnelPerfPaged.pageSize} setPageSize={personnelPerfPaged.setPageSize} totalPages={personnelPerfPaged.totalPages} totalCount={personnelPerfPaged.totalCount}
           />
           </>
         )}
@@ -5812,7 +6186,7 @@ function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, ve
               { value: 'delivery_desc', label: 'Teslim ettiği kg: Büyük → Küçük' },
               { value: 'trips_desc', label: 'Sefer sayısı: Büyük → Küçük' },
             ]}
-            page={vehiclePerfPaged.page} setPage={vehiclePerfPaged.setPage} totalPages={vehiclePerfPaged.totalPages} totalCount={vehiclePerfPaged.totalCount}
+            page={vehiclePerfPaged.page} setPage={vehiclePerfPaged.setPage} pageSize={vehiclePerfPaged.pageSize} setPageSize={vehiclePerfPaged.setPageSize} totalPages={vehiclePerfPaged.totalPages} totalCount={vehiclePerfPaged.totalCount}
           />
           </>
         )}
@@ -6038,6 +6412,8 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
   const [tab, setTab] = useState('genel');
 
   const [decimalPlaces, setDecimalPlaces] = useState(settings.decimalPlaces ?? 2);
+  const [purchaseReceiptNext, setPurchaseReceiptNext] = useState(settings.purchaseReceiptNext ?? 1);
+  const [salesReceiptNext, setSalesReceiptNext] = useState(settings.salesReceiptNext ?? 1);
   const [dateFormat, setDateFormat] = useState(settings.dateFormat || 'DMY');
   const [defaultVatRate, setDefaultVatRate] = useState(settings.defaultVatRate ?? 20);
   const [aiVoiceEnabled, setAiVoiceEnabled] = useState(settings.aiVoiceEnabled ?? false);
@@ -6080,6 +6456,8 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
 
   const buildNext = () => ({
     decimalPlaces, dateFormat,
+    purchaseReceiptNext: parseInt(purchaseReceiptNext, 10) || 1,
+    salesReceiptNext: parseInt(salesReceiptNext, 10) || 1,
     defaultVatRate: parseFloat(defaultVatRate) || 0,
     defaultFuelPrice: parseFloat(defaultFuelPrice) || 0,
     crateWeight: parseFloat(crateWeight) || 0,
@@ -6226,6 +6604,23 @@ function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup,
               </div>
               <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 10 }}>
                 KDV oranı henüz ayrı bir fatura modülü olmadığı için şu an sadece Vergi sekmesindeki hızlı seçim listesinin varsayılanı olarak saklanır.
+              </div>
+            </div>
+
+            <div className="zk-card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>🧾 Makbuz numaralandırma</div>
+              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 12 }}>
+                Bir sonraki kaydedilecek alım/satış makbuzunun alacağı numara. Örneğin defterinizdeki mevcut numaralandırmaya devam etmek için buradan ayarlayabilirsiniz.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14 }}>
+                <div>
+                  <label className="zk-label">Sonraki alış (müstahsil) makbuz no</label>
+                  <input className="zk-input" type="number" min="1" value={purchaseReceiptNext} onChange={(e) => setPurchaseReceiptNext(e.target.value)} />
+                </div>
+                <div>
+                  <label className="zk-label">Sonraki satış makbuz no</label>
+                  <input className="zk-input" type="number" min="1" value={salesReceiptNext} onChange={(e) => setSalesReceiptNext(e.target.value)} />
+                </div>
               </div>
             </div>
 
@@ -6673,6 +7068,49 @@ function PrintArea({ purchase, farmer, settings }) {
   );
 }
 
+function SalePrintArea({ sale, buyer, settings }) {
+  if (!sale) return <div id="zk-print-area" />;
+  return (
+    <div id="zk-print-area">
+      <div style={{ fontFamily: "'Courier New', monospace", width: '100%', fontSize: 11, lineHeight: 1.5 }}>
+        <div style={{ textAlign: 'center', marginBottom: 6 }}>
+          {settings.logo && <img src={settings.logo} alt="Logo" style={{ maxWidth: 60, maxHeight: 60, marginBottom: 4 }} />}
+          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Zeytin Komisyonculuğu'}</div>
+          {settings.address && <div style={{ fontSize: 10 }}>{settings.address}</div>}
+          {settings.phone && <div style={{ fontSize: 10 }}>Tel: {settings.phone}</div>}
+          {settings.taxNo && <div style={{ fontSize: 10 }}>VKN: {settings.taxNo}{settings.taxOffice ? ` · ${settings.taxOffice}` : ''}</div>}
+        </div>
+        <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '4px 0', marginBottom: 6, textAlign: 'center', fontWeight: 700 }}>
+          SATIŞ MAKBUZU No: {sale.makbuzNo}
+        </div>
+        <div>Tarih: {fmtDate(sale.date)}</div>
+        <div>Alıcı: {buyer ? buyer.name : '—'}</div>
+        {sale.vehiclePlaka && <div>Araç: {sale.vehiclePlaka}</div>}
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+        <table style={{ width: '100%', marginTop: 4 }}>
+          <tbody>
+            <tr>
+              <td>{sale.grade}</td>
+              <td style={{ textAlign: 'right' }}>{fmtKg(sale.kg)}</td>
+              <td style={{ textAlign: 'right' }}>×{fmtTL(sale.pricePerKg)}</td>
+              <td style={{ textAlign: 'right' }}>{fmtTL(sale.amount)}</td>
+            </tr>
+            <tr style={{ borderTop: '1px solid #000' }}>
+              <td style={{ fontWeight: 700, paddingTop: 4 }} colSpan={3}>TOPLAM</td>
+              <td style={{ textAlign: 'right', fontWeight: 700, paddingTop: 4 }}>{fmtTL(sale.amount)}</td>
+            </tr>
+          </tbody>
+        </table>
+        {sale.note && <div style={{ marginTop: 6 }}>Not: {sale.note}</div>}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26, fontSize: 10 }}>
+          <div>Satan İmza<br/>........................</div>
+          <div>Alan İmza<br/>........................</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Sesli komut asistanı ----------
 
 // ---------- Sesli komut ayrıştırma: yerel (ücretsiz) kural tabanlı motor ----------
@@ -7005,7 +7443,7 @@ function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchase
     if (pending.type === 'purchase') {
       const amount = pending.kg * pending.price;
       const record = {
-        id: uid(), makbuzNo: purchases.length + 1, farmerId: pending.farmer.id,
+        id: uid(), makbuzNo: nextReceiptNo(purchases, settings.purchaseReceiptNext), farmerId: pending.farmer.id,
         date: todayStr(), time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
         personnelId: null, personnelName: '', vehicleId: null, vehiclePlaka: '',
         items: [{ id: uid(), grade: pending.varietyLabel, kg: pending.kg, pricePerKg: pending.price, amount }],
@@ -7485,6 +7923,7 @@ export default function ZeytinDefteri() {
   const [reminders, setReminders] = useState([]);
   const [crateMovements, setCrateMovements] = useState([]);
   const [personnelAttendance, setPersonnelAttendance] = useState([]);
+  const [buyerPayments, setBuyerPayments] = useState([]);
   const [personnelPayments, setPersonnelPayments] = useState([]);
   const [labResults, setLabResults] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
@@ -7499,7 +7938,7 @@ export default function ZeytinDefteri() {
 
   useEffect(() => {
     (async () => {
-      const [f, p, pay, b, s, set, pl, per, exp, cash, veh, maint, fl, docs, ins, dmg, fns, trs, rem, crt, lab, bnk, chk, shp, pAtt, pPay] = await Promise.all([
+      const [f, p, pay, b, s, set, pl, per, exp, cash, veh, maint, fl, docs, ins, dmg, fns, trs, rem, crt, lab, bnk, chk, shp, pAtt, pPay, bPay] = await Promise.all([
         storageGet('zk:farmers'),
         storageGet('zk:purchases'),
         storageGet('zk:payments'),
@@ -7526,6 +7965,7 @@ export default function ZeytinDefteri() {
         storageGet('zk:shipments'),
         storageGet('zk:personnelAttendance'),
         storageGet('zk:personnelPayments'),
+        storageGet('zk:buyerPayments'),
       ]);
       setFarmers(f || []); setPurchases(p || []); setPayments(pay || []);
       setBuyers(b || []); setSales(s || []); setSettings(set || {});
@@ -7538,6 +7978,7 @@ export default function ZeytinDefteri() {
       setCrateMovements(crt || []); setLabResults(lab || []); setBankAccounts(bnk || []); setChecksNotes(chk || []);
       setShipments(shp || []);
       setPersonnelAttendance(pAtt || []); setPersonnelPayments(pPay || []);
+      setBuyerPayments(bPay || []);
       if (pl && pl.length > 0) {
         const normalized = pl.map((v) => ('grades' in v ? v : { id: v.id, name: v.name, hasGrades: false, singlePrice: v.price || 0, grades: [] }));
         setPriceList(normalized);
@@ -7565,7 +8006,13 @@ export default function ZeytinDefteri() {
 
   const handlePrintReceipt = (purchase) => {
     const farmer = farmers.find((f) => f.id === purchase.farmerId);
-    setPrintTarget({ purchase, farmer });
+    setPrintTarget({ type: 'purchase', purchase, farmer });
+    setTimeout(() => window.print(), 100);
+  };
+
+  const handlePrintSaleReceipt = (sale) => {
+    const buyer = buyers.find((b) => b.id === sale.buyerId);
+    setPrintTarget({ type: 'sale', sale, buyer });
     setTimeout(() => window.print(), 100);
   };
 
@@ -7574,6 +8021,7 @@ export default function ZeytinDefteri() {
     vehicleMaintenance: maintenance, vehicleFuel: fuel, vehicleDocuments: documents, vehicleInsurance: insurance,
     vehicleDamage: damages, vehicleFines: fines, vehicleTires: tires, reminders,
     crateMovements, labResults, bankAccounts, checksNotes, shipments,
+    personnelAttendance, personnelPayments, buyerPayments,
     exportedAt: new Date().toISOString(),
   });
 
@@ -7605,7 +8053,7 @@ export default function ZeytinDefteri() {
     try {
       const data = await storageGet(key);
       if (!data) { setRestoreStatus('Yedek bulunamadı.'); return; }
-      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles', 'vehicleMaintenance', 'vehicleFuel', 'vehicleDocuments', 'vehicleInsurance', 'vehicleDamage', 'vehicleFines', 'vehicleTires', 'reminders', 'crateMovements', 'labResults', 'bankAccounts', 'checksNotes', 'shipments'];
+      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles', 'vehicleMaintenance', 'vehicleFuel', 'vehicleDocuments', 'vehicleInsurance', 'vehicleDamage', 'vehicleFines', 'vehicleTires', 'reminders', 'crateMovements', 'labResults', 'bankAccounts', 'checksNotes', 'shipments', 'personnelAttendance', 'personnelPayments', 'buyerPayments'];
       for (const k of keys) {
         if (data[k] !== undefined) await storageSet(`zk:${k}`, data[k]);
       }
@@ -7621,6 +8069,8 @@ export default function ZeytinDefteri() {
       setCrateMovements(data.crateMovements || []); setLabResults(data.labResults || []);
       setBankAccounts(data.bankAccounts || []); setChecksNotes(data.checksNotes || []);
       setShipments(data.shipments || []);
+      setPersonnelAttendance(data.personnelAttendance || []); setPersonnelPayments(data.personnelPayments || []);
+      setBuyerPayments(data.buyerPayments || []);
       setRestoreStatus(`${key.split(':').pop()} tarihli otomatik yedek geri yüklendi.`);
     } catch (e) {
       setRestoreStatus('Otomatik yedek geri yüklenemedi.');
@@ -7648,7 +8098,7 @@ export default function ZeytinDefteri() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles', 'vehicleMaintenance', 'vehicleFuel', 'vehicleDocuments', 'vehicleInsurance', 'vehicleDamage', 'vehicleFines', 'vehicleTires', 'reminders', 'crateMovements', 'labResults', 'bankAccounts', 'checksNotes', 'shipments'];
+      const keys = ['farmers', 'purchases', 'payments', 'buyers', 'sales', 'settings', 'priceList', 'personnel', 'expenses', 'cashEntries', 'vehicles', 'vehicleMaintenance', 'vehicleFuel', 'vehicleDocuments', 'vehicleInsurance', 'vehicleDamage', 'vehicleFines', 'vehicleTires', 'reminders', 'crateMovements', 'labResults', 'bankAccounts', 'checksNotes', 'shipments', 'personnelAttendance', 'personnelPayments', 'buyerPayments'];
       for (const k of keys) {
         if (data[k] !== undefined) await storageSet(`zk:${k}`, data[k]);
       }
@@ -7664,6 +8114,8 @@ export default function ZeytinDefteri() {
       setCrateMovements(data.crateMovements || []); setLabResults(data.labResults || []);
       setBankAccounts(data.bankAccounts || []); setChecksNotes(data.checksNotes || []);
       setShipments(data.shipments || []);
+      setPersonnelAttendance(data.personnelAttendance || []); setPersonnelPayments(data.personnelPayments || []);
+      setBuyerPayments(data.buyerPayments || []);
       setRestoreStatus('Yedek başarıyla geri yüklendi.');
     } catch (e) {
       setRestoreStatus('Dosya okunamadı, geçerli bir yedek dosyası seçin.');
@@ -7781,11 +8233,11 @@ export default function ZeytinDefteri() {
           {tab === 'manualPurchase' && <ManualPurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} />}
           {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
 
-          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} />}
+          {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} />}
           {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
           {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} />}
-          {tab === 'salesHistory' && <SalesHistoryTab buyers={buyers} sales={sales} setSales={setSales} />}
+          {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} />}
+          {tab === 'salesHistory' && <SalesHistoryTab buyers={buyers} sales={sales} setSales={setSales} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} />}
 
           {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} />}
           {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
@@ -7797,7 +8249,8 @@ export default function ZeytinDefteri() {
           {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} autoBackups={autoBackups} onRestoreAutoBackup={restoreFromAutoBackup} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} />}
         </div>
       </div>
-      {printTarget && <PrintArea purchase={printTarget.purchase} farmer={printTarget.farmer} settings={settings} />}
+      {printTarget?.type === 'sale' && <SalePrintArea sale={printTarget.sale} buyer={printTarget.buyer} settings={settings} />}
+      {(!printTarget || printTarget.type !== 'sale') && <PrintArea purchase={printTarget?.purchase} farmer={printTarget?.farmer} settings={settings} />}
       <VoiceAssistant farmers={farmers} setFarmers={setFarmers} priceList={priceList} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} reminders={reminders} setReminders={setReminders} settings={settings} />
     </div>
   );
