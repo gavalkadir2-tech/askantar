@@ -1039,19 +1039,6 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
     if (g) setLinePrice(g.price.toString());
   }, [lineGradeName]);
 
-  useEffect(() => {
-    if (!broadcastLive) return;
-    const lineLabel = lineVariety ? (lineGradeName ? `${lineVariety} · ${lineGradeName}` : lineVariety) : '';
-    const lineNetKg = (parseFloat(lineKg) || 0) - lineDara;
-    broadcastLive({
-      type: 'purchase', partyName: farmer ? farmer.name : '', dateTimeLabel,
-      items: items.map((it) => ({ grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount })),
-      currentLine: { grade: lineLabel, kg: lineNetKg > 0 ? lineNetKg : 0, pricePerKg: parseFloat(linePrice) || 0 },
-      netKg: items.reduce((s, it) => s + it.kg, 0) + (lineNetKg > 0 ? lineNetKg : 0),
-      total: items.reduce((s, it) => s + it.amount, 0) + (lineNetKg > 0 ? lineNetKg : 0) * (parseFloat(linePrice) || 0),
-    });
-  }, [farmer, items, lineVariety, lineGradeName, lineKg, linePrice, lineDara, dateTimeLabel, broadcastLive]);
-
   const handleFarmerSelect = (value) => {
     if (value === '__add_new__') { setShowAddFarmer(true); return; }
     setFarmerId(value);
@@ -1125,6 +1112,32 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
   const netPayment = amountAfterFire - commissionAmount - stopajTutari - bagkurTutari - hammaliyeVal - nakliyeVal - cuvalVal;
 
   const canSave = farmerId && items.length > 0;
+
+  useEffect(() => {
+    if (!broadcastLive) return;
+    const lineLabel = lineVariety ? (lineGradeName ? `${lineVariety} · ${lineGradeName}` : lineVariety) : '';
+    const lineNetKg = Math.max(0, (parseFloat(lineKg) || 0) - lineDara);
+    const linePriceVal = parseFloat(linePrice) || 0;
+    const person = personnel.find((p) => p.id === personnelId);
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    broadcastLive({
+      type: 'purchase',
+      partyName: farmer ? farmer.name : '',
+      personnelName: person ? person.name : '',
+      vehiclePlaka: vehicle ? vehicle.plaka : '',
+      dateTimeLabel,
+      items: items.map((it) => ({ grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount })),
+      currentLine: { grade: lineLabel, kg: lineNetKg, pricePerKg: linePriceVal },
+      netKg: netKg + lineNetKg,
+      grossAmount: amount + lineNetKg * linePriceVal,
+      deductions: noDeduction ? null : {
+        komisyon: commissionAmount, stopaj: stopajTutari, bagkur: bagkurTutari,
+        hammaliye: hammaliyeVal, nakliye: nakliyeVal, cuval: cuvalVal, fire: fireTutari,
+      },
+      netAmount: netPayment,
+      randiman: parseFloat(randiman) || null, asit: parseFloat(asit) || null, nem: parseFloat(nem) || null,
+    });
+  }, [farmer, items, lineVariety, lineGradeName, lineKg, linePrice, lineDara, dateTimeLabel, broadcastLive, personnelId, vehicleId, noDeduction, commissionAmount, stopajTutari, bagkurTutari, hammaliyeVal, nakliyeVal, cuvalVal, fireTutari, randiman, asit, nem, personnel, vehicles, amount, netKg, netPayment]);
 
   const handlePhotoUpload = (file) => {
     if (!file) return;
@@ -1906,14 +1919,23 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
   // Kantar/kamera üzerinden canli tartim, "musteri ekrani" ikinci pencereye yayinlanir.
   useEffect(() => {
     if (!broadcastLive) return;
+    const person = personnel.find((p) => p.id === personnelId);
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    const total = items.reduce((s, it) => s + it.amount, 0) + (parseFloat(lineKg) || 0) * (parseFloat(linePrice) || 0);
     broadcastLive({
-      type: 'sale', partyName: buyer ? buyer.name : '', dateTimeLabel,
+      type: 'sale',
+      partyName: buyer ? buyer.name : '',
+      personnelName: person ? person.name : '',
+      vehiclePlaka: vehicle ? vehicle.plaka : '',
+      dateTimeLabel,
       items: items.map((it) => ({ grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount })),
       currentLine: { grade: lineGrade, kg: parseFloat(lineKg) || 0, pricePerKg: parseFloat(linePrice) || 0 },
       netKg: items.reduce((s, it) => s + it.kg, 0) + (parseFloat(lineKg) || 0),
-      total: items.reduce((s, it) => s + it.amount, 0) + (parseFloat(lineKg) || 0) * (parseFloat(linePrice) || 0),
+      grossAmount: total,
+      deductions: null,
+      netAmount: total,
     });
-  }, [buyer, items, lineGrade, lineKg, linePrice, dateTimeLabel, broadcastLive]);
+  }, [buyer, items, lineGrade, lineKg, linePrice, dateTimeLabel, broadcastLive, personnelId, vehicleId, personnel, vehicles]);
 
   const availableForLine = lineGrade ? (stockByGrade.find((g) => g.grade === lineGrade)?.stock ?? 0) : 0;
 
@@ -8502,6 +8524,12 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
 function CustomerDisplayView({ businessName, logo }) {
   const [live, setLive] = useState(null);
   const [doneFlash, setDoneFlash] = useState(null);
+  const [clock, setClock] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -8512,7 +8540,7 @@ function CustomerDisplayView({ businessName, logo }) {
       if (msg.type === 'purchase_done' || msg.type === 'sale_done') {
         setDoneFlash(msg);
         setLive(null);
-        setTimeout(() => setDoneFlash(null), 6000);
+        setTimeout(() => setDoneFlash(null), 7000);
       } else {
         setLive(msg);
       }
@@ -8520,57 +8548,131 @@ function CustomerDisplayView({ businessName, logo }) {
     return () => ch.close();
   }, []);
 
-  const wrapStyle = {
+  const rootStyle = {
     minHeight: '100vh', width: '100%', background: '#1C1B17', color: '#F7F3E8',
-    fontFamily: "'Fraunces', Georgia, serif", display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', padding: '5vh 6vw', boxSizing: 'border-box',
-    textAlign: 'center',
+    fontFamily: "'Fraunces', Georgia, serif", boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
   };
+  const headerStyle = {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '2vh 4vw', borderBottom: '1px solid #3A3831', flexShrink: 0,
+  };
+
+  const Header = () => (
+    <div style={headerStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2vw' }}>
+        {logo && <img src={logo} alt="Logo" style={{ maxHeight: '4.5vh' }} />}
+        <div style={{ fontSize: '1.9vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
+      </div>
+      <div style={{ fontSize: '1.6vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
+        {clock.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      </div>
+    </div>
+  );
 
   if (doneFlash) {
     return (
-      <div style={wrapStyle}>
-        <div style={{ fontSize: '4vw', marginBottom: 20 }}>✓</div>
-        <div style={{ fontSize: '3vw', fontWeight: 700, marginBottom: 16 }}>{doneFlash.partyName || ' '}</div>
-        <div style={{ fontSize: '2.2vw', color: '#C9A24B', marginBottom: 10 }}>{fmtKg(doneFlash.netKg)}</div>
-        <div style={{ fontSize: '5vw', fontWeight: 700 }}>{fmtTL(doneFlash.total)}</div>
-        <div style={{ fontSize: '1.6vw', marginTop: 30, color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
+      <div style={rootStyle}>
+        <Header />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '4vh 6vw' }}>
+          <div style={{ fontSize: '5vw', color: '#7FB27A', marginBottom: 14 }}>✓</div>
+          <div style={{ fontSize: '2.6vw', fontWeight: 700, marginBottom: 10 }}>{doneFlash.partyName || ' '}</div>
+          <div style={{ fontSize: '1.8vw', color: '#C9A24B', marginBottom: 14 }}>{fmtKg(doneFlash.netKg)}</div>
+          <div style={{ fontSize: '4.5vw', fontWeight: 700 }}>{fmtTL(doneFlash.total)}</div>
+          <div style={{ fontSize: '1.4vw', marginTop: 26, color: '#B8B2A0' }}>İşlem tamamlandı, teşekkür ederiz</div>
+        </div>
       </div>
     );
   }
 
   if (!live) {
     return (
-      <div style={wrapStyle}>
-        {logo && <img src={logo} alt="Logo" style={{ maxWidth: '12vw', marginBottom: 24 }} />}
-        <div style={{ fontSize: '3.2vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
-        <div style={{ fontSize: '1.4vw', color: '#B8B2A0', marginTop: 20 }}>Tartım bekleniyor...</div>
+      <div style={rootStyle}>
+        <Header />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          {logo && <img src={logo} alt="Logo" style={{ maxWidth: '10vw', marginBottom: 20, opacity: 0.85 }} />}
+          <div style={{ fontSize: '1.6vw', color: '#B8B2A0' }}>Tartım bekleniyor...</div>
+        </div>
       </div>
     );
   }
 
   const cl = live.currentLine;
+  const hasCurrentLine = cl && (cl.grade || cl.kg > 0);
+  const ded = live.deductions;
+  const dedRows = ded ? [
+    ['Komisyon', ded.komisyon], ['Stopaj', ded.stopaj], ['BAĞ-KUR', ded.bagkur],
+    ['Hammaliye', ded.hammaliye], ['Nakliye', ded.nakliye], ['Çuval/kasa', ded.cuval], ['Fire/İskonto', ded.fire],
+  ].filter(([, v]) => v > 0) : [];
+
   return (
-    <div style={wrapStyle}>
-      <div style={{ fontSize: '1.6vw', color: '#B8B2A0', marginBottom: 6 }}>{live.dateTimeLabel}</div>
-      <div style={{ fontSize: '3.2vw', fontWeight: 700, marginBottom: '3vh' }}>{live.partyName || '—'}</div>
+    <div style={rootStyle}>
+      <Header />
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {/* Sol: canli tartim + taraf bilgisi */}
+        <div style={{ flex: '1.1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3vh 3vw', borderRight: '1px solid #3A3831', textAlign: 'center' }}>
+          <div style={{ fontSize: '2.6vw', fontWeight: 700, marginBottom: '1vh' }}>{live.partyName || '—'}</div>
+          <div style={{ fontSize: '1.2vw', color: '#B8B2A0', marginBottom: '3vh' }}>
+            {[live.personnelName, live.vehiclePlaka].filter(Boolean).join(' · ') || live.dateTimeLabel}
+          </div>
 
-      {cl && (cl.grade || cl.kg > 0) && (
-        <div style={{ marginBottom: '4vh' }}>
-          <div style={{ fontSize: '1.6vw', color: '#B8B2A0' }}>{cl.grade || 'Tartılıyor'}</div>
-          <div style={{ fontSize: '7vw', fontWeight: 700, lineHeight: 1.1 }}>{fmtKg(cl.kg)}</div>
-          {cl.pricePerKg > 0 && <div style={{ fontSize: '2vw', color: '#C9A24B' }}>{fmtTL(cl.pricePerKg)} / kg</div>}
+          {hasCurrentLine ? (
+            <>
+              <div style={{ fontSize: '1.5vw', color: '#C9A24B', marginBottom: 4 }}>{cl.grade || 'Tartılıyor'}</div>
+              <div style={{ fontSize: '9vw', fontWeight: 700, lineHeight: 1 }}>{fmtKg(cl.kg)}</div>
+              {cl.pricePerKg > 0 && <div style={{ fontSize: '1.8vw', marginTop: 10, color: '#D8D2C0' }}>{fmtTL(cl.pricePerKg)} / kg</div>}
+              {(live.randiman || live.asit || live.nem) && (
+                <div style={{ display: 'flex', gap: '2vw', marginTop: '2.5vh', fontSize: '1.1vw', color: '#B8B2A0' }}>
+                  {live.randiman != null && <span>Randıman %{live.randiman}</span>}
+                  {live.asit != null && <span>Asit %{live.asit}</span>}
+                  {live.nem != null && <span>Nem %{live.nem}</span>}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: '1.6vw', color: '#B8B2A0' }}>Sonraki tartım bekleniyor...</div>
+          )}
         </div>
-      )}
 
-      <div style={{ display: 'flex', gap: '6vw', alignItems: 'baseline', borderTop: '2px solid #3A3831', paddingTop: '3vh', width: '100%', justifyContent: 'center' }}>
-        <div>
-          <div style={{ fontSize: '1.3vw', color: '#B8B2A0' }}>Toplam</div>
-          <div style={{ fontSize: '2.6vw', fontWeight: 700 }}>{fmtKg(live.netKg)}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: '1.3vw', color: '#B8B2A0' }}>Tutar</div>
-          <div style={{ fontSize: '3.6vw', fontWeight: 700, color: '#C9A24B' }}>{fmtTL(live.total)}</div>
+        {/* Sag: kalem listesi + toplamlar */}
+        <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', padding: '3vh 3vw', minHeight: 0 }}>
+          <div style={{ fontSize: '1.3vw', color: '#B8B2A0', marginBottom: '1.5vh' }}>Tartılan kalemler</div>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {live.items.length === 0 ? (
+              <div style={{ fontSize: '1.3vw', color: '#6E6A5E' }}>Henüz eklenmiş kalem yok.</div>
+            ) : (
+              live.items.map((it, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '1vw', fontSize: '1.35vw', padding: '0.8vh 0', borderBottom: '1px solid #2C2A24' }}>
+                  <span style={{ color: '#D8D2C0' }}>{it.grade} · {fmtKg(it.kg)}</span>
+                  <span style={{ fontWeight: 600, flexShrink: 0 }}>{fmtTL(it.amount)}</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          {dedRows.length > 0 && (
+            <div style={{ borderTop: '1px solid #3A3831', marginTop: '1.5vh', paddingTop: '1.2vh' }}>
+              {dedRows.map(([label, val]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1vw', color: '#B8B2A0', padding: '0.3vh 0' }}>
+                  <span>{label}</span><span>− {fmtTL(val)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ borderTop: '2px solid #3A3831', marginTop: '1.5vh', paddingTop: '1.5vh' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.4vw', color: '#B8B2A0', marginBottom: 6 }}>
+              <span>Toplam kg</span><span>{fmtKg(live.netKg)}</span>
+            </div>
+            {dedRows.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.4vw', color: '#B8B2A0', marginBottom: 6 }}>
+                <span>Brüt tutar</span><span>{fmtTL(live.grossAmount)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '2.4vw', fontWeight: 700, color: '#C9A24B' }}>
+              <span>{dedRows.length > 0 ? 'Net ödenecek' : 'Toplam tutar'}</span>
+              <span>{fmtTL(live.netAmount)}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
