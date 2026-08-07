@@ -8712,15 +8712,24 @@ function CustomerDisplayView({ businessName, logo, channelId }) {
       </div>
 
       <div style={{ borderTop: '2px solid #3A3831', padding: '3vh 5vw', flexShrink: 0 }}>
-        {live.items.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.2vw', justifyContent: 'center', marginBottom: '3vh' }}>
-            {live.items.map((it, i) => (
-              <div key={i} style={{ background: '#2A2822', borderRadius: 10, padding: '1.2vh 1.6vw', fontSize: '1.5vw' }}>
-                {it.grade} · <strong>{fmtKg(it.kg)}</strong>
-              </div>
-            ))}
-          </div>
-        )}
+        {live.items.length > 0 && (() => {
+          const groups = {};
+          const order = [];
+          live.items.forEach((it) => {
+            if (!groups[it.grade]) { groups[it.grade] = 0; order.push(it.grade); }
+            groups[it.grade] += it.kg;
+          });
+          return (
+            <div style={{ marginBottom: '3vh', maxWidth: '46vw', marginLeft: 'auto', marginRight: 'auto' }}>
+              {order.map((g) => (
+                <div key={g} style={{ display: 'flex', justifyContent: 'space-between', gap: '2vw', fontSize: '1.8vw', padding: '0.8vh 0', borderBottom: '1px solid #2C2A24' }}>
+                  <span style={{ color: '#D8D2C0' }}>{g}</span>
+                  <span style={{ fontWeight: 700 }}>{fmtKg(groups[g])}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '1.6vw', color: '#B8B2A0', marginBottom: '0.5vh' }}>Toplam</div>
           <div style={{ fontSize: '4.5vw', fontWeight: 700, color: '#C9A24B' }}>{fmtKg(live.netKg)}</div>
