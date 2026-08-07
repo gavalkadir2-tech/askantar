@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient.js';
 import { currentUser } from './currentUser.js';
 import { getQrDataUrl } from './qrHelper.js';
-import { downloadReceiptPdf } from './pdfHelper.js';
+import { downloadReceiptPdf, printReceiptPdf, downloadSaleReceiptPdf, printSaleReceiptPdf, downloadPaymentReceiptPdf, printPaymentReceiptPdf } from './pdfHelper.js';
 import { offlineGet, offlineSet, queuePendingWrite, getPendingCount, flushQueue } from './offlineStorage.js';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
@@ -2471,6 +2471,7 @@ function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt
                     <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => setEditingSale(s)}><Pencil size={12} /></button>
                       {s.makbuzNo && <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintSaleReceipt(s)}><Printer size={12} /></button>}
+                      {s.makbuzNo && <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => downloadSaleReceiptPdf(s, b, settings)}><Download size={12} /></button>}
                       {waPhone && s.makbuzNo && (
                         <a className="zk-btn" style={{ padding: '5px 9px', background: '#25D366', color: '#fff' }} href={`https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppSaleReceiptText(s, b, settings))}`} target="_blank" rel="noopener noreferrer">
                           <MessageCircle size={12} />
@@ -4990,6 +4991,7 @@ function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases,
                     <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => startEdit(row)}><Pencil size={12} /></button>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintPayment(row)}><Printer size={12} /></button>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => downloadPaymentReceiptPdf(row, settings)}><Download size={12} /></button>
                       {waPhone && (
                         <a className="zk-btn" style={{ padding: '5px 9px', background: '#25D366', color: '#fff' }} href={`https://wa.me/${waPhone}?text=${encodeURIComponent(buildWhatsAppPaymentText(row, settings))}`} target="_blank" rel="noopener noreferrer">
                           <MessageCircle size={12} />
@@ -8803,19 +8805,16 @@ export default function ZeytinDefteri() {
 
   const handlePrintReceipt = (purchase) => {
     const farmer = farmers.find((f) => f.id === purchase.farmerId);
-    setPrintTarget({ type: 'purchase', purchase, farmer });
-    setTimeout(() => window.print(), 100);
+    printReceiptPdf(purchase, farmer, settings);
   };
 
   const handlePrintSaleReceipt = (sale) => {
     const buyer = buyers.find((b) => b.id === sale.buyerId);
-    setPrintTarget({ type: 'sale', sale, buyer });
-    setTimeout(() => window.print(), 100);
+    printSaleReceiptPdf(sale, buyer, settings);
   };
 
   const handlePrintPayment = (row) => {
-    setPrintTarget({ type: 'payment', row });
-    setTimeout(() => window.print(), 100);
+    printPaymentReceiptPdf(row, settings);
   };
 
   const buildBackupPayload = () => ({
