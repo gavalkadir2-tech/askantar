@@ -58,7 +58,17 @@ function ListFooterControls({ sortOrder, setSortOrder, sortOptions, page, setPag
     </div>
   );
 }
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// UYARI: new Date().toISOString() HER ZAMAN UTC saatini döndürür. Türkiye gibi
+// UTC'nin ilerisindeki saat dilimlerinde gece yarısından sonraki saatlerde
+// (örn. UTC+3'te 00:00-03:00 arası) bu, tarihi bir gün GERİDEN gösteren ciddi
+// bir hataya yol açar. Bunun yerine her zaman YEREL tarih bileşenlerini kullanıyoruz.
+const localDateStr = (d) => {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${da}`;
+};
+const todayStr = () => localDateStr(new Date());
 
 // Ayarlar sayfasından değiştirilebilen, tüm dosyada paylaşılan biçimlendirme durumu.
 // React state değil çünkü fmtTL/fmtDate gibi yardımcılar yüzlerce yerde çağrılıyor;
@@ -582,7 +592,7 @@ function DashboardTab({ farmers, purchases, payments, sales, setTab }) {
     for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const key = localDateStr(d);
       const kg = purchases.filter((p) => p.date === key).reduce((s, p) => s + p.netKg, 0);
       days.push({ date: fmtDateShort(key), kg: Math.round(kg * 10) / 10 });
     }
@@ -1022,12 +1032,12 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
 
   const farmer = farmers.find((f) => f.id === farmerId);
   const selectedVariety = priceList.find((v) => v.name === lineVariety);
-  const date = manualDateTime ? manualDate : now.toISOString().slice(0, 10);
+  const date = manualDateTime ? manualDate : localDateStr(now);
   const timeLabel = manualDateTime ? (manualTime || '00:00') : now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   const dateTimeLabel = fmtDate(date) + ' · ' + timeLabel;
 
   const startManualEdit = () => {
-    setManualDate(now.toISOString().slice(0, 10));
+    setManualDate(localDateStr(now));
     setManualTime(now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
     setManualDateTime(true);
   };
@@ -1245,7 +1255,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
 
       <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} compact />
 
-      <div style={{ maxWidth: 640, marginTop: 16 }}>
+      <div style={{ maxWidth: 900, marginTop: 16 }}>
         <div className="zk-card">
           <div style={{ marginBottom: 10 }}>
             <label className="zk-label">Çiftçi</label>
@@ -1298,8 +1308,8 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
 
           <div style={{ background: COLORS.paper, borderRadius: 10, padding: 12, marginBottom: 14 }}>
             <div className="zk-label" style={{ marginBottom: 8 }}>Tartım satırı ekle</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'end' }}>
-              <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+            <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', alignItems: 'end' }}>
+              <div>
                 <label className="zk-label">Tür</label>
                 <select className="zk-select" value={lineVariety} onChange={(e) => setLineVariety(e.target.value)}>
                   {priceList.length === 0 && <option value="">Fiyat listesi boş</option>}
@@ -1307,7 +1317,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                 </select>
               </div>
               {selectedVariety?.hasGrades && (
-                <div style={{ flex: '1 1 120px', minWidth: 0 }}>
+                <div>
                   <label className="zk-label">Numara</label>
                   <select className="zk-select" value={lineGradeName} onChange={(e) => setLineGradeName(e.target.value)}>
                     {selectedVariety.grades.length === 0 && <option value="">Numara yok</option>}
@@ -1315,11 +1325,11 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                   </select>
                 </div>
               )}
-              <div style={{ flex: '1 1 100px', minWidth: 0 }}>
+              <div>
                 <label className="zk-label">Ölçülen (kg)</label>
                 <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
               </div>
-              <div style={{ flex: '1 1 130px', minWidth: 0 }}>
+              <div>
                 <label className="zk-label">Kasa</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                   <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
@@ -1329,11 +1339,11 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                   <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
                 </div>
               </div>
-              <div style={{ flex: '1 1 100px', minWidth: 0 }}>
+              <div>
                 <label className="zk-label">Fiyat/kg</label>
                 <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
               </div>
-              <button className="zk-btn zk-btn-gold" style={{ flexShrink: 0 }} onClick={addLine}><Plus size={14} /> Ekle</button>
+              <button className="zk-btn zk-btn-gold" style={{ justifyContent: 'center' }} onClick={addLine}><Plus size={14} /> Ekle</button>
             </div>
             {lineKg && (
               <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginTop: 8 }}>
@@ -1677,7 +1687,7 @@ function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles,
         <StatCard label="Mevcut stok" value={fmtKg(currentStock)} tone={COLORS.blue} icon={Warehouse} />
       </div>
 
-      <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 900 }}>
         <div className="zk-card">
           <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni satış</div>
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
@@ -1916,12 +1926,12 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
   const adjustCrateCount = (delta) => setCrateCount((c) => Math.max(0, Math.min(7, c + delta)));
 
   const buyer = buyers.find((b) => b.id === buyerId);
-  const date = manualDateTime ? manualDate : now.toISOString().slice(0, 10);
+  const date = manualDateTime ? manualDate : localDateStr(now);
   const timeLabel = manualDateTime ? (manualTime || '00:00') : now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   const dateTimeLabel = fmtDate(date) + ' · ' + timeLabel;
 
   const startManualEdit = () => {
-    setManualDate(now.toISOString().slice(0, 10));
+    setManualDate(localDateStr(now));
     setManualTime(now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
     setManualDateTime(true);
   };
@@ -2040,7 +2050,7 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
         {openCustomerDisplay && <CustomerDisplayButtons openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} />}
       </div>
 
-      <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 900 }}>
         <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} compact />
 
         <div className="zk-card" style={{ marginTop: 14 }}>
@@ -2089,19 +2099,19 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
           </div>
 
           <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Tartım satırı ekle</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 4, alignItems: 'end' }}>
-            <div style={{ flex: '2 1 160px', minWidth: 0 }}>
+          <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', alignItems: 'end', marginBottom: 4 }}>
+            <div>
               <label className="zk-label">Sınıf</label>
               <select className="zk-select" value={lineGrade} onChange={(e) => setLineGrade(e.target.value)}>
                 <option value="">Seçin...</option>
                 {stockByGrade.filter((g) => g.stock > 0.01).map((g) => <option key={g.grade} value={g.grade}>{g.grade} · stokta {fmtKg(g.stock)}</option>)}
               </select>
             </div>
-            <div style={{ flex: '1 1 110px', minWidth: 0 }}>
+            <div>
               <label className="zk-label">Ölçülen (kg)</label>
               <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
             </div>
-            <div style={{ flex: '1 1 130px', minWidth: 0 }}>
+            <div>
               <label className="zk-label">Kasa</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                 <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
@@ -2111,11 +2121,11 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
                 <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
               </div>
             </div>
-            <div style={{ flex: '1 1 100px', minWidth: 0 }}>
+            <div>
               <label className="zk-label">Fiyat/kg</label>
               <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
             </div>
-            <button className="zk-btn zk-btn-gold" style={{ flexShrink: 0 }} onClick={addLine}><Plus size={14} /> Ekle</button>
+            <button className="zk-btn zk-btn-gold" style={{ justifyContent: 'center' }} onClick={addLine}><Plus size={14} /> Ekle</button>
           </div>
           {lineKg && (
             <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 8 }}>
@@ -2298,7 +2308,7 @@ function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases, price
       <div className="zk-h1">Alış</div>
       <div className="zk-h1-sub">Tartım/kesinti detayı olmadan hızlı manuel alış kaydı — detaylı tartım için Kantarlı Alış'ı kullanın</div>
 
-      <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 900 }}>
         <div className="zk-card">
           <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Yeni alış</div>
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
@@ -7957,7 +7967,7 @@ function parseReminderCommand(text) {
   const title = text.replace(/hatırlat(ma|ıcı)?( ekle)?/gi, '').trim() || text;
   let date = todayStr();
   if (/yarın/i.test(text)) {
-    const d = new Date(); d.setDate(d.getDate() + 1); date = d.toISOString().slice(0, 10);
+    const d = new Date(); d.setDate(d.getDate() + 1); date = localDateStr(d);
   }
   return { ok: true, type: 'reminder', title, date };
 }
@@ -8496,7 +8506,7 @@ function NotificationCenter({ farmers, purchases, payments, documents, insurance
     const d = new Date(dateStr);
     if (recur === 'weekly') d.setDate(d.getDate() + 7);
     else if (recur === 'monthly') d.setMonth(d.getMonth() + 1);
-    return d.toISOString().slice(0, 10);
+    return localDateStr(d);
   };
 
   const toggleDone = async (id) => {
