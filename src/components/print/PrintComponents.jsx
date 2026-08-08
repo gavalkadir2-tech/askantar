@@ -89,7 +89,7 @@ export function PrintArea({ purchase, farmer, settings }) {
           <PrintRow label="Kesintisiz" value="—" />
         ) : (
           <>
-            <PrintRow label={`Komisyon (%${purchase.commissionRate})`} value={`− ${fmtTL(purchase.commissionAmount)}`} />
+            <PrintRow label={`Komisyon (${purchase.commissionRate} ₺/kg)`} value={`− ${fmtTL(purchase.commissionAmount)}`} />
             <PrintRow label={`Stopaj (%${purchase.stopajOrani})`} value={`− ${fmtTL(purchase.stopajTutari)}`} />
             {purchase.applyBagkur && <PrintRow label={`BAĞ-KUR (%${purchase.bagkurRate})`} value={`− ${fmtTL(purchase.bagkurTutari)}`} />}
           </>
