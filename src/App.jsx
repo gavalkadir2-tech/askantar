@@ -12,7 +12,7 @@ import {
   Receipt, Banknote, ListChecks, Upload, MessageCircle, Truck, Contact as IdCard, Menu,
   Wrench, Fuel, FileText, ShieldAlert, AlertTriangle, Disc, TrendingUp, Gauge, CalendarClock,
   Sparkles, AlertOctagon, UserCheck, Archive, Target, Radar, RefreshCw, Trash2, Mic, MicOff, Send, Bot, Bell, Pencil,
-  Package2, FlaskConical, Landmark, CreditCard, Navigation, MapPin, PackageCheck, Repeat, BellRing, CheckCircle2, ChevronLeft, ArrowUpDown, Tv,
+  Package2, FlaskConical, Landmark, CreditCard, Navigation, MapPin, PackageCheck, Repeat, BellRing, CheckCircle2, ChevronLeft, ArrowUpDown, Tv, ChevronUp, ChevronDown,
 } from 'lucide-react';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -31,6 +31,48 @@ function usePagedList(items, defaultPageSize = 20) {
   const setPageSize = (n) => { setPageSizeRaw(n); setPage(1); };
   const paged = items.slice((clampedPage - 1) * pageSize, clampedPage * pageSize);
   return { page: clampedPage, setPage, pageSize, setPageSize, totalPages, paged, totalCount: items.length };
+}
+
+// Sutun basligina tiklayarak siralama. sortKey: hangi alana gore siralandigini,
+// sortDir: 'asc' | 'desc' tutar. Ayni basliga tekrar tiklamak yonu tersine cevirir.
+function useSortableColumns(defaultKey = null, defaultDir = 'asc') {
+  const [sortKey, setSortKey] = useState(defaultKey);
+  const [sortDir, setSortDir] = useState(defaultDir);
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const sortRows = (rows, getValue) => {
+    if (!sortKey) return rows;
+    const sorted = [...rows].sort((a, b) => {
+      const va = getValue(a, sortKey);
+      const vb = getValue(b, sortKey);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === 'string' || typeof vb === 'string') {
+        return String(va).localeCompare(String(vb), 'tr');
+      }
+      return va - vb;
+    });
+    return sortDir === 'desc' ? sorted.reverse() : sorted;
+  };
+  return { sortKey, sortDir, toggleSort, sortRows };
+}
+
+function SortableTh({ label, sortKeyName, sortKey, sortDir, onSort, style }) {
+  const active = sortKey === sortKeyName;
+  return (
+    <th
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style }}
+      onClick={() => onSort(sortKeyName)}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+        {label}
+        {active ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}
+      </span>
+    </th>
+  );
 }
 
 function ListFooterControls({ sortOrder, setSortOrder, sortOptions, page, setPage, pageSize, setPageSize, totalPages, totalCount }) {
@@ -2730,7 +2772,15 @@ function ExpensesTab({ expenses, setExpenses, settings }) {
         ) : (
           <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Kategori</th><th>Not</th><th>Tutar</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder(sortOrder === 'date_asc' ? 'date_desc' : 'date_asc')}>Tarih {sortOrder === 'date_asc' ? <ChevronUp size={12} /> : sortOrder === 'date_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
+                <th>Kategori</th>
+                <th>Not</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('amount_desc')}>Tutar {sortOrder === 'amount_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               {paged.map((e) => (
                 <tr key={e.id}>
@@ -2818,6 +2868,15 @@ function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCa
     await storageSet('zk:cashEntries', next);
   };
 
+  const [query, setQuery] = useState('');
+  const reversedWithRunning = [...withRunning].reverse();
+  const filteredMovements = useMemo(() => {
+    if (!query) return reversedWithRunning;
+    const q = query.toLowerCase();
+    return reversedWithRunning.filter((m) => m.label.toLowerCase().includes(q) || (m.note || '').toLowerCase().includes(q));
+  }, [withRunning, query]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filteredMovements);
+
   return (
     <div>
       <div className="zk-h1">Kasa</div>
@@ -2859,13 +2918,15 @@ function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCa
 
       <div className="zk-card">
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Kasa hareketleri</div>
-        {withRunning.length === 0 ? (
-          <div className="zk-empty">Hareket yok.</div>
+        <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="İşlem veya nota göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        {filteredMovements.length === 0 ? (
+          <div className="zk-empty">{withRunning.length === 0 ? 'Hareket yok.' : 'Aramanızla eşleşen hareket bulunamadı.'}</div>
         ) : (
+          <>
           <table className="zk-table">
             <thead><tr><th>Tarih</th><th>İşlem</th><th>Tutar</th><th>Bakiye</th></tr></thead>
             <tbody>
-              {withRunning.slice().reverse().map((m, i) => (
+              {paged.map((m, i) => (
                 <tr key={i}>
                   <td>{fmtDate(m.date)}</td>
                   <td><span className={`zk-badge ${m.amount >= 0 ? 'zk-badge-olive' : 'zk-badge-red'}`}>{m.label}{m.note ? ` · ${m.note}` : ''}</span></td>
@@ -2875,6 +2936,8 @@ function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCa
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -4491,9 +4554,33 @@ function CrateInventoryTab({ farmers, movements, setMovements, settings, setSett
     return farmers.map((f) => ({ farmer: f, balance: balances[f.id] || { kasa: 0, cuval: 0 } })).filter((r) => r.balance.kasa !== 0 || r.balance.cuval !== 0 || movements.some((m) => m.farmerId === r.farmer.id));
   }, [farmers, balances, movements]);
 
-  const farmerMovements = viewFarmerId
-    ? movements.filter((m) => m.farmerId === viewFarmerId).sort((a, b) => b.createdAt - a.createdAt)
+  const [balanceQuery, setBalanceQuery] = useState('');
+  const { sortKey: balSortKey, sortDir: balSortDir, toggleSort: balToggleSort, sortRows: balSortRows } = useSortableColumns();
+  const filteredFarmerList = useMemo(() => {
+    if (!balanceQuery) return farmerList;
+    const q = balanceQuery.toLowerCase();
+    return farmerList.filter((r) => r.farmer.name.toLowerCase().includes(q) || (r.farmer.phone || '').toLowerCase().includes(q) || (r.farmer.address || '').toLowerCase().includes(q));
+  }, [farmerList, balanceQuery]);
+  const sortedFarmerList = balSortRows(filteredFarmerList, (r, key) => {
+    if (key === 'name') return r.farmer.name;
+    if (key === 'kasa') return r.balance.kasa;
+    if (key === 'cuval') return r.balance.cuval;
+    return null;
+  });
+  const balPaged = usePagedList(sortedFarmerList);
+
+  const [moveQuery, setMoveQuery] = useState('');
+  const { sortKey: movSortKey, sortDir: movSortDir, toggleSort: movToggleSort, sortRows: movSortRows } = useSortableColumns('date', 'desc');
+  const farmerMovementsAll = viewFarmerId
+    ? movements.filter((m) => m.farmerId === viewFarmerId)
     : [];
+  const filteredFarmerMovements = useMemo(() => {
+    if (!moveQuery) return farmerMovementsAll;
+    const q = moveQuery.toLowerCase();
+    return farmerMovementsAll.filter((m) => (m.note || '').toLowerCase().includes(q) || (CRATE_MOVEMENT_TYPES.find((t) => t.key === m.type)?.label || '').toLowerCase().includes(q));
+  }, [farmerMovementsAll, moveQuery]);
+  const sortedFarmerMovements = movSortRows(filteredFarmerMovements, (m, key) => m[key]);
+  const movPaged = usePagedList(sortedFarmerMovements);
 
   return (
     <div>
@@ -4560,21 +4647,35 @@ function CrateInventoryTab({ farmers, movements, setMovements, settings, setSett
 
       <div className="zk-card" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Çiftçi bazında bakiye — kimde kaç kasa/çuval var</div>
-        {farmerList.length === 0 ? (
-          <div className="zk-empty">Henüz kasa/çuval hareketi yok.</div>
+        <input className="zk-input" style={{ marginBottom: 12, maxWidth: 320 }} placeholder="İsim, telefon veya adrese göre ara..." value={balanceQuery} onChange={(e) => setBalanceQuery(e.target.value)} />
+        {sortedFarmerList.length === 0 ? (
+          <div className="zk-empty">{farmerList.length === 0 ? 'Henüz kasa/çuval hareketi yok.' : 'Aramanızla eşleşen çiftçi bulunamadı.'}</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Çiftçi</th><th>Elindeki kasa</th><th>Elindeki çuval</th></tr></thead>
+            <thead>
+              <tr>
+                <SortableTh label="Çiftçi" sortKeyName="name" sortKey={balSortKey} sortDir={balSortDir} onSort={balToggleSort} />
+                <th>Telefon</th>
+                <th>Adres</th>
+                <SortableTh label="Elindeki kasa" sortKeyName="kasa" sortKey={balSortKey} sortDir={balSortDir} onSort={balToggleSort} />
+                <SortableTh label="Elindeki çuval" sortKeyName="cuval" sortKey={balSortKey} sortDir={balSortDir} onSort={balToggleSort} />
+              </tr>
+            </thead>
             <tbody>
-              {farmerList.map(({ farmer, balance }) => (
+              {balPaged.paged.map(({ farmer, balance }) => (
                 <tr key={farmer.id} style={{ cursor: 'pointer' }} onClick={() => setViewFarmerId(farmer.id)}>
                   <td>{farmer.name}</td>
+                  <td style={{ color: COLORS.inkSoft }}>{farmer.phone || '—'}</td>
+                  <td style={{ color: COLORS.inkSoft }}>{farmer.address || '—'}</td>
                   <td><span className={`zk-badge ${balance.kasa > 0 ? 'zk-badge-blue' : 'zk-badge-olive'}`}>{balance.kasa} adet</span></td>
                   <td><span className={`zk-badge ${balance.cuval > 0 ? 'zk-badge-gold' : 'zk-badge-olive'}`}>{balance.cuval} adet</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={balPaged.page} setPage={balPaged.setPage} pageSize={balPaged.pageSize} setPageSize={balPaged.setPageSize} totalPages={balPaged.totalPages} totalCount={balPaged.totalCount} />
+          </>
         )}
       </div>
 
@@ -4586,13 +4687,24 @@ function CrateInventoryTab({ farmers, movements, setMovements, settings, setSett
             </div>
             <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 10px', fontSize: 11.5 }} onClick={() => setViewFarmerId('')}>Kapat</button>
           </div>
-          {farmerMovements.length === 0 ? (
-            <div className="zk-empty">Hareket yok.</div>
+          <input className="zk-input" style={{ marginBottom: 12, maxWidth: 320 }} placeholder="Hareket türü veya nota göre ara..." value={moveQuery} onChange={(e) => setMoveQuery(e.target.value)} />
+          {sortedFarmerMovements.length === 0 ? (
+            <div className="zk-empty">{farmerMovementsAll.length === 0 ? 'Hareket yok.' : 'Aramanızla eşleşen hareket bulunamadı.'}</div>
           ) : (
+            <>
             <table className="zk-table">
-              <thead><tr><th>Tarih</th><th>Hareket</th><th>Adet</th><th>Depozito</th><th>Not</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <SortableTh label="Tarih" sortKeyName="date" sortKey={movSortKey} sortDir={movSortDir} onSort={movToggleSort} />
+                  <th>Hareket</th>
+                  <SortableTh label="Adet" sortKeyName="quantity" sortKey={movSortKey} sortDir={movSortDir} onSort={movToggleSort} />
+                  <SortableTh label="Depozito" sortKeyName="deposit" sortKey={movSortKey} sortDir={movSortDir} onSort={movToggleSort} />
+                  <th>Not</th>
+                  <th></th>
+                </tr>
+              </thead>
               <tbody>
-                {farmerMovements.map((m) => {
+                {movPaged.paged.map((m) => {
                   const def = CRATE_MOVEMENT_TYPES.find((t) => t.key === m.type);
                   return (
                     <tr key={m.id}>
@@ -4610,6 +4722,8 @@ function CrateInventoryTab({ farmers, movements, setMovements, settings, setSett
                 })}
               </tbody>
             </table>
+            <ListFooterControls page={movPaged.page} setPage={movPaged.setPage} pageSize={movPaged.pageSize} setPageSize={movPaged.setPageSize} totalPages={movPaged.totalPages} totalCount={movPaged.totalCount} />
+            </>
           )}
         </div>
       )}
@@ -4629,10 +4743,10 @@ function LabTab({ farmers, purchases, results, setResults }) {
   const [nem, setNem] = useState('');
   const [kalite, setKalite] = useState('');
   const [note, setNote] = useState('');
+  const [query, setQuery] = useState('');
 
   const farmerPurchases = farmerId ? purchases.filter((p) => p.farmerId === farmerId).sort((a, b) => b.createdAt - a.createdAt) : [];
 
-  const sortedResults = [...results].sort((a, b) => b.createdAt - a.createdAt);
   const avgRandiman = results.length ? mean(results.map((r) => r.randiman).filter((v) => v > 0)) : 0;
   const avgAsit = results.length ? mean(results.map((r) => r.asit).filter((v) => v > 0)) : 0;
 
@@ -4664,6 +4778,16 @@ function LabTab({ farmers, purchases, results, setResults }) {
     await storageSet('zk:labResults', next);
     if (editingId === id) resetForm();
   };
+
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('date', 'desc');
+  const withFarmer = useMemo(() => results.map((r) => ({ ...r, farmerName: farmers.find((f) => f.id === r.farmerId)?.name || '' })), [results, farmers]);
+  const filtered = useMemo(() => {
+    if (!query) return withFarmer;
+    const q = query.toLowerCase();
+    return withFarmer.filter((r) => r.farmerName.toLowerCase().includes(q) || (r.kalite || '').toLowerCase().includes(q) || (r.note || '').toLowerCase().includes(q));
+  }, [withFarmer, query]);
+  const sorted = sortRows(filtered, (r, key) => r[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sorted);
 
   return (
     <div>
@@ -4701,19 +4825,31 @@ function LabTab({ farmers, purchases, results, setResults }) {
       </div>
 
       <div className="zk-card">
-        {sortedResults.length === 0 ? (
-          <div className="zk-empty">Henüz laboratuvar sonucu yok.</div>
+        <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="Çiftçi, kalite notu veya nota göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        {sorted.length === 0 ? (
+          <div className="zk-empty">{results.length === 0 ? 'Henüz laboratuvar sonucu yok.' : 'Aramanızla eşleşen sonuç bulunamadı.'}</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Çiftçi</th><th>Alım</th><th>Randıman</th><th>Asit</th><th>Nem</th><th>Kalite</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Çiftçi" sortKeyName="farmerName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Alım</th>
+                <SortableTh label="Randıman" sortKeyName="randiman" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Asit" sortKeyName="asit" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Nem" sortKeyName="nem" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Kalite</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {sortedResults.map((r) => {
-                const f = farmers.find((x) => x.id === r.farmerId);
+              {paged.map((r) => {
                 const p = purchases.find((x) => x.id === r.purchaseId);
                 return (
                   <tr key={r.id}>
                     <td>{fmtDate(r.date)}</td>
-                    <td>{f ? f.name : '—'}</td>
+                    <td>{r.farmerName || '—'}</td>
                     <td style={{ color: COLORS.inkSoft }}>{p ? `#${p.makbuzNo}` : '—'}</td>
                     <td>{r.randiman ? `%${r.randiman}` : '—'}</td>
                     <td>{r.asit ? `%${r.asit}` : '—'}</td>
@@ -4728,6 +4864,8 @@ function LabTab({ farmers, purchases, results, setResults }) {
               })}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -5273,9 +5411,17 @@ function ShipmentsTab({ vehicles, personnel, buyers, shipments, setShipments }) 
     if (editingId === id) resetForm();
   };
 
-  const sorted = [...shipments].sort((a, b) => b.createdAt - a.createdAt);
+  const [query, setQuery] = useState('');
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('createdAt', 'desc');
   const totalKg = shipments.reduce((s, x) => s + x.kg, 0);
   const activeCount = shipments.filter((s) => s.status !== 'Teslim Edildi').length;
+  const filtered = useMemo(() => {
+    if (!query) return shipments;
+    const q = query.toLowerCase();
+    return shipments.filter((s) => (s.waybillNo || '').toLowerCase().includes(q) || (s.vehiclePlaka || '').toLowerCase().includes(q) || (s.driverName || '').toLowerCase().includes(q) || (s.buyerName || '').toLowerCase().includes(q) || (s.note || '').toLowerCase().includes(q));
+  }, [shipments, query]);
+  const sorted = sortRows(filtered, (s, key) => s[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sorted);
 
   return (
     <div>
@@ -5344,13 +5490,25 @@ function ShipmentsTab({ vehicles, personnel, buyers, shipments, setShipments }) 
       </div>
 
       <div className="zk-card">
+        <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="İrsaliye no, araç, şoför veya alıcıya göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
         {sorted.length === 0 ? (
-          <div className="zk-empty"><PackageCheck size={26} className="zk-empty-icon" /><br/>Henüz sevkiyat kaydı yok.</div>
+          <div className="zk-empty"><PackageCheck size={26} className="zk-empty-icon" /><br/>{shipments.length === 0 ? 'Henüz sevkiyat kaydı yok.' : 'Aramanızla eşleşen sevkiyat bulunamadı.'}</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>İrsaliye</th><th>Araç</th><th>Alıcı</th><th>Kg</th><th>Durum</th><th>Konum</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <SortableTh label="İrsaliye" sortKeyName="waybillNo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Araç" sortKeyName="vehiclePlaka" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Alıcı" sortKeyName="buyerName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Kg" sortKeyName="kg" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Durum" sortKeyName="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Konum</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {sorted.map((s) => (
+              {paged.map((s) => (
                 <tr key={s.id}>
                   <td>{s.waybillNo || '—'}<div style={{ fontSize: 10.5, color: COLORS.inkSoft }}>{fmtDate(s.date)}</div></td>
                   <td>{s.vehiclePlaka}<div style={{ fontSize: 10.5, color: COLORS.inkSoft }}>{s.driverName}</div></td>
@@ -5374,6 +5532,8 @@ function ShipmentsTab({ vehicles, personnel, buyers, shipments, setShipments }) 
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -5449,11 +5609,11 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   const [earnDate, setEarnDate] = useState(todayStr());
   const [earnAmount, setEarnAmount] = useState('');
   const [earnNote, setEarnNote] = useState('');
-  const [vehicleSortOrder, setVehicleSortOrder] = useState('plaka_asc');
-  const [personnelSortOrder, setPersonnelSortOrder] = useState('name_asc');
   const [vehicleQuery, setVehicleQuery] = useState('');
   const [personnelQuery, setPersonnelQuery] = useState('');
   const [personnelPayTypeFilter, setPersonnelPayTypeFilter] = useState('');
+  const { sortKey: vehSortKey, sortDir: vehSortDir, toggleSort: vehToggleSort, sortRows: vehSortRows } = useSortableColumns('plaka', 'asc');
+  const { sortKey: persSortKey, sortDir: persSortDir, toggleSort: persToggleSort, sortRows: persSortRows } = useSortableColumns('name', 'asc');
 
   const addVehicle = async (data) => {
     if (!data.plaka || !data.plaka.trim()) return;
@@ -5570,17 +5730,17 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   }, [vehicles, purchases, sales]);
 
   const sortedVehicles = useMemo(() => {
-    let arr = vehicles.filter((v) => {
+    const arr = vehicles.filter((v) => {
       if (!vehicleQuery) return true;
       const q = vehicleQuery.toLowerCase();
       return v.plaka.toLowerCase().includes(q) || (v.marka || '').toLowerCase().includes(q);
     });
-    arr = [...arr];
-    if (vehicleSortOrder === 'plaka_desc') arr.sort((a, b) => b.plaka.localeCompare(a.plaka, 'tr'));
-    else if (vehicleSortOrder === 'kg_desc') arr.sort((a, b) => (vehicleStats[b.id]?.pickupKg || 0) - (vehicleStats[a.id]?.pickupKg || 0));
-    else arr.sort((a, b) => a.plaka.localeCompare(b.plaka, 'tr'));
-    return arr;
-  }, [vehicles, vehicleSortOrder, vehicleStats, vehicleQuery]);
+    return vehSortRows(arr, (v, key) => {
+      if (key === 'pickupKg') return vehicleStats[v.id]?.pickupKg || 0;
+      if (key === 'deliveryKg') return vehicleStats[v.id]?.deliveryKg || 0;
+      return v[key];
+    });
+  }, [vehicles, vehSortRows, vehicleStats, vehicleQuery]);
   const vehiclesPaged = usePagedList(sortedVehicles);
 
   const personnelStats = useMemo(() => {
@@ -5601,22 +5761,17 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
   }, [personnel, personnelAttendance, personnelPayments]);
 
   const sortedPersonnel = useMemo(() => {
-    let arr = personnel.filter((p) => {
+    const arr = personnel.filter((p) => {
       if (personnelPayTypeFilter && (p.payType || 'yevmiye') !== personnelPayTypeFilter) return false;
       if (!personnelQuery) return true;
       const q = personnelQuery.toLowerCase();
       return p.name.toLowerCase().includes(q) || (p.role || '').toLowerCase().includes(q) || (p.phone || '').includes(personnelQuery);
     });
-    arr = [...arr];
-    if (personnelSortOrder === 'name_desc') arr.sort((a, b) => b.name.localeCompare(a.name, 'tr'));
-    else if (personnelSortOrder === 'balance_desc') arr.sort((a, b) => {
-      const balA = (wageBalances[a.id]?.earned || 0) - (wageBalances[a.id]?.paid || 0);
-      const balB = (wageBalances[b.id]?.earned || 0) - (wageBalances[b.id]?.paid || 0);
-      return balB - balA;
+    return persSortRows(arr, (p, key) => {
+      if (key === 'balance') return (wageBalances[p.id]?.earned || 0) - (wageBalances[p.id]?.paid || 0);
+      return p[key];
     });
-    else arr.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
-    return arr;
-  }, [personnel, personnelSortOrder, wageBalances, personnelQuery, personnelPayTypeFilter]);
+  }, [personnel, persSortRows, wageBalances, personnelQuery, personnelPayTypeFilter]);
   const personnelPaged = usePagedList(sortedPersonnel);
 
   const todayAttendanceIds = new Set(personnelAttendance.filter((a) => a.date === todayStr()).map((a) => a.personnelId));
@@ -5694,39 +5849,40 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
             <div className="zk-empty"><Truck size={26} className="zk-empty-icon" /><br/>{vehicles.length === 0 ? 'Henüz araç eklenmedi.' : 'Aramanızla eşleşen araç bulunamadı.'}</div>
           ) : (
             <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {vehiclesPaged.paged.map((v) => {
-                const stat = vehicleStats[v.id] || { pickups: 0, pickupKg: 0, deliveries: 0, deliveryKg: 0 };
-                const driver = personnel.find((p) => p.id === v.defaultPersonnelId);
-                return (
-                  <div key={v.id} className="zk-farmer-row">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }} onClick={() => { setSelectedVehicleId(v.id); setVehicleSubTab('overview'); }}>
-                      <div className="zk-avatar"><Truck size={16} /></div>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{v.plaka}</div>
-                        <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>
-                          {v.marka && `${v.marka} · `}{v.kapasite ? `${fmtKg(v.kapasite)} kapasite · ` : ''}{driver ? `Sürücü: ${driver.name}` : 'Sürücü atanmadı'}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="zk-badge zk-badge-olive">{fmtKg(stat.pickupKg)} topladı</span>
-                      <span className="zk-badge zk-badge-blue">{fmtKg(stat.deliveryKg)} teslim etti</span>
-                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => setEditingVehicle(v)}><Pencil size={12} /></button>
-                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeVehicle(v)}><Trash2 size={12} /></button>
-                      <ChevronRight size={16} color={COLORS.inkSoft} style={{ cursor: 'pointer' }} onClick={() => { setSelectedVehicleId(v.id); setVehicleSubTab('overview'); }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <table className="zk-table">
+              <thead>
+                <tr>
+                  <SortableTh label="Plaka" sortKeyName="plaka" sortKey={vehSortKey} sortDir={vehSortDir} onSort={vehToggleSort} />
+                  <SortableTh label="Marka" sortKeyName="marka" sortKey={vehSortKey} sortDir={vehSortDir} onSort={vehToggleSort} />
+                  <SortableTh label="Kapasite" sortKeyName="kapasite" sortKey={vehSortKey} sortDir={vehSortDir} onSort={vehToggleSort} />
+                  <th>Sürücü</th>
+                  <SortableTh label="Topladığı" sortKeyName="pickupKg" sortKey={vehSortKey} sortDir={vehSortDir} onSort={vehToggleSort} />
+                  <SortableTh label="Teslim ettiği" sortKeyName="deliveryKg" sortKey={vehSortKey} sortDir={vehSortDir} onSort={vehToggleSort} />
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {vehiclesPaged.paged.map((v) => {
+                  const stat = vehicleStats[v.id] || { pickups: 0, pickupKg: 0, deliveries: 0, deliveryKg: 0 };
+                  const driver = personnel.find((p) => p.id === v.defaultPersonnelId);
+                  return (
+                    <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => { setSelectedVehicleId(v.id); setVehicleSubTab('overview'); }}>
+                      <td style={{ fontWeight: 700 }}>{v.plaka}</td>
+                      <td style={{ color: COLORS.inkSoft }}>{v.marka || '—'}</td>
+                      <td style={{ color: COLORS.inkSoft }}>{v.kapasite ? fmtKg(v.kapasite) : '—'}</td>
+                      <td style={{ color: COLORS.inkSoft }}>{driver ? driver.name : 'Atanmadı'}</td>
+                      <td><span className="zk-badge zk-badge-olive">{fmtKg(stat.pickupKg)}</span></td>
+                      <td><span className="zk-badge zk-badge-blue">{fmtKg(stat.deliveryKg)}</span></td>
+                      <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => setEditingVehicle(v)}><Pencil size={12} /></button>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeVehicle(v)}><Trash2 size={12} /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
             <ListFooterControls
-              sortOrder={vehicleSortOrder} setSortOrder={setVehicleSortOrder}
-              sortOptions={[
-                { value: 'plaka_asc', label: 'Plaka: A → Z' },
-                { value: 'plaka_desc', label: 'Plaka: Z → A' },
-                { value: 'kg_desc', label: 'Toplanan kg: Büyük → Küçük' },
-              ]}
               page={vehiclesPaged.page} setPage={vehiclesPaged.setPage} pageSize={vehiclesPaged.pageSize} setPageSize={vehiclesPaged.setPageSize} totalPages={vehiclesPaged.totalPages} totalCount={vehiclesPaged.totalCount}
             />
             </>
@@ -5887,47 +6043,44 @@ function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, s
             <div className="zk-empty"><IdCard size={26} className="zk-empty-icon" /><br/>{personnel.length === 0 ? 'Henüz personel eklenmedi.' : 'Aramanızla eşleşen personel bulunamadı.'}</div>
           ) : (
             <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {personnelPaged.paged.map((p) => {
-                const stat = personnelStats[p.id] || { count: 0, kg: 0, amount: 0 };
-                const wage = wageBalances[p.id] || { earned: 0, paid: 0 };
-                const remaining = wage.earned - wage.paid;
-                return (
-                  <div key={p.id} className="zk-farmer-row">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }} onClick={() => setSelectedPersonnelId(p.id)}>
-                      <div className="zk-avatar">{p.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</div>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {p.name}
-                          <span className="zk-badge zk-badge-blue" style={{ fontSize: 10 }}>{p.payType === 'maas' ? 'Maaşlı' : 'Yövmiyeli'}</span>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: COLORS.inkSoft }}>
-                          {p.role && `${p.role} · `}{p.phone || 'Telefon kayıtlı değil'}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span className="zk-badge zk-badge-olive">{stat.count} alım</span>
-                      {p.payType !== 'maas' && (
-                        <span className={`zk-badge ${remaining > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
-                          {remaining > 0 ? `${fmtTL(remaining)} alacağı var` : 'Ödemesi tamam'}
-                        </span>
-                      )}
-                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => setEditingPersonnel(p)}><Pencil size={12} /></button>
-                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removePersonnel(p)}><Trash2 size={12} /></button>
-                      <ChevronRight size={16} color={COLORS.inkSoft} style={{ cursor: 'pointer' }} onClick={() => setSelectedPersonnelId(p.id)} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <table className="zk-table">
+              <thead>
+                <tr>
+                  <SortableTh label="Ad Soyad" sortKeyName="name" sortKey={persSortKey} sortDir={persSortDir} onSort={persToggleSort} />
+                  <th>Görev</th>
+                  <th>Telefon</th>
+                  <th>Tür</th>
+                  <SortableTh label="Alacağı" sortKeyName="balance" sortKey={persSortKey} sortDir={persSortDir} onSort={persToggleSort} />
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {personnelPaged.paged.map((p) => {
+                  const wage = wageBalances[p.id] || { earned: 0, paid: 0 };
+                  const remaining = wage.earned - wage.paid;
+                  return (
+                    <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedPersonnelId(p.id)}>
+                      <td style={{ fontWeight: 700 }}>{p.name}</td>
+                      <td style={{ color: COLORS.inkSoft }}>{p.role || '—'}</td>
+                      <td style={{ color: COLORS.inkSoft }}>{p.phone || '—'}</td>
+                      <td><span className="zk-badge zk-badge-blue">{p.payType === 'maas' ? 'Maaşlı' : 'Yövmiyeli'}</span></td>
+                      <td>
+                        {p.payType !== 'maas' ? (
+                          <span className={`zk-badge ${remaining > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
+                            {remaining > 0 ? fmtTL(remaining) : 'Tamam'}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => setEditingPersonnel(p)}><Pencil size={12} /></button>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removePersonnel(p)}><Trash2 size={12} /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
             <ListFooterControls
-              sortOrder={personnelSortOrder} setSortOrder={setPersonnelSortOrder}
-              sortOptions={[
-                { value: 'name_asc', label: 'İsim: A → Z' },
-                { value: 'name_desc', label: 'İsim: Z → A' },
-                { value: 'balance_desc', label: 'Alacağı: Büyük → Küçük' },
-              ]}
               page={personnelPaged.page} setPage={personnelPaged.setPage} pageSize={personnelPaged.pageSize} setPageSize={personnelPaged.setPageSize} totalPages={personnelPaged.totalPages} totalCount={personnelPaged.totalCount}
             />
             </>
