@@ -154,7 +154,7 @@ export function DashboardTab({ farmers, purchases, payments, sales, setTab }) {
       <div className="zk-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8,}}>
           <div style={{ fontSize: 13.5, fontWeight: 700 }}>Son alımlar</div>
-          <button className="zk-btn zk-btn-primary" onClick={() => setTab('purchase')}><Plus size={14} /> Yeni alım</button>
+          <button className="zk-btn zk-btn-primary" onClick={() => setTab('kantar')}><Plus size={14} /> Yeni alım</button>
         </div>
         {recent.length === 0 ? (
           <div className="zk-empty"><Package size={26} className="zk-empty-icon" /><br/>Henüz alım kaydı yok. "Yeni alım" ile başlayın.</div>
