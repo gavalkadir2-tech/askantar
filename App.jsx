@@ -28,19 +28,17 @@ import { GlobalStyle } from './components/common/index';
 import { PaymentPrintArea, PrintArea, SalePrintArea } from './components/print/PrintComponents';
 import { AccountingTab } from './components/tabs/AccountingTab';
 import { AiAssistantTab } from './components/tabs/AiAssistantTab';
-import { AllPurchasesTab } from './components/tabs/AllPurchasesTab';
+import { AlisTab } from './components/tabs/AlisTab';
 import { CariTab } from './components/tabs/CariTab';
 import { CrateInventoryTab } from './components/tabs/CrateInventoryTab';
 import { DashboardTab } from './components/tabs/DashboardTab';
 import { FleetTab } from './components/tabs/FleetTab';
 import { LabTab } from './components/tabs/LabTab';
 import { KantarTab } from './components/tabs/KantarTab';
-import { ManualPurchaseTab } from './components/tabs/ManualPurchaseTab';
 import { ReportsTab } from './components/tabs/ReportsTab';
-import { SalesHistoryTab } from './components/tabs/SalesHistoryTab';
+import { SatisTab } from './components/tabs/SatisTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { ShipmentsTab } from './components/tabs/ShipmentsTab';
-import { WarehouseTab } from './components/tabs/WarehouseTab';
 import { applyAppearance, storageGet, storageSet, todayStr, uid } from './lib/format';
 import { COLORS } from './lib/theme';
 
@@ -320,10 +318,8 @@ export default function ZeytinDefteri() {
 
     { key: 'accounting', label: 'Muhasebe', icon: Landmark, group: 'Finans' },
     { key: 'cari', label: 'Cariler', icon: Wallet, group: 'Finans' },
-    { key: 'manualPurchase', label: 'Alış', icon: Package, group: 'Finans' },
-    { key: 'allPurchases', label: 'Alış Geçmişi', icon: ListChecks, group: 'Finans' },
-    { key: 'sales', label: 'Satış', icon: ShoppingCart, group: 'Finans' },
-    { key: 'salesHistory', label: 'Satış Geçmişi', icon: ListChecks, group: 'Finans' },
+    { key: 'alis', label: 'Alış', icon: Package, group: 'Finans' },
+    { key: 'satis', label: 'Satış', icon: ShoppingCart, group: 'Finans' },
 
     { key: 'vehicles', label: 'Araçlar', icon: Truck, group: 'Filo & Personel' },
     { key: 'personnel', label: 'Personel', icon: IdCard, group: 'Filo & Personel' },
@@ -337,9 +333,9 @@ export default function ZeytinDefteri() {
 
   const ROLE_TAB_ACCESS = {
     admin: null, user: null, // null = tum sekmelere erisim
-    muhasebe: ['dashboard', 'accounting', 'cari', 'reports', 'allPurchases', 'settings'],
-    kantar: ['dashboard', 'kantar', 'manualPurchase', 'cari', 'allPurchases'],
-    depo: ['dashboard', 'kantar', 'sales', 'salesHistory', 'crates', 'lab'],
+    muhasebe: ['dashboard', 'accounting', 'cari', 'reports', 'alis', 'settings'],
+    kantar: ['dashboard', 'kantar', 'alis', 'cari'],
+    depo: ['dashboard', 'kantar', 'satis', 'crates', 'lab'],
     sevkiyat: ['dashboard', 'shipments', 'vehicles'],
   };
   const allowedTabs = ROLE_TAB_ACCESS[currentUser.role];
@@ -447,18 +443,16 @@ export default function ZeytinDefteri() {
         <div className="zk-main">
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
 
-          {tab === 'kantar' && <KantarTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} onPrintSaleReceipt={handlePrintSaleReceipt} />}
-          {tab === 'manualPurchase' && <ManualPurchaseTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} />}
+          {tab === 'kantar' && <KantarTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} onPrintSaleReceipt={handlePrintSaleReceipt} bankAccounts={bankAccounts} />}
+          {tab === 'alis' && <AlisTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} bankAccounts={bankAccounts} />}
           {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
 
           {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} onPrintPayment={handlePrintPayment} />}
           {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'allPurchases' && <AllPurchasesTab farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel} vehicles={vehicles} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'sales' && <WarehouseTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} />}
-          {tab === 'salesHistory' && <SalesHistoryTab buyers={buyers} sales={sales} setSales={setSales} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} vehicles={vehicles} />}
+          {tab === 'satis' && <SatisTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} bankAccounts={bankAccounts} />}
 
-          {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} />}
-          {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
+          {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} setSettings={setSettings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
+          {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} setSettings={setSettings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
           {tab === 'crates' && <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} settings={settings} setSettings={setSettings} />}
           {tab === 'lab' && <LabTab farmers={farmers} purchases={purchases} results={labResults} setResults={setLabResults} />}
 
