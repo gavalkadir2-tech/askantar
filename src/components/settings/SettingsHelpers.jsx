@@ -39,7 +39,7 @@ export function VarietyEditor({ variety, onChange, onRemove }) {
       {!variety.hasGrades ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12.5, color: COLORS.inkSoft }}>Kg fiyatı</span>
-          <input className="zk-input" type="number" value={variety.singlePrice || 0} onChange={(e) => setSinglePrice(e.target.value)} style={{ width: 100 }} />
+          <input className="zk-input" type="text" inputMode="decimal" value={variety.singlePrice || 0} onChange={(e) => setSinglePrice(e.target.value.replace(',', '.'))} style={{ width: 100 }} />
         </div>
       ) : (
         <>
@@ -47,7 +47,7 @@ export function VarietyEditor({ variety, onChange, onRemove }) {
             {variety.grades.map((g) => (
               <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ flex: 1, fontSize: 12.5 }}>{g.name}</span>
-                <input className="zk-input" type="number" value={g.price} onChange={(e) => updateGradePrice(g.id, e.target.value)} style={{ width: 85 }} />
+                <input className="zk-input" type="text" inputMode="decimal" value={g.price} onChange={(e) => updateGradePrice(g.id, e.target.value.replace(',', '.'))} style={{ width: 85 }} />
                 <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 7px' }} onClick={() => removeGradeRow(g.id)}><X size={11} /></button>
               </div>
             ))}
@@ -55,7 +55,7 @@ export function VarietyEditor({ variety, onChange, onRemove }) {
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <input className="zk-input" value={newGradeName} onChange={(e) => setNewGradeName(e.target.value)} placeholder="örn. 1 Numara" style={{ fontSize: 12.5 }} />
-            <input className="zk-input" type="number" value={newGradePrice} onChange={(e) => setNewGradePrice(e.target.value)} placeholder="Fiyat" style={{ width: 80 }} />
+            <input className="zk-input" type="text" inputMode="decimal" value={newGradePrice} onChange={(e) => setNewGradePrice(e.target.value.replace(',', '.'))} placeholder="Fiyat" style={{ width: 80 }} />
             <button className="zk-btn zk-btn-secondary" style={{ padding: '6px 10px' }} onClick={addGradeRow}><Plus size={12} /></button>
           </div>
         </>
@@ -117,7 +117,7 @@ export function TaxRateList({ rates, onChange }) {
       </table>
       <div style={{ display: 'flex', gap: 8 }}>
         <input className="zk-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ad (örn. KDV %8)" style={{ flex: 2 }} />
-        <input className="zk-input" type="number" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="Oran" style={{ flex: 1 }} />
+        <input className="zk-input" type="text" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value.replace(',', '.'))} placeholder="Oran" style={{ flex: 1 }} />
         <button className="zk-btn zk-btn-gold" onClick={add}><Plus size={13} /></button>
       </div>
     </div>
@@ -195,4 +195,3 @@ export function ExcelFarmerImport({ farmers, setFarmers }) {
     </div>
   );
 }
-
