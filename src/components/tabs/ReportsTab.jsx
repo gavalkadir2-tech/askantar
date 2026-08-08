@@ -363,7 +363,18 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
         ) : (
           <>
           <table className="zk-table">
-            <thead><tr><th>#</th><th>Çiftçi</th><th>Teslimat</th><th>Toplam kg</th><th>Ort. teslimat</th><th>Ort. fiyat</th><th>Toplam ödeme</th><th>Son teslimat</th></tr></thead>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Çiftçi</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setPerfSortOrder('count_desc')}>Teslimat {perfSortOrder === 'count_desc' && '↓'}</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setPerfSortOrder('kg_desc')}>Toplam kg {perfSortOrder === 'kg_desc' && '↓'}</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setPerfSortOrder('avgDelivery_desc')}>Ort. teslimat {perfSortOrder === 'avgDelivery_desc' && '↓'}</th>
+                <th>Ort. fiyat</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setPerfSortOrder('amount_desc')}>Toplam ödeme {perfSortOrder === 'amount_desc' && '↓'}</th>
+                <th>Son teslimat</th>
+              </tr>
+            </thead>
             <tbody>
               {supplierPerfPaged.paged.map((row, i) => {
                 const rank = (supplierPerfPaged.page - 1) * 10 + i + 1;
@@ -410,7 +421,17 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
         ) : (
           <>
           <table className="zk-table">
-            <thead><tr><th>#</th><th>Personel</th><th>Alım sayısı</th><th>Toplandığı kg</th><th>Çiftçilere ödenen</th><th>Kalan alacağı</th><th>Son alım</th></tr></thead>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Personel</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setPersonnelPerfSortOrder('count_desc')}>Alım sayısı {personnelPerfSortOrder === 'count_desc' && '↓'}</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setPersonnelPerfSortOrder('kg_desc')}>Toplandığı kg {personnelPerfSortOrder === 'kg_desc' && '↓'}</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setPersonnelPerfSortOrder('amount_desc')}>Çiftçilere ödenen {personnelPerfSortOrder === 'amount_desc' && '↓'}</th>
+                <th>Kalan alacağı</th>
+                <th>Son alım</th>
+              </tr>
+            </thead>
             <tbody>
               {personnelPerfPaged.paged.map((row, i) => {
                 const rank = (personnelPerfPaged.page - 1) * 10 + i + 1;
@@ -459,7 +480,17 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
         ) : (
           <>
           <table className="zk-table">
-            <thead><tr><th>#</th><th>Plaka</th><th>Alım sefer</th><th>Topladığı kg</th><th>Satış sefer</th><th>Teslim ettiği kg</th><th>Son alım</th></tr></thead>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Plaka</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setVehiclePerfSortOrder('trips_desc')}>Alım sefer {vehiclePerfSortOrder === 'trips_desc' && '↓'}</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setVehiclePerfSortOrder('kg_desc')}>Topladığı kg {vehiclePerfSortOrder === 'kg_desc' && '↓'}</th>
+                <th>Satış sefer</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setVehiclePerfSortOrder('delivery_desc')}>Teslim ettiği kg {vehiclePerfSortOrder === 'delivery_desc' && '↓'}</th>
+                <th>Son alım</th>
+              </tr>
+            </thead>
             <tbody>
               {vehiclePerfPaged.paged.map((row, i) => {
                 const rank = (vehiclePerfPaged.page - 1) * 10 + i + 1;
