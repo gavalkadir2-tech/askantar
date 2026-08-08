@@ -66,12 +66,15 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
   const costByGrade = useMemo(() => {
     const sums = {};
     purchases.forEach((p) => {
-      const commissionPerKg = parseFloat(p.commissionRate) || 0;
+      const commissionRatePct = p.noDeduction ? 0 : (parseFloat(p.commissionRate) || 0);
       (p.items || []).forEach((it) => {
         if (!it.grade) return;
         const kgVal = parseFloat(it.kg) || 0;
         if (kgVal <= 0) return;
-        const costPerKg = (parseFloat(it.pricePerKg) || 0) + commissionPerKg;
+        const basePrice = parseFloat(it.pricePerKg) || 0;
+        // Komisyon oran (%) olarak saklanır, TL karşılığı fiyatın yüzdesi kadardır.
+        // Örnek: alış 100 TL, komisyon %6 ise satış önerisi 100 + (100*%6) = 106 TL.
+        const costPerKg = basePrice * (1 + commissionRatePct / 100);
         if (!sums[it.grade]) sums[it.grade] = { kg: 0, cost: 0 };
         sums[it.grade].kg += kgVal;
         sums[it.grade].cost += kgVal * costPerKg;
