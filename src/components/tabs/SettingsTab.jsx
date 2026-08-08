@@ -32,6 +32,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
   const [cariRiskWarningDays, setCariRiskWarningDays] = useState(settings.cariRiskWarningDays ?? 20);
   const [maintenanceWarningKm, setMaintenanceWarningKm] = useState(settings.maintenanceWarningKm ?? 500);
   const [openingCashBalance, setOpeningCashBalance] = useState(settings.openingCashBalance ?? 0);
+  const [saleCommissionPerKg, setSaleCommissionPerKg] = useState(settings.saleCommissionPerKg ?? 0);
 
   const [logo, setLogo] = useState(settings.logo || '');
   const [businessName, setBusinessName] = useState(settings.businessName || '');
@@ -79,6 +80,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     aiVoiceEnabled,
     groqApiKey,
     openingCashBalance: parseFloat(openingCashBalance) || 0,
+    saleCommissionPerKg: parseFloat(saleCommissionPerKg) || 0,
   });
 
   const save = async () => {
@@ -253,6 +255,18 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
               <div style={{ maxWidth: 240 }}>
                 <label className="zk-label">Açılış bakiyesi (TL)</label>
                 <input className="zk-input" type="text" inputMode="decimal" value={openingCashBalance} onChange={(e) => setOpeningCashBalance(e.target.value.replace(',', '.'))} />
+              </div>
+            </div>
+
+            <div className="zk-card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>💵 Satış komisyonu (kg başına sabit TL)</div>
+              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 12 }}>
+                Satış formunda bir sınıf seçildiğinde önerilen kg fiyatı = o sınıfın ortalama alış fiyatı + bu sabit tutar.
+                Örneğin alış 100 TL, bu değer 6 TL ise öneri 106 TL; alış 70 TL ise öneri 76 TL olur.
+              </div>
+              <div style={{ maxWidth: 240 }}>
+                <label className="zk-label">Kg başına komisyon (TL)</label>
+                <input className="zk-input" type="text" inputMode="decimal" value={saleCommissionPerKg} onChange={(e) => setSaleCommissionPerKg(e.target.value.replace(',', '.'))} placeholder="6" />
               </div>
             </div>
 

@@ -63,27 +63,32 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
     return Array.from(grades).map((g) => ({ grade: g, stock: (purchasedByGrade[g] || 0) - (soldByGrade[g] || 0) })).sort((a, b) => b.stock - a.stock);
   }, [purchasedByGrade, soldByGrade]);
 
-  const costByGrade = useMemo(() => {
+  // Her sinif icin agirlikli ortalama alis fiyati + sabit TL komisyon (satis
+  // onerisi). Komisyon oran degil, Ayarlar'da girilen SABIT TL/kg tutarıdır.
+  // Ornek: alis 100 TL, komisyon 6 TL ise oneri 106 TL; alis 70 TL ise 76 TL.
+  const saleCommissionPerKg = parseFloat(settings?.saleCommissionPerKg) || 0;
+  const avgCostByGrade = useMemo(() => {
     const sums = {};
     purchases.forEach((p) => {
-      const commissionRatePct = p.noDeduction ? 0 : (parseFloat(p.commissionRate) || 0);
       (p.items || []).forEach((it) => {
         if (!it.grade) return;
         const kgVal = parseFloat(it.kg) || 0;
         if (kgVal <= 0) return;
         const basePrice = parseFloat(it.pricePerKg) || 0;
-        // Komisyon oran (%) olarak saklanır, TL karşılığı fiyatın yüzdesi kadardır.
-        // Örnek: alış 100 TL, komisyon %6 ise satış önerisi 100 + (100*%6) = 106 TL.
-        const costPerKg = basePrice * (1 + commissionRatePct / 100);
         if (!sums[it.grade]) sums[it.grade] = { kg: 0, cost: 0 };
         sums[it.grade].kg += kgVal;
-        sums[it.grade].cost += kgVal * costPerKg;
+        sums[it.grade].cost += kgVal * basePrice;
       });
     });
     const map = {};
     Object.keys(sums).forEach((g) => { map[g] = sums[g].kg > 0 ? sums[g].cost / sums[g].kg : 0; });
     return map;
   }, [purchases]);
+  const costByGrade = useMemo(() => {
+    const map = {};
+    Object.keys(avgCostByGrade).forEach((g) => { map[g] = avgCostByGrade[g] + saleCommissionPerKg; });
+    return map;
+  }, [avgCostByGrade, saleCommissionPerKg]);
 
   const handleGradeChange = (value) => {
     setGrade(value);
@@ -214,7 +219,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
               <input className="zk-input" type="text" inputMode="decimal" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value.replace(',', '.'))} placeholder="0.00" />
               {grade && costByGrade[grade] > 0 && (
                 <div style={{ fontSize: 10.5, color: COLORS.inkSoft, marginTop: 3 }}>
-                  Alış + komisyona göre önerilen: {costByGrade[grade].toFixed(2)} ₺ — isterseniz değiştirebilirsiniz.
+                  Alış ort. {avgCostByGrade[grade]?.toFixed(2)} ₺ + komisyon {saleCommissionPerKg.toFixed(2)} ₺ = önerilen {costByGrade[grade].toFixed(2)} ₺ — isterseniz değiştirebilirsiniz.
                 </div>
               )}
             </div>

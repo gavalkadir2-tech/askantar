@@ -74,27 +74,32 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
       .sort((a, b) => b.stock - a.stock);
   }, [purchasedByGrade, soldByGrade, addedByGrade]);
 
-  // Her sinif icin agirlikli ortalama alis fiyati + komisyon (satis onerisi).
-  // Ornek: alis 100 TL, komisyon %6 ise oneri 100 + (100*%6) = 106 TL.
-  const costByGrade = useMemo(() => {
+  // Her sinif icin agirlikli ortalama alis fiyati + sabit TL komisyon (satis
+  // onerisi). Komisyon oran degil, Ayarlar'da girilen SABIT TL/kg tutarıdır.
+  // Ornek: alis 100 TL, komisyon 6 TL ise oneri 106 TL; alis 70 TL ise 76 TL.
+  const saleCommissionPerKg = parseFloat(settings?.saleCommissionPerKg) || 0;
+  const avgCostByGrade = useMemo(() => {
     const sums = {};
     purchases.forEach((p) => {
-      const commissionRatePct = p.noDeduction ? 0 : (parseFloat(p.commissionRate) || 0);
       (p.items || []).forEach((it) => {
         if (!it.grade) return;
         const kgVal = parseFloat(it.kg) || 0;
         if (kgVal <= 0) return;
         const basePrice = parseFloat(it.pricePerKg) || 0;
-        const costPerKg = basePrice * (1 + commissionRatePct / 100);
         if (!sums[it.grade]) sums[it.grade] = { kg: 0, cost: 0 };
         sums[it.grade].kg += kgVal;
-        sums[it.grade].cost += kgVal * costPerKg;
+        sums[it.grade].cost += kgVal * basePrice;
       });
     });
     const map = {};
     Object.keys(sums).forEach((g) => { map[g] = sums[g].kg > 0 ? sums[g].cost / sums[g].kg : 0; });
     return map;
   }, [purchases]);
+  const costByGrade = useMemo(() => {
+    const map = {};
+    Object.keys(avgCostByGrade).forEach((g) => { map[g] = avgCostByGrade[g] + saleCommissionPerKg; });
+    return map;
+  }, [avgCostByGrade, saleCommissionPerKg]);
 
   useEffect(() => {
     const suggested = costByGrade[lineGrade];
@@ -266,7 +271,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
               <input className="zk-input" type="text" inputMode="decimal" value={linePrice} onChange={(e) => setLinePrice(e.target.value.replace(',', '.'))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
               {lineGrade && costByGrade[lineGrade] > 0 && (
                 <div style={{ fontSize: 10.5, color: COLORS.inkSoft, marginTop: 3 }}>
-                  Alış + komisyon: {costByGrade[lineGrade].toFixed(2)} ₺
+                  Alış ort. {avgCostByGrade[lineGrade]?.toFixed(2)} ₺ + komisyon {saleCommissionPerKg.toFixed(2)} ₺
                 </div>
               )}
             </div>
