@@ -279,7 +279,7 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onCl
 
   const netKg = items.reduce((s, it) => s + (parseFloat(it.kg) || 0), 0);
   const amount = items.reduce((s, it) => s + (parseFloat(it.kg) || 0) * (parseFloat(it.pricePerKg) || 0), 0);
-  const commissionAmount = purchase.noDeduction ? 0 : amount * (parseFloat(commissionRate) || 0) / 100;
+  const commissionAmount = purchase.noDeduction ? 0 : netKg * (parseFloat(commissionRate) || 0);
   const stopajTutari = purchase.noDeduction ? 0 : (amount - commissionAmount) * (parseFloat(stopajOrani) || 0) / 100;
   const bagkurTutari = purchase.applyBagkur && !purchase.noDeduction ? amount * (purchase.bagkurRate || 0) / 100 : (purchase.bagkurTutari || 0);
   const netPayment = amount - commissionAmount - stopajTutari - bagkurTutari - (parseFloat(hammaliyeTutari) || 0) - (parseFloat(nakliyeTutari) || 0) - (parseFloat(cuvalKesintisi) || 0) - (purchase.fireTutari || 0);
@@ -352,8 +352,8 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onCl
         {!purchase.noDeduction && (
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
-              <label className="zk-label">Komisyon oranı (%)</label>
-              <input className="zk-input" type="number" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} />
+              <label className="zk-label">Komisyon (₺/kg)</label>
+              <input className="zk-input" type="number" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} />
             </div>
             <div>
               <label className="zk-label">Stopaj oranı (%)</label>
@@ -409,4 +409,3 @@ export function BuyerQuickForm({ onSave }) {
     </>
   );
 }
-
