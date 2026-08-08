@@ -9,12 +9,9 @@ import {
   Pencil,
   Landmark,
   CreditCard,
-  ChevronUp,
-  ChevronDown,
-  ArrowUpDown,
 } from 'lucide-react';
-import { ExpiryBadge, ListFooterControls, Modal, SortableTh, StatCard } from '../common/index';
-import { usePagedList, useSortableColumns } from '../../hooks/index';
+import { ExpiryBadge, ListFooterControls, Modal, StatCard } from '../common/index';
+import { usePagedList } from '../../hooks/index';
 import { fmtDate, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppPaymentText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -25,10 +22,8 @@ export function BankAccountsSection({ accounts, setAccounts }) {
   const [accountName, setAccountName] = useState('');
   const [iban, setIban] = useState('');
   const [balance, setBalance] = useState('');
-  const { sortKey: bankSortKey, sortDir: bankSortDir, toggleSort: bankToggleSort, sortRows: bankSortRows } = useSortableColumns();
 
   const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
-  const sortedAccounts = bankSortRows(accounts, (a, key) => a[key]);
 
   const resetForm = () => { setEditingId(null); setBankName(''); setAccountName(''); setIban(''); setBalance(''); };
   const startEdit = (a) => { setEditingId(a.id); setBankName(a.bankName); setAccountName(a.accountName || ''); setIban(a.iban || ''); setBalance(String(a.balance)); };
@@ -67,7 +62,7 @@ export function BankAccountsSection({ accounts, setAccounts }) {
           <input className="zk-input" placeholder="Banka adı" style={{ flex: '1 1 140px' }} value={bankName} onChange={(e) => setBankName(e.target.value)} />
           <input className="zk-input" placeholder="Hesap adı (opsiyonel)" style={{ flex: '1 1 140px' }} value={accountName} onChange={(e) => setAccountName(e.target.value)} />
           <input className="zk-input" placeholder="IBAN (opsiyonel)" style={{ flex: '2 1 200px' }} value={iban} onChange={(e) => setIban(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Bakiye (TL)" style={{ flex: '1 1 120px' }} value={balance} onChange={(e) => setBalance(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Bakiye (TL)" style={{ flex: '1 1 120px' }} value={balance} onChange={(e) => setBalance(e.target.value.replace(',', '.'))} />
           <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
           {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
         </div>
@@ -77,17 +72,9 @@ export function BankAccountsSection({ accounts, setAccounts }) {
           <div className="zk-empty">Henüz banka hesabı yok.</div>
         ) : (
           <table className="zk-table">
-            <thead>
-              <tr>
-                <SortableTh label="Banka" sortKeyName="bankName" sortKey={bankSortKey} sortDir={bankSortDir} onSort={bankToggleSort} />
-                <th>Hesap adı</th>
-                <th>IBAN</th>
-                <SortableTh label="Bakiye" sortKeyName="balance" sortKey={bankSortKey} sortDir={bankSortDir} onSort={bankToggleSort} />
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Banka</th><th>Hesap adı</th><th>IBAN</th><th>Bakiye</th><th></th></tr></thead>
             <tbody>
-              {sortedAccounts.map((a) => (
+              {accounts.map((a) => (
                 <tr key={a.id}>
                   <td>{a.bankName}</td>
                   <td style={{ color: COLORS.inkSoft }}>{a.accountName || '—'}</td>
@@ -145,15 +132,7 @@ export function ChecksNotesSection({ items, setItems }) {
     if (editingId === id) resetForm();
   };
 
-  const [query, setQuery] = useState('');
-  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('dueDate', 'asc');
-  const filtered = useMemo(() => {
-    if (!query) return items;
-    const q = query.toLowerCase();
-    return items.filter((i) => i.party.toLowerCase().includes(q) || (i.note || '').toLowerCase().includes(q));
-  }, [items, query]);
-  const sorted = sortRows(filtered, (i, key) => i[key]);
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sorted);
+  const sorted = [...items].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
 
   return (
     <div>
@@ -173,7 +152,7 @@ export function ChecksNotesSection({ items, setItems }) {
             <option value="verilen">Verilen</option>
           </select>
           <input className="zk-input" placeholder="Kimden/kime" style={{ flex: '2 1 160px' }} value={party} onChange={(e) => setParty(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 110px' }} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ flex: '1 1 110px' }} value={amount} onChange={(e) => setAmount(e.target.value.replace(',', '.'))} />
           <input className="zk-input" type="date" placeholder="Vade" style={{ flex: '1 1 130px' }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           <select className="zk-select" style={{ flex: '1 1 130px' }} value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="Bekliyor">Bekliyor</option>
@@ -186,25 +165,13 @@ export function ChecksNotesSection({ items, setItems }) {
         </div>
       </div>
       <div className="zk-card">
-        <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="Kimden/kime veya nota göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
         {sorted.length === 0 ? (
-          <div className="zk-empty">{items.length === 0 ? 'Henüz çek/senet kaydı yok.' : 'Aramanızla eşleşen kayıt bulunamadı.'}</div>
+          <div className="zk-empty">Henüz çek/senet kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <th>Tür</th>
-                <th>Yön</th>
-                <SortableTh label="Kimden/kime" sortKeyName="party" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Tutar" sortKeyName="amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Vade" sortKeyName="dueDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Durum</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Tür</th><th>Yön</th><th>Kimden/kime</th><th>Tutar</th><th>Vade</th><th>Durum</th><th></th></tr></thead>
             <tbody>
-              {paged.map((i) => (
+              {sorted.map((i) => (
                 <tr key={i.id}>
                   <td><span className="zk-badge zk-badge-blue">{i.type === 'çek' ? 'Çek' : 'Senet'}</span></td>
                   <td>{i.direction === 'alınan' ? 'Alınan' : 'Verilen'}</td>
@@ -222,8 +189,6 @@ export function ChecksNotesSection({ items, setItems }) {
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
-          </>
         )}
       </div>
     </div>
@@ -362,7 +327,7 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
               <option value="avans">Avans</option>
             </select>
           )}
-          <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 130px' }} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ flex: '1 1 130px' }} value={amount} onChange={(e) => setAmount(e.target.value.replace(',', '.'))} />
           <input className="zk-input" placeholder="Not (opsiyonel)" style={{ flex: '1 1 150px' }} value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="zk-btn zk-btn-primary" disabled={!canSave} onClick={save}>Kaydet</button>
         </div>
@@ -376,16 +341,7 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
         ) : (
           <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder(sortOrder === 'date_asc' ? 'date_desc' : 'date_asc')}>Tarih {sortOrder === 'date_asc' ? <ChevronUp size={12} /> : sortOrder === 'date_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
-                <th>Tür</th>
-                <th>Kişi/firma</th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('amount_desc')}>Tutar {sortOrder === 'amount_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
-                <th>Not</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Tarih</th><th>Tür</th><th>Kişi/firma</th><th>Tutar</th><th>Not</th><th></th></tr></thead>
             <tbody>
               {paged.map((row) => {
                 const waPhone = formatPhoneForWhatsApp(row.partyPhone);
@@ -446,7 +402,7 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
           )}
           <div style={{ marginBottom: 12 }}>
             <label className="zk-label">Tutar (TL)</label>
-            <input className="zk-input" type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+            <input className="zk-input" type="text" inputMode="decimal" value={editAmount} onChange={(e) => setEditAmount(e.target.value.replace(',', '.'))} />
           </div>
           <div style={{ marginBottom: 18 }}>
             <label className="zk-label">Not</label>
