@@ -10,9 +10,8 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { ListFooterControls, Modal, StatCard } from '../common/index';
+import { Modal, StatCard } from '../common/index';
 import { AddVehicleModal } from '../modals/index';
-import { usePagedList } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppSaleReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -43,16 +42,6 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
   const totalSoldKg = sales.reduce((s, s2) => s + s2.kg, 0);
   const currentStock = totalPurchasedKg - totalSoldKg;
 
-  // Hook kurallarina uymak icin (kosullu render icinde degil, ustte
-  // kosulsuz cagriliyor) alici hareketleri burada hesaplaniyor.
-  const buyerMovements = useMemo(() => {
-    if (!viewingBuyerId) return [];
-    const bs = sales.filter((s) => s.buyerId === viewingBuyerId).map((s) => ({ ...s, kind: 'satış' }));
-    const bc = (buyerPayments || []).filter((p) => p.buyerId === viewingBuyerId).map((p) => ({ ...p, kind: 'tahsilat' }));
-    return [...bs, ...bc].sort((a, b) => b.createdAt - a.createdAt);
-  }, [viewingBuyerId, sales, buyerPayments]);
-  const buyerMovementsPaged = usePagedList(buyerMovements);
-
   const purchasedByGrade = useMemo(() => {
     const map = {};
     purchases.forEach((p) => {
@@ -71,6 +60,31 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
     const grades = new Set([...Object.keys(purchasedByGrade), ...Object.keys(soldByGrade)]);
     return Array.from(grades).map((g) => ({ grade: g, stock: (purchasedByGrade[g] || 0) - (soldByGrade[g] || 0) })).sort((a, b) => b.stock - a.stock);
   }, [purchasedByGrade, soldByGrade]);
+
+  const costByGrade = useMemo(() => {
+    const sums = {};
+    purchases.forEach((p) => {
+      const commissionPerKg = parseFloat(p.commissionRate) || 0;
+      (p.items || []).forEach((it) => {
+        if (!it.grade) return;
+        const kgVal = parseFloat(it.kg) || 0;
+        if (kgVal <= 0) return;
+        const costPerKg = (parseFloat(it.pricePerKg) || 0) + commissionPerKg;
+        if (!sums[it.grade]) sums[it.grade] = { kg: 0, cost: 0 };
+        sums[it.grade].kg += kgVal;
+        sums[it.grade].cost += kgVal * costPerKg;
+      });
+    });
+    const map = {};
+    Object.keys(sums).forEach((g) => { map[g] = sums[g].kg > 0 ? sums[g].cost / sums[g].kg : 0; });
+    return map;
+  }, [purchases]);
+
+  const handleGradeChange = (value) => {
+    setGrade(value);
+    const suggested = costByGrade[value];
+    if (suggested) setPricePerKg((Math.round(suggested * 100) / 100).toString());
+  };
 
   const availableForGrade = grade ? (purchasedByGrade[grade] || 0) - (soldByGrade[grade] || 0) : 0;
   const amount = (parseFloat(kg) || 0) * (parseFloat(pricePerKg) || 0);
@@ -177,7 +191,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
           </div>
           <div style={{ marginBottom: 10 }}>
             <label className="zk-label">Sınıf / numara</label>
-            <select className="zk-select" value={grade} onChange={(e) => setGrade(e.target.value)}>
+            <select className="zk-select" value={grade} onChange={(e) => handleGradeChange(e.target.value)}>
               <option value="">Seçin...</option>
               {stockByGrade.filter((g) => g.stock > 0.01).map((g) => <option key={g.grade} value={g.grade}>{g.grade} · stokta {fmtKg(g.stock)}</option>)}
             </select>
@@ -190,6 +204,11 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
             <div>
               <label className="zk-label">Kg fiyatı (TL)</label>
               <input className="zk-input" type="number" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value)} placeholder="0.00" />
+              {grade && costByGrade[grade] > 0 && (
+                <div style={{ fontSize: 10.5, color: COLORS.inkSoft, marginTop: 3 }}>
+                  Alış + komisyona göre önerilen: {costByGrade[grade].toFixed(2)} ₺ — isterseniz değiştirebilirsiniz.
+                </div>
+              )}
             </div>
           </div>
           <div style={{ marginBottom: 10 }}>
@@ -280,27 +299,25 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
               <button className="zk-btn zk-btn-primary" onClick={addDetailCollection}>Ekle</button>
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Hareketler</div>
-            {buyerMovements.length === 0 ? (
+            {[...buyerSales.map((s) => ({ ...s, kind: 'satış' })), ...buyerColls.map((c) => ({ ...c, kind: 'tahsilat' }))]
+              .sort((a, b) => b.createdAt - a.createdAt).length === 0 ? (
               <div className="zk-empty">Henüz hareket yok.</div>
             ) : (
-              <>
               <table className="zk-table">
                 <thead><tr><th>Tarih</th><th>Tür</th><th>Tutar</th><th>Not</th></tr></thead>
                 <tbody>
-                  {buyerMovementsPaged.paged.map((row) => (
-                    <tr key={`${row.kind}-${row.id}`}>
-                      <td>{fmtDate(row.date)}</td>
-                      <td><span className={`zk-badge ${row.kind === 'satış' ? 'zk-badge-blue' : 'zk-badge-olive'}`}>{row.kind === 'satış' ? 'Satış' : 'Tahsilat'}</span></td>
-                      <td style={{ fontWeight: 600 }}>{row.kind === 'satış' ? fmtTL(row.amount) : `− ${fmtTL(row.amount)}`}</td>
-                      <td style={{ color: COLORS.inkSoft }}>{row.note || (row.kind === 'satış' ? row.grade : '') || '—'}</td>
-                    </tr>
-                  ))}
+                  {[...buyerSales.map((s) => ({ ...s, kind: 'satış' })), ...buyerColls.map((c) => ({ ...c, kind: 'tahsilat' }))]
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .map((row) => (
+                      <tr key={`${row.kind}-${row.id}`}>
+                        <td>{fmtDate(row.date)}</td>
+                        <td><span className={`zk-badge ${row.kind === 'satış' ? 'zk-badge-blue' : 'zk-badge-olive'}`}>{row.kind === 'satış' ? 'Satış' : 'Tahsilat'}</span></td>
+                        <td style={{ fontWeight: 600 }}>{row.kind === 'satış' ? fmtTL(row.amount) : `− ${fmtTL(row.amount)}`}</td>
+                        <td style={{ color: COLORS.inkSoft }}>{row.note || (row.kind === 'satış' ? row.grade : '') || '—'}</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
-              <ListFooterControls
-                page={buyerMovementsPaged.page} setPage={buyerMovementsPaged.setPage} pageSize={buyerMovementsPaged.pageSize} setPageSize={buyerMovementsPaged.setPageSize} totalPages={buyerMovementsPaged.totalPages} totalCount={buyerMovementsPaged.totalCount}
-              />
-              </>
             )}
           </div>
         );
