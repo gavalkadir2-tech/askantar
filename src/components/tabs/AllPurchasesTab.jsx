@@ -8,13 +8,10 @@ import {
   MessageCircle,
   Trash2,
   Pencil,
-  ChevronUp,
-  ChevronDown,
-  ArrowUpDown,
 } from 'lucide-react';
-import { ListFooterControls } from '../common/index';
+import { ListFooterControls, SortableTh } from '../common/index';
 import { EditPurchaseModal } from '../modals/index';
-import { usePagedList } from '../../hooks/index';
+import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -24,29 +21,34 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
   const [farmerFilter, setFarmerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [sortOrder, setSortOrder] = useState('date_desc');
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('date', 'desc');
+
+  const withNames = useMemo(() => purchases.map((p) => ({
+    ...p,
+    farmerName: farmers.find((x) => x.id === p.farmerId)?.name || '',
+    gradesLabel: (p.items || []).map((it) => it.grade).join(', '),
+  })), [purchases, farmers]);
 
   const filtered = useMemo(() => {
-    const arr = purchases.filter((p) => {
+    const arr = withNames.filter((p) => {
       if (farmerFilter && p.farmerId !== farmerFilter) return false;
       if (fromDate && p.date < fromDate) return false;
       if (toDate && p.date > toDate) return false;
       if (query) {
-        const f = farmers.find((x) => x.id === p.farmerId);
-        const haystack = [
-          f?.name || '', p.note || '', String(p.makbuzNo),
-          ...(p.items || []).map((it) => it.grade),
-        ].join(' ').toLowerCase();
+        const haystack = [p.farmerName, p.note || '', String(p.makbuzNo), p.gradesLabel].join(' ').toLowerCase();
         if (!haystack.includes(query.toLowerCase())) return false;
       }
       return true;
     });
-    if (sortOrder === 'date_asc') arr.sort((a, b) => a.createdAt - b.createdAt);
-    else if (sortOrder === 'kg_desc') arr.sort((a, b) => b.netKg - a.netKg);
-    else if (sortOrder === 'amount_desc') arr.sort((a, b) => b.netPayment - a.netPayment);
-    else arr.sort((a, b) => b.createdAt - a.createdAt);
-    return arr;
-  }, [purchases, farmerFilter, fromDate, toDate, query, farmers, sortOrder]);
+    return sortRows(arr, (p, key) => {
+      if (key === 'date') return p.createdAt;
+      if (key === 'makbuzNo') return p.makbuzNo;
+      if (key === 'farmerName') return p.farmerName;
+      if (key === 'personnelName') return p.personnelName;
+      if (key === 'vehiclePlaka') return p.vehiclePlaka;
+      return p[key];
+    });
+  }, [withNames, farmerFilter, fromDate, toDate, query, sortRows]);
 
   const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filtered);
 
@@ -97,14 +99,14 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
           <table className="zk-table">
             <thead>
               <tr>
-                <th>No</th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder(sortOrder === 'date_asc' ? 'date_desc' : 'date_asc')}>Tarih {sortOrder === 'date_asc' ? <ChevronUp size={12} /> : sortOrder === 'date_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
-                <th>Çiftçi</th>
-                <th>Personel</th>
-                <th>Araç</th>
+                <SortableTh label="No" sortKeyName="makbuzNo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Çiftçi" sortKeyName="farmerName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Personel" sortKeyName="personnelName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Araç" sortKeyName="vehiclePlaka" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <th>Sınıflar</th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('kg_desc')}>Net kg {sortOrder === 'kg_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('amount_desc')}>Net ödeme {sortOrder === 'amount_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
+                <SortableTh label="Net kg" sortKeyName="netKg" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Net ödeme" sortKeyName="netPayment" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <th></th>
               </tr>
             </thead>
@@ -119,7 +121,7 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
                     <td>{f ? f.name : '—'}</td>
                     <td style={{ color: COLORS.inkSoft }}>{p.personnelName || '—'}</td>
                     <td style={{ color: COLORS.inkSoft }}>{p.vehiclePlaka || '—'}</td>
-                    <td style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{(p.items || []).map((it) => it.grade).join(', ')}</td>
+                    <td style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{p.gradesLabel}</td>
                     <td>{fmtKg(p.netKg)}</td>
                     <td style={{ fontWeight: 600 }}>{fmtTL(p.netPayment)}</td>
                     <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
@@ -138,16 +140,7 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
               })}
             </tbody>
           </table>
-          <ListFooterControls
-            sortOrder={sortOrder} setSortOrder={setSortOrder}
-            sortOptions={[
-              { value: 'date_desc', label: 'Tarih: Yeni → Eski' },
-              { value: 'date_asc', label: 'Tarih: Eski → Yeni' },
-              { value: 'kg_desc', label: 'Kg: Büyük → Küçük' },
-              { value: 'amount_desc', label: 'Tutar: Büyük → Küçük' },
-            ]}
-            page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
-          />
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
           </>
         )}
       </div>

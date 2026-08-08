@@ -6,13 +6,10 @@ import {
   MessageCircle,
   Trash2,
   Pencil,
-  ChevronUp,
-  ChevronDown,
-  ArrowUpDown,
 } from 'lucide-react';
-import { ListFooterControls } from '../common/index';
+import { ListFooterControls, SortableTh } from '../common/index';
 import { EditSaleModal } from '../modals/index';
-import { usePagedList } from '../../hooks/index';
+import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppSaleReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -22,26 +19,30 @@ export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSale
   const [buyerFilter, setBuyerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [sortOrder, setSortOrder] = useState('date_desc');
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('date', 'desc');
+
+  const withNames = useMemo(() => sales.map((s) => ({ ...s, buyerName: buyers.find((x) => x.id === s.buyerId)?.name || '' })), [sales, buyers]);
 
   const filtered = useMemo(() => {
-    const arr = sales.filter((s) => {
+    const arr = withNames.filter((s) => {
       if (buyerFilter && s.buyerId !== buyerFilter) return false;
       if (fromDate && s.date < fromDate) return false;
       if (toDate && s.date > toDate) return false;
       if (query) {
-        const b = buyers.find((x) => x.id === s.buyerId);
-        const haystack = [b?.name || '', s.note || '', s.grade || '', s.vehiclePlaka || ''].join(' ').toLowerCase();
+        const haystack = [s.buyerName, s.note || '', s.grade || '', s.vehiclePlaka || ''].join(' ').toLowerCase();
         if (!haystack.includes(query.toLowerCase())) return false;
       }
       return true;
     });
-    if (sortOrder === 'date_asc') arr.sort((a, b) => a.createdAt - b.createdAt);
-    else if (sortOrder === 'kg_desc') arr.sort((a, b) => b.kg - a.kg);
-    else if (sortOrder === 'amount_desc') arr.sort((a, b) => b.amount - a.amount);
-    else arr.sort((a, b) => b.createdAt - a.createdAt);
-    return arr;
-  }, [sales, buyerFilter, fromDate, toDate, query, buyers, sortOrder]);
+    return sortRows(arr, (s, key) => {
+      if (key === 'date') return s.createdAt;
+      if (key === 'makbuzNo') return s.makbuzNo;
+      if (key === 'buyerName') return s.buyerName;
+      if (key === 'grade') return s.grade;
+      if (key === 'vehiclePlaka') return s.vehiclePlaka;
+      return s[key];
+    });
+  }, [withNames, buyerFilter, fromDate, toDate, query, sortRows]);
 
   const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filtered);
 
@@ -88,14 +89,14 @@ export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSale
           <table className="zk-table">
             <thead>
               <tr>
-                <th>No</th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder(sortOrder === 'date_asc' ? 'date_desc' : 'date_asc')}>Tarih {sortOrder === 'date_asc' ? <ChevronUp size={12} /> : sortOrder === 'date_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
-                <th>Alıcı</th>
-                <th>Sınıf</th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('kg_desc')}>Kg {sortOrder === 'kg_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
-                <th>Fiyat</th>
-                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('amount_desc')}>Tutar {sortOrder === 'amount_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
-                <th>Araç</th>
+                <SortableTh label="No" sortKeyName="makbuzNo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Alıcı" sortKeyName="buyerName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Sınıf" sortKeyName="grade" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Kg" sortKeyName="kg" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Fiyat" sortKeyName="pricePerKg" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Tutar" sortKeyName="amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Araç" sortKeyName="vehiclePlaka" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <th></th>
               </tr>
             </thead>
@@ -129,16 +130,7 @@ export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSale
               })}
             </tbody>
           </table>
-          <ListFooterControls
-            sortOrder={sortOrder} setSortOrder={setSortOrder}
-            sortOptions={[
-              { value: 'date_desc', label: 'Tarih: Yeni → Eski' },
-              { value: 'date_asc', label: 'Tarih: Eski → Yeni' },
-              { value: 'kg_desc', label: 'Kg: Büyük → Küçük' },
-              { value: 'amount_desc', label: 'Tutar: Büyük → Küçük' },
-            ]}
-            page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
-          />
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
           </>
         )}
       </div>
