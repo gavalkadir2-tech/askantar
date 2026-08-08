@@ -108,9 +108,13 @@ export function CashTab({ settings, setSettings, payments, expenses, cashEntries
       <div className="zk-h1">Kasa</div>
       <div className="zk-h1-sub">Nakit takibi — çiftçi ödemeleri/avanslar ve giderler otomatik düşülür</div>
 
-      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 8 }}>
         <StatCard label="Güncel kasa bakiyesi" value={fmtTL(currentBalance)} tone={currentBalance < 0 ? COLORS.red : COLORS.olive} />
         <StatCard label="Açılış bakiyesi" value={fmtTL(opening)} />
+      </div>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
+        <StatCard label="Toplam banka bakiyesi" value={fmtTL(totalBankBalance)} tone={COLORS.olive} icon={Landmark} />
+        <StatCard label="Hesap sayısı" value={(bankAccounts || []).length} />
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -163,10 +167,6 @@ export function CashTab({ settings, setSettings, payments, expenses, cashEntries
       </div>
 
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, marginTop: 22 }}>🏦 Banka Hesapları</div>
-      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
-        <StatCard label="Toplam banka bakiyesi" value={fmtTL(totalBankBalance)} tone={COLORS.olive} icon={Landmark} />
-        <StatCard label="Hesap sayısı" value={(bankAccounts || []).length} />
-      </div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingBankId ? 'Hesabı düzenle' : 'Yeni banka hesabı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
