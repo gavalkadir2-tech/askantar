@@ -14,14 +14,14 @@ export function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases
   const [grade, setGrade] = useState('');
   const [kg, setKg] = useState('');
   const [pricePerKg, setPricePerKg] = useState('');
-  const [commissionRate, setCommissionRate] = useState((settings.defaultCommissionRate ?? 3).toString());
+  const [commissionRate, setCommissionRate] = useState((settings.defaultCommissionRate ?? 0.5).toString());
   const [personnelId, setPersonnelId] = useState('');
   const [vehicleId, setVehicleId] = useState('');
   const [note, setNote] = useState('');
   const [lastSaved, setLastSaved] = useState(null);
 
   const amount = (parseFloat(kg) || 0) * (parseFloat(pricePerKg) || 0);
-  const commissionAmount = amount * (parseFloat(commissionRate) || 0) / 100;
+  const commissionAmount = (parseFloat(kg) || 0) * (parseFloat(commissionRate) || 0);
   const netPayment = amount - commissionAmount;
   const canSave = farmerId && grade.trim() && parseFloat(kg) > 0 && parseFloat(pricePerKg) > 0;
 
@@ -124,8 +124,8 @@ export function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases
           </div>
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
-              <label className="zk-label">Komisyon oranı (%)</label>
-              <input className="zk-input" type="number" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} />
+              <label className="zk-label">Komisyon (₺/kg)</label>
+              <input className="zk-input" type="number" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} placeholder="0.50" />
             </div>
             <div>
               <label className="zk-label">Personel (opsiyonel)</label>

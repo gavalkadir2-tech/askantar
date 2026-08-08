@@ -24,14 +24,13 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
   const [defaultFuelPrice, setDefaultFuelPrice] = useState(settings.defaultFuelPrice ?? '');
   const [crateWeight, setCrateWeight] = useState(settings.crateWeight ?? 2);
   const [defaultCrateCount, setDefaultCrateCount] = useState(settings.defaultCrateCount ?? 5);
-  const [defaultCommissionRate, setDefaultCommissionRate] = useState(settings.defaultCommissionRate ?? 3);
+  const [defaultCommissionRate, setDefaultCommissionRate] = useState(settings.defaultCommissionRate ?? 0.5);
   const [defaultBagkurRate, setDefaultBagkurRate] = useState(settings.defaultBagkurRate ?? 1);
   const [defaultNoDeduction, setDefaultNoDeduction] = useState(settings.defaultNoDeduction ?? true);
   const [docWarningDays, setDocWarningDays] = useState(settings.docWarningDays ?? 30);
   const [cariRiskDays, setCariRiskDays] = useState(settings.cariRiskDays ?? 45);
   const [cariRiskWarningDays, setCariRiskWarningDays] = useState(settings.cariRiskWarningDays ?? 20);
   const [maintenanceWarningKm, setMaintenanceWarningKm] = useState(settings.maintenanceWarningKm ?? 500);
-  const [openingCashBalance, setOpeningCashBalance] = useState(settings.openingCashBalance ?? 0);
 
   const [logo, setLogo] = useState(settings.logo || '');
   const [businessName, setBusinessName] = useState(settings.businessName || '');
@@ -78,7 +77,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     theme, accentColor, sidebarDensity, fontSize,
     aiVoiceEnabled,
     groqApiKey,
-    openingCashBalance: parseFloat(openingCashBalance) || 0,
+    openingCashBalance: settings.openingCashBalance ?? 0,
   });
 
   const save = async () => {
@@ -116,14 +115,13 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     await storageSet('zk:priceList', next);
   };
 
-  const [bulkMode, setBulkMode] = useState('percent');
   const [bulkValue, setBulkValue] = useState('');
   const bulkUpdatePrices = async () => {
     const v = parseFloat(bulkValue);
     if (!v && v !== 0) return;
-    if (!window.confirm(bulkMode === 'percent' ? `Tüm fiyatlar %${v} oranında değiştirilecek. Onaylıyor musunuz?` : `Tüm fiyatlara ${fmtTL(v)} eklenecek. Onaylıyor musunuz?`)) return;
+    if (!window.confirm(`Tüm fiyatlara kg başına ${fmtTL(v)} eklenecek. Onaylıyor musunuz?`)) return;
     const adjust = (price) => {
-      const newPrice = bulkMode === 'percent' ? price * (1 + v / 100) : price + v;
+      const newPrice = price + v;
       return Math.max(0, Math.round(newPrice * 100) / 100);
     };
     const next = priceList.map((variety) => {
@@ -247,17 +245,6 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
             </div>
 
             <div className="zk-card">
-              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>💰 Nakit kasa açılış bakiyesi</div>
-              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 12 }}>
-                Muhasebe → Kasa sayfasındaki güncel bakiye hesaplaması bu değerden başlar.
-              </div>
-              <div style={{ maxWidth: 240 }}>
-                <label className="zk-label">Açılış bakiyesi (TL)</label>
-                <input className="zk-input" type="number" value={openingCashBalance} onChange={(e) => setOpeningCashBalance(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="zk-card">
               <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Kasa / dara</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: 14 }}>
                 <div>
@@ -279,8 +266,8 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
               <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 14 }}>Yeni alım ekranı her açıldığında bu değerlerle başlar, siz orada değiştirebilirsiniz.</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: 14 }}>
                 <div>
-                  <label className="zk-label">Varsayılan komisyon oranı (%)</label>
-                  <input className="zk-input" type="number" value={defaultCommissionRate} onChange={(e) => setDefaultCommissionRate(e.target.value)} placeholder="3" />
+                  <label className="zk-label">Varsayılan komisyon (₺/kg)</label>
+                  <input className="zk-input" type="number" step="0.01" value={defaultCommissionRate} onChange={(e) => setDefaultCommissionRate(e.target.value)} placeholder="0.50" />
                 </div>
                 <div>
                   <label className="zk-label">Varsayılan BAĞ-KUR oranı (%)</label>
@@ -378,16 +365,12 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
             <div style={{ background: COLORS.paper, borderRadius: 10, padding: 12, marginBottom: 16 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Toplu fiyat güncelleme</div>
               <div style={{ fontSize: 11, color: COLORS.inkSoft, marginBottom: 8 }}>
-                Piyasa fiyatı değiştiğinde tüm tür ve numaraların fiyatını tek seferde güncelleyin (örn. borsa fiyatı %5 arttıysa).
+                Piyasa fiyatı değiştiğinde tüm tür ve numaraların fiyatına kg başına tek bir tutar ekleyin/çıkarın (örn. kg başına 2 TL arttıysa "2" girin, azaldıysa "-2" girin).
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                <select className="zk-select" style={{ width: 140 }} value={bulkMode} onChange={(e) => setBulkMode(e.target.value)}>
-                  <option value="percent">Yüzde (%)</option>
-                  <option value="fixed">Sabit tutar (₺)</option>
-                </select>
                 <input
-                  className="zk-input" type="number" style={{ width: 130 }}
-                  placeholder={bulkMode === 'percent' ? 'örn. 5 veya -3' : 'örn. 2 veya -1.5'}
+                  className="zk-input" type="number" step="0.01" style={{ width: 160 }}
+                  placeholder="örn. 2 veya -1.5 (₺/kg)"
                   value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}
                 />
                 <button className="zk-btn zk-btn-gold" onClick={bulkUpdatePrices}>Tüm fiyatları güncelle</button>

@@ -28,7 +28,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const [manualDateTime, setManualDateTime] = useState(false);
   const [manualDate, setManualDate] = useState(todayStr());
   const [manualTime, setManualTime] = useState('');
-  const [commissionRate, setCommissionRate] = useState((settings.defaultCommissionRate ?? 3).toString());
+  const [commissionRate, setCommissionRate] = useState((settings.defaultCommissionRate ?? 0.5).toString());
   const [borsaTescilli, setBorsaTescilli] = useState(false);
   const [noDeduction, setNoDeduction] = useState(settings.defaultNoDeduction ?? true);
   const [note, setNote] = useState('');
@@ -159,7 +159,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const amount = items.reduce((s, i) => s + i.amount, 0);
   const fireTutari = amount * ((parseFloat(firePercent) || 0) / 100);
   const amountAfterFire = amount - fireTutari;
-  const commissionAmount = noDeduction ? 0 : amountAfterFire * ((parseFloat(commissionRate) || 0) / 100);
+  const commissionAmount = noDeduction ? 0 : netKg * (parseFloat(commissionRate) || 0);
   const stopajOrani = stopajOraniHesapla(borsaTescilli);
   const stopajTutari = noDeduction ? 0 : amountAfterFire * (stopajOrani / 100);
   const bagkurTutari = (!noDeduction && applyBagkur) ? amountAfterFire * ((parseFloat(bagkurRate) || 0) / 100) : 0;
@@ -437,8 +437,8 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
           {!noDeduction && (
             <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 12 }}>
               <div>
-                <label className="zk-label">Komisyon oranı (%)</label>
-                <input className="zk-input" type="number" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} placeholder="3" />
+                <label className="zk-label">Komisyon (₺/kg)</label>
+                <input className="zk-input" type="number" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} placeholder="0.50" />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 6 }}>
                 <label className="zk-checkbox-row">
@@ -538,7 +538,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
             {fireTutari > 0 && (<><div style={{ color: COLORS.red }}>Fire/İskonto (%{firePercent})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.red }}>− {fmtTL(fireTutari)}</div></>)}
             {!noDeduction && (
               <>
-                <div style={{ color: COLORS.gold }}>Komisyon (%{commissionRate || 0})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.gold }}>− {fmtTL(commissionAmount)}</div>
+                <div style={{ color: COLORS.gold }}>Komisyon ({commissionRate || 0} ₺/kg)</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.gold }}>− {fmtTL(commissionAmount)}</div>
                 <div style={{ color: COLORS.blue }}>Stopaj (%{stopajOrani})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.blue }}>− {fmtTL(stopajTutari)}</div>
                 {applyBagkur && (<><div style={{ color: COLORS.red }}>BAĞ-KUR (%{bagkurRate || 0})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.red }}>− {fmtTL(bagkurTutari)}</div></>)}
               </>
