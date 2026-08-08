@@ -40,12 +40,12 @@ export function AddPersonnelModal({ onClose, onSave, initialData }) {
       {payType === 'yevmiye' ? (
         <div style={{ marginBottom: 18 }}>
           <label className="zk-label">Günlük yövmiye (TL)</label>
-          <input className="zk-input" type="number" value={dailyWage} onChange={(e) => setDailyWage(e.target.value)} placeholder="örn. 800" />
+          <input className="zk-input" type="text" inputMode="decimal" value={dailyWage} onChange={(e) => setDailyWage(e.target.value.replace(',', '.'))} placeholder="örn. 800" />
         </div>
       ) : (
         <div style={{ marginBottom: 18 }}>
           <label className="zk-label">Aylık maaş (TL)</label>
-          <input className="zk-input" type="number" value={monthlySalary} onChange={(e) => setMonthlySalary(e.target.value)} placeholder="örn. 25000" />
+          <input className="zk-input" type="text" inputMode="decimal" value={monthlySalary} onChange={(e) => setMonthlySalary(e.target.value.replace(',', '.'))} placeholder="örn. 25000" />
         </div>
       )}
       <button
@@ -77,7 +77,7 @@ export function AddVehicleModal({ onClose, onSave, personnel, initialData }) {
         </div>
         <div>
           <label className="zk-label">Kapasite (kg)</label>
-          <input className="zk-input" type="number" value={kapasite} onChange={(e) => setKapasite(e.target.value)} placeholder="örn. 3000" />
+          <input className="zk-input" type="text" inputMode="decimal" value={kapasite} onChange={(e) => setKapasite(e.target.value.replace(',', '.'))} placeholder="örn. 3000" />
         </div>
       </div>
       <div style={{ marginBottom: 18 }}>
@@ -231,11 +231,11 @@ export function EditSaleModal({ sale, buyers, vehicles, onClose, onSave }) {
       <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
         <div>
           <label className="zk-label">Kg</label>
-          <input className="zk-input" type="number" value={kg} onChange={(e) => setKg(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" value={kg} onChange={(e) => setKg(e.target.value.replace(',', '.'))} />
         </div>
         <div>
           <label className="zk-label">Kg fiyatı</label>
-          <input className="zk-input" type="number" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value.replace(',', '.'))} />
         </div>
       </div>
       <div style={{ marginBottom: 10 }}>
@@ -342,8 +342,8 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onCl
         {items.map((it) => (
           <div key={it.id} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
             <input className="zk-input" style={{ flex: '2 1 100px' }} placeholder="Sınıf" value={it.grade} onChange={(e) => updateItem(it.id, 'grade', e.target.value)} />
-            <input className="zk-input" type="number" style={{ flex: '1 1 70px' }} placeholder="Kg" value={it.kg} onChange={(e) => updateItem(it.id, 'kg', e.target.value)} />
-            <input className="zk-input" type="number" style={{ flex: '1 1 70px' }} placeholder="Fiyat" value={it.pricePerKg} onChange={(e) => updateItem(it.id, 'pricePerKg', e.target.value)} />
+            <input className="zk-input" type="text" inputMode="decimal" style={{ flex: '1 1 70px' }} placeholder="Kg" value={it.kg} onChange={(e) => updateItem(it.id, 'kg', e.target.value.replace(',', '.'))} />
+            <input className="zk-input" type="text" inputMode="decimal" style={{ flex: '1 1 70px' }} placeholder="Fiyat" value={it.pricePerKg} onChange={(e) => updateItem(it.id, 'pricePerKg', e.target.value.replace(',', '.'))} />
             <button className="zk-btn zk-btn-secondary" style={{ padding: '6px 8px' }} onClick={() => removeItem(it.id)}><Trash2 size={12} /></button>
           </div>
         ))}
@@ -353,26 +353,26 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onCl
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
               <label className="zk-label">Komisyon (₺/kg)</label>
-              <input className="zk-input" type="number" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} />
+              <input className="zk-input" type="text" inputMode="decimal" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value.replace(',', '.'))} />
             </div>
             <div>
               <label className="zk-label">Stopaj oranı (%)</label>
-              <input className="zk-input" type="number" value={stopajOrani} onChange={(e) => setStopajOrani(e.target.value)} />
+              <input className="zk-input" type="text" inputMode="decimal" value={stopajOrani} onChange={(e) => setStopajOrani(e.target.value.replace(',', '.'))} />
             </div>
           </div>
         )}
         <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 14 }}>
           <div>
             <label className="zk-label">Hammaliye (₺)</label>
-            <input className="zk-input" type="number" value={hammaliyeTutari} onChange={(e) => setHammaliyeTutari(e.target.value)} />
+            <input className="zk-input" type="text" inputMode="decimal" value={hammaliyeTutari} onChange={(e) => setHammaliyeTutari(e.target.value.replace(',', '.'))} />
           </div>
           <div>
             <label className="zk-label">Nakliye (₺)</label>
-            <input className="zk-input" type="number" value={nakliyeTutari} onChange={(e) => setNakliyeTutari(e.target.value)} />
+            <input className="zk-input" type="text" inputMode="decimal" value={nakliyeTutari} onChange={(e) => setNakliyeTutari(e.target.value.replace(',', '.'))} />
           </div>
           <div>
             <label className="zk-label">Çuval/kasa (₺)</label>
-            <input className="zk-input" type="number" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value)} />
+            <input className="zk-input" type="text" inputMode="decimal" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value.replace(',', '.'))} />
           </div>
         </div>
         <div style={{ marginBottom: 14 }}>
