@@ -3,15 +3,14 @@ import {
   Users,
   Plus,
   Search,
-  ChevronRight,
   MessageCircle,
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { ListFooterControls } from '../common/index';
+import { ListFooterControls, SortableTh } from '../common/index';
 import { AddCariModal } from '../modals/index';
 import { LedgerTab } from './LedgerTab';
-import { usePagedList } from '../../hooks/index';
+import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtTL, storageSet, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppBalanceReminderText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -22,9 +21,9 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
   const [editingBuyer, setEditingBuyer] = useState(null);
   const [viewingLedger, setViewingLedger] = useState(false);
   const [query, setQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState('name_asc');
   const [typeFilter, setTypeFilter] = useState('');
   const [balanceFilter, setBalanceFilter] = useState('');
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('name', 'asc');
 
   const farmerBalances = useMemo(() => {
     const map = {};
@@ -35,17 +34,14 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
   }, [farmers, purchases, payments]);
 
   const combined = useMemo(() => {
-    const f = farmers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, type: 'tedarikci', raw: x }));
-    const b = buyers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, type: 'cari', raw: x }));
-    let arr = [...f, ...b].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()) || (c.phone || '').includes(query));
+    const f = farmers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, address: x.address || '', type: 'tedarikci', raw: x }));
+    const b = buyers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, address: x.address || '', type: 'cari', raw: x }));
+    let arr = [...f, ...b].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()) || (c.phone || '').includes(query) || (c.address || '').toLowerCase().includes(query.toLowerCase()));
     if (typeFilter) arr = arr.filter((c) => c.type === typeFilter);
     if (balanceFilter === 'has') arr = arr.filter((c) => c.type === 'tedarikci' && (farmerBalances[c.id] || 0) > 0);
     else if (balanceFilter === 'closed') arr = arr.filter((c) => c.type !== 'tedarikci' || (farmerBalances[c.id] || 0) <= 0);
-    if (sortOrder === 'name_desc') arr.sort((a, b2) => b2.name.localeCompare(a.name, 'tr'));
-    else if (sortOrder === 'balance_desc') arr.sort((a, b2) => (farmerBalances[b2.id] || 0) - (farmerBalances[a.id] || 0));
-    else arr.sort((a, b2) => a.name.localeCompare(b2.name, 'tr'));
-    return arr;
-  }, [farmers, buyers, query, sortOrder, typeFilter, balanceFilter, farmerBalances]);
+    return sortRows(arr, (c, key) => (key === 'balance' ? (c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : null) : c[key]));
+  }, [farmers, buyers, query, sortRows, typeFilter, balanceFilter, farmerBalances]);
 
   const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(combined);
 
@@ -129,7 +125,7 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         <div style={{ position: 'relative', flex: '2 1 220px', maxWidth: 320 }}>
           <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: COLORS.inkSoft }} />
-          <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="İsim veya telefon ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="İsim, telefon veya adrese göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <select className="zk-select" style={{ flex: '1 1 140px', maxWidth: 170 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="">Tümü (tedarikçi + cari)</option>
@@ -148,60 +144,59 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
           <div className="zk-empty"><Users size={26} className="zk-empty-icon" /><br/>Henüz cari eklenmedi.</div>
         ) : (
           <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {paged.map((c) => {
-              const bal = c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : null;
-              return (
-                <div key={`${c.type}-${c.id}`} className="zk-farmer-row">
-                  <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }}
+          <table className="zk-table">
+            <thead>
+              <tr>
+                <SortableTh label="İsim" sortKeyName="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Tür</th>
+                <th>Telefon</th>
+                <th>Adres</th>
+                <SortableTh label="Bakiye" sortKeyName="balance" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {paged.map((c) => {
+                const bal = c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : null;
+                return (
+                  <tr
+                    key={`${c.type}-${c.id}`} style={{ cursor: 'pointer' }}
                     onClick={() => (c.type === 'tedarikci' ? openLedger(c.id) : setEditingBuyer(c.raw))}
                   >
-                    <div className="zk-avatar">{c.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 7 }}>
-                        {c.name}
-                        <span className={`zk-badge ${c.type === 'tedarikci' ? 'zk-badge-olive' : 'zk-badge-blue'}`} style={{ fontSize: 10 }}>
-                          {c.type === 'tedarikci' ? 'Tedarikçi' : 'Cari'}
+                    <td style={{ fontWeight: 700 }}>{c.name}</td>
+                    <td><span className={`zk-badge ${c.type === 'tedarikci' ? 'zk-badge-olive' : 'zk-badge-blue'}`}>{c.type === 'tedarikci' ? 'Tedarikçi' : 'Cari'}</span></td>
+                    <td style={{ color: COLORS.inkSoft }}>{c.phone || '—'}</td>
+                    <td style={{ color: COLORS.inkSoft }}>{c.address || '—'}</td>
+                    <td>
+                      {c.type === 'tedarikci' ? (
+                        <span className={`zk-badge ${bal > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
+                          {bal > 0 ? fmtTL(bal) : 'Kapalı'}
                         </span>
-                      </div>
-                      <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginTop: 2 }}>{c.phone || 'Telefon kayıtlı değil'}</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {c.type === 'tedarikci' && (
-                      <span className={`zk-badge ${bal > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
-                        {bal > 0 ? `${fmtTL(bal)} ödenecek` : 'Bakiye kapalı'}
-                      </span>
-                    )}
-                    {c.type === 'tedarikci' && bal > 0 && formatPhoneForWhatsApp(c.phone) && (
-                      <a
-                        className="zk-btn" style={{ padding: '5px 8px', background: '#25D366', color: '#fff' }}
-                        href={`https://wa.me/${formatPhoneForWhatsApp(c.phone)}?text=${encodeURIComponent(buildWhatsAppBalanceReminderText(c.raw, bal, purchases.filter((p) => p.farmerId === c.id).sort((a, b) => b.createdAt - a.createdAt), settings))}`}
-                        target="_blank" rel="noopener noreferrer" title="WhatsApp ile bakiye hatırlat" onClick={(e) => e.stopPropagation()}
-                      >
-                        <MessageCircle size={12} />
-                      </a>
-                    )}
-                    <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => (c.type === 'tedarikci' ? setEditingFarmer(c.raw) : setEditingBuyer(c.raw))}>
-                      <Pencil size={12} />
-                    </button>
-                    <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeCari(c)}>
-                      <Trash2 size={12} />
-                    </button>
-                    {c.type === 'tedarikci' && <ChevronRight size={16} color={COLORS.inkSoft} style={{ cursor: 'pointer' }} onClick={() => openLedger(c.id)} />}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                      ) : '—'}
+                    </td>
+                    <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                      {c.type === 'tedarikci' && bal > 0 && formatPhoneForWhatsApp(c.phone) && (
+                        <a
+                          className="zk-btn" style={{ padding: '5px 8px', background: '#25D366', color: '#fff' }}
+                          href={`https://wa.me/${formatPhoneForWhatsApp(c.phone)}?text=${encodeURIComponent(buildWhatsAppBalanceReminderText(c.raw, bal, purchases.filter((p) => p.farmerId === c.id).sort((a, b) => b.createdAt - a.createdAt), settings))}`}
+                          target="_blank" rel="noopener noreferrer" title="WhatsApp ile bakiye hatırlat"
+                        >
+                          <MessageCircle size={12} />
+                        </a>
+                      )}
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => (c.type === 'tedarikci' ? setEditingFarmer(c.raw) : setEditingBuyer(c.raw))}>
+                        <Pencil size={12} />
+                      </button>
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 8px' }} onClick={() => removeCari(c)}>
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           <ListFooterControls
-            sortOrder={sortOrder} setSortOrder={setSortOrder}
-            sortOptions={[
-              { value: 'name_asc', label: 'İsim: A → Z' },
-              { value: 'name_desc', label: 'İsim: Z → A' },
-              { value: 'balance_desc', label: 'Bakiye: Büyük → Küçük' },
-            ]}
             page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount}
           />
           </>

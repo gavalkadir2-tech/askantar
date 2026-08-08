@@ -6,6 +6,9 @@ import {
   MessageCircle,
   Trash2,
   Pencil,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import { ListFooterControls } from '../common/index';
 import { EditSaleModal } from '../modals/index';
@@ -83,7 +86,19 @@ export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSale
         ) : (
           <>
           <table className="zk-table">
-            <thead><tr><th>No</th><th>Tarih</th><th>Alıcı</th><th>Sınıf</th><th>Kg</th><th>Fiyat</th><th>Tutar</th><th>Araç</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder(sortOrder === 'date_asc' ? 'date_desc' : 'date_asc')}>Tarih {sortOrder === 'date_asc' ? <ChevronUp size={12} /> : sortOrder === 'date_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
+                <th>Alıcı</th>
+                <th>Sınıf</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('kg_desc')}>Kg {sortOrder === 'kg_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
+                <th>Fiyat</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('amount_desc')}>Tutar {sortOrder === 'amount_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
+                <th>Araç</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               {paged.map((s) => {
                 const b = buyers.find((x) => x.id === s.buyerId);
