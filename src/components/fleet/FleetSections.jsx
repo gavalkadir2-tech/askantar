@@ -10,8 +10,7 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { ExpiryBadge, ListFooterControls, SortableTh, StatCard } from '../common/index';
-import { usePagedList, useSortableColumns } from '../../hooks/index';
+import { ExpiryBadge, StatCard } from '../common/index';
 import { DOC_TYPES, MAINTENANCE_TYPES, TIRE_POSITIONS, TIRE_STATUSES } from '../../lib/constants';
 import { daysUntil, fmtDate, fmtKg, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
@@ -26,9 +25,6 @@ export function MaintenanceSection({ vehicleId, records, setRecords }) {
 
   const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
   const total = vehicleRecords.reduce((s, r) => s + r.cost, 0);
-  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns();
-  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
 
   const resetForm = () => { setEditingId(null); setDate(todayStr()); setKm(''); setType(MAINTENANCE_TYPES[0]); setCost(''); setNote(''); };
 
@@ -69,8 +65,8 @@ export function MaintenanceSection({ vehicleId, records, setRecords }) {
             {MAINTENANCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           <input className="zk-input" type="date" style={{ flex: '1 1 140px' }} value={date} onChange={(e) => setDate(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Km" style={{ flex: '1 1 110px' }} value={km} onChange={(e) => setKm(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Maliyet (TL)" style={{ flex: '1 1 130px' }} value={cost} onChange={(e) => setCost(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Km" style={{ flex: '1 1 110px' }} value={km} onChange={(e) => setKm(e.target.value.replace(',', '.'))} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Maliyet (TL)" style={{ flex: '1 1 130px' }} value={cost} onChange={(e) => setCost(e.target.value.replace(',', '.'))} />
           <input className="zk-input" placeholder="Not" style={{ flex: '2 1 180px' }} value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
           {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
@@ -80,20 +76,10 @@ export function MaintenanceSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Bakım kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Km" sortKeyName="km" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Tür</th>
-                <SortableTh label="Maliyet" sortKeyName="cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Not</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Tarih</th><th>Km</th><th>Tür</th><th>Maliyet</th><th>Not</th><th></th></tr></thead>
             <tbody>
-              {paged.map((r) => (
+              {vehicleRecords.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.km ? fmtKg(r.km).replace('kg', 'km') : '—'}</td>
@@ -108,8 +94,6 @@ export function MaintenanceSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
-          </>
         )}
       </div>
     </div>
@@ -164,10 +148,6 @@ export function FuelSection({ vehicleId, records, setRecords, settings }) {
     if (editingId === id) resetForm();
   };
 
-  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('date', 'desc');
-  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
-
   return (
     <div>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
@@ -179,9 +159,9 @@ export function FuelSection({ vehicleId, records, setRecords, settings }) {
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Yakıt kaydını düzenle' : 'Yeni yakıt kaydı'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <input className="zk-input" type="date" style={{ flex: '1 1 140px' }} value={date} onChange={(e) => setDate(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Kilometre (gösterge)" style={{ flex: '1 1 160px' }} value={km} onChange={(e) => setKm(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Litre" style={{ flex: '1 1 100px' }} value={liters} onChange={(e) => setLiters(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Litre fiyatı" style={{ flex: '1 1 110px' }} value={pricePerLiter} onChange={(e) => setPricePerLiter(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Kilometre (gösterge)" style={{ flex: '1 1 160px' }} value={km} onChange={(e) => setKm(e.target.value.replace(',', '.'))} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Litre" style={{ flex: '1 1 100px' }} value={liters} onChange={(e) => setLiters(e.target.value.replace(',', '.'))} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Litre fiyatı" style={{ flex: '1 1 110px' }} value={pricePerLiter} onChange={(e) => setPricePerLiter(e.target.value.replace(',', '.'))} />
           <input className="zk-input" placeholder="Not" style={{ flex: '2 1 160px' }} value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
           {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
@@ -191,20 +171,10 @@ export function FuelSection({ vehicleId, records, setRecords, settings }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Yakıt kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Km" sortKeyName="km" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Litre" sortKeyName="liters" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Litre fiyatı</th>
-                <SortableTh label="Tutar" sortKeyName="totalCost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Tarih</th><th>Km</th><th>Litre</th><th>Litre fiyatı</th><th>Tutar</th><th></th></tr></thead>
             <tbody>
-              {paged.map((r) => (
+              {[...vehicleRecords].reverse().map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.km || '—'}</td>
@@ -219,8 +189,6 @@ export function FuelSection({ vehicleId, records, setRecords, settings }) {
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
-          </>
         )}
       </div>
     </div>
@@ -261,10 +229,6 @@ export function DocumentsSection({ vehicleId, records, setRecords }) {
     if (editingId === id) resetForm();
   };
 
-  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns();
-  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
-
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
@@ -293,20 +257,10 @@ export function DocumentsSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Evrak kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <th>Belge</th>
-                <SortableTh label="Düzenleme" sortKeyName="issueDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Bitiş" sortKeyName="expiryDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Durum</th>
-                <th>Not</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Belge</th><th>Düzenleme</th><th>Bitiş</th><th>Durum</th><th>Not</th><th></th></tr></thead>
             <tbody>
-              {paged.map((r) => (
+              {vehicleRecords.map((r) => (
                 <tr key={r.id}>
                   <td><span className="zk-badge zk-badge-blue">{r.docType}</span></td>
                   <td>{r.issueDate ? fmtDate(r.issueDate) : '—'}</td>
@@ -321,8 +275,6 @@ export function DocumentsSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
-          </>
         )}
       </div>
     </div>
@@ -397,14 +349,6 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
     if (editingDamageId === id) resetDamageForm();
   };
 
-  const { sortKey: polSortKey, sortDir: polSortDir, toggleSort: polToggleSort, sortRows: polSortRows } = useSortableColumns();
-  const sortedPolicies = polSortRows(vehiclePolicies, (r, key) => r[key]);
-  const policiesPaged = usePagedList(sortedPolicies);
-
-  const { sortKey: dmgSortKey, sortDir: dmgSortDir, toggleSort: dmgToggleSort, sortRows: dmgSortRows } = useSortableColumns('date', 'desc');
-  const sortedDamages = dmgSortRows(vehicleDamages, (r, key) => r[key]);
-  const damagesPaged = usePagedList(sortedDamages);
-
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
@@ -418,27 +362,17 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
           <input className="zk-input" placeholder="Poliçe no" style={{ flex: '1 1 120px' }} value={policyNo} onChange={(e) => setPolicyNo(e.target.value)} />
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Prim (TL)" style={{ flex: '1 1 110px' }} value={premium} onChange={(e) => setPremium(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Prim (TL)" style={{ flex: '1 1 110px' }} value={premium} onChange={(e) => setPremium(e.target.value.replace(',', '.'))} />
           <button className="zk-btn zk-btn-gold" onClick={savePolicy}>{editingPolicyId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
           {editingPolicyId && <button className="zk-btn zk-btn-secondary" onClick={resetPolicyForm}>İptal</button>}
         </div>
         {vehiclePolicies.length === 0 ? (
           <div className="zk-empty">Poliçe kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <th>Tür</th>
-                <SortableTh label="Şirket" sortKeyName="company" sortKey={polSortKey} sortDir={polSortDir} onSort={polToggleSort} />
-                <SortableTh label="Bitiş" sortKeyName="endDate" sortKey={polSortKey} sortDir={polSortDir} onSort={polToggleSort} />
-                <th>Durum</th>
-                <SortableTh label="Prim" sortKeyName="premium" sortKey={polSortKey} sortDir={polSortDir} onSort={polToggleSort} />
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Tür</th><th>Şirket</th><th>Bitiş</th><th>Durum</th><th>Prim</th><th></th></tr></thead>
             <tbody>
-              {policiesPaged.paged.map((r) => (
+              {vehiclePolicies.map((r) => (
                 <tr key={r.id}>
                   <td><span className="zk-badge zk-badge-blue">{r.policyType}</span></td>
                   <td>{r.company}</td>
@@ -453,8 +387,6 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={policiesPaged.page} setPage={policiesPaged.setPage} pageSize={policiesPaged.pageSize} setPageSize={policiesPaged.setPageSize} totalPages={policiesPaged.totalPages} totalCount={policiesPaged.totalCount} />
-          </>
         )}
       </div>
 
@@ -468,7 +400,7 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={damageDate} onChange={(e) => setDamageDate(e.target.value)} />
           <input className="zk-input" placeholder="Açıklama" style={{ flex: '2 1 200px' }} value={damageDesc} onChange={(e) => setDamageDesc(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Onarım maliyeti" style={{ flex: '1 1 130px' }} value={damageCost} onChange={(e) => setDamageCost(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Onarım maliyeti" style={{ flex: '1 1 130px' }} value={damageCost} onChange={(e) => setDamageCost(e.target.value.replace(',', '.'))} />
           <select className="zk-select" style={{ flex: '1 1 120px' }} value={damageStatus} onChange={(e) => setDamageStatus(e.target.value)}>
             <option value="Bekliyor">Bekliyor</option>
             <option value="Onarımda">Onarımda</option>
@@ -480,19 +412,10 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
         {vehicleDamages.length === 0 ? (
           <div className="zk-empty">Hasar kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <SortableTh label="Tarih" sortKeyName="date" sortKey={dmgSortKey} sortDir={dmgSortDir} onSort={dmgToggleSort} />
-                <th>Açıklama</th>
-                <SortableTh label="Maliyet" sortKeyName="cost" sortKey={dmgSortKey} sortDir={dmgSortDir} onSort={dmgToggleSort} />
-                <th>Durum</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Tarih</th><th>Açıklama</th><th>Maliyet</th><th>Durum</th><th></th></tr></thead>
             <tbody>
-              {damagesPaged.paged.map((r) => (
+              {vehicleDamages.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.description}</td>
@@ -508,8 +431,6 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={damagesPaged.page} setPage={damagesPaged.setPage} pageSize={damagesPaged.pageSize} setPageSize={damagesPaged.setPageSize} totalPages={damagesPaged.totalPages} totalCount={damagesPaged.totalCount} />
-          </>
         )}
       </div>
     </div>
@@ -558,10 +479,6 @@ export function FinesSection({ vehicleId, records, setRecords }) {
     if (editingId === id) resetForm();
   };
 
-  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('date', 'desc');
-  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
-
   return (
     <div>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
@@ -573,7 +490,7 @@ export function FinesSection({ vehicleId, records, setRecords }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
           <input className="zk-input" placeholder="Açıklama (örn. hız ihlali)" style={{ flex: '2 1 200px' }} value={description} onChange={(e) => setDescription(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 110px' }} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ flex: '1 1 110px' }} value={amount} onChange={(e) => setAmount(e.target.value.replace(',', '.'))} />
           <input className="zk-input" type="date" placeholder="Son ödeme" style={{ flex: '1 1 130px' }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
           {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}
@@ -583,20 +500,10 @@ export function FinesSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Ceza kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Açıklama</th>
-                <SortableTh label="Tutar" sortKeyName="amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Son ödeme" sortKeyName="dueDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Durum</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Tarih</th><th>Açıklama</th><th>Tutar</th><th>Son ödeme</th><th>Durum</th><th></th></tr></thead>
             <tbody>
-              {paged.map((r) => (
+              {vehicleRecords.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.description}</td>
@@ -615,8 +522,6 @@ export function FinesSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
-          </>
         )}
       </div>
     </div>
@@ -658,10 +563,6 @@ export function TiresSection({ vehicleId, records, setRecords }) {
     if (editingId === id) resetForm();
   };
 
-  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('installDate', 'desc');
-  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
-
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
@@ -672,7 +573,7 @@ export function TiresSection({ vehicleId, records, setRecords }) {
           </select>
           <input className="zk-input" placeholder="Marka" style={{ flex: '1 1 130px' }} value={brand} onChange={(e) => setBrand(e.target.value)} />
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={installDate} onChange={(e) => setInstallDate(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Takılan km" style={{ flex: '1 1 110px' }} value={installKm} onChange={(e) => setInstallKm(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Takılan km" style={{ flex: '1 1 110px' }} value={installKm} onChange={(e) => setInstallKm(e.target.value.replace(',', '.'))} />
           <select className="zk-select" style={{ flex: '1 1 100px' }} value={status} onChange={(e) => setStatus(e.target.value)}>
             {TIRE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -685,21 +586,10 @@ export function TiresSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Lastik kaydı yok.</div>
         ) : (
-          <>
           <table className="zk-table">
-            <thead>
-              <tr>
-                <th>Konum</th>
-                <SortableTh label="Marka" sortKeyName="brand" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Takılma" sortKeyName="installDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <SortableTh label="Km" sortKeyName="installKm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th>Durum</th>
-                <th>Not</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Konum</th><th>Marka</th><th>Takılma</th><th>Km</th><th>Durum</th><th>Not</th><th></th></tr></thead>
             <tbody>
-              {paged.map((r) => (
+              {vehicleRecords.map((r) => (
                 <tr key={r.id}>
                   <td><span className="zk-badge zk-badge-blue">{r.position}</span></td>
                   <td>{r.brand}</td>
@@ -717,8 +607,6 @@ export function TiresSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
-          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
-          </>
         )}
       </div>
     </div>
