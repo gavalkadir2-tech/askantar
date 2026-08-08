@@ -138,7 +138,7 @@ export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSale
       </div>
 
       {editingSale && (
-        <EditSaleModal sale={editingSale} buyers={buyers} vehicles={vehicles} onClose={() => setEditingSale(null)} onSave={saveEditedSale} />
+        <EditSaleModal sale={editingSale} buyers={buyers} vehicles={vehicles} bankAccounts={bankAccounts} onClose={() => setEditingSale(null)} onSave={saveEditedSale} />
       )}
     </div>
   );

@@ -149,7 +149,7 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
 
       {editingPurchase && (
         <EditPurchaseModal
-          purchase={editingPurchase} farmers={farmers} personnel={personnel} vehicles={vehicles}
+          purchase={editingPurchase} farmers={farmers} personnel={personnel} vehicles={vehicles} bankAccounts={bankAccounts}
           onClose={() => setEditingPurchase(null)} onSave={saveEditedPurchase}
         />
       )}

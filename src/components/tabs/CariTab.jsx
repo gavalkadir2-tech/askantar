@@ -36,7 +36,7 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
   const combined = useMemo(() => {
     const f = farmers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, address: x.address || '', type: 'tedarikci', raw: x }));
     const b = buyers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, address: x.address || '', type: 'cari', raw: x }));
-    let arr = [...f, ...b].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()) || (c.phone || '').includes(query) || (c.address || '').toLowerCase().includes(query.toLowerCase()));
+    let arr = [...f, ...b].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()) || (c.phone || '').includes(query) || (c.address || '').toLowerCase().includes(query.toLowerCase()) || (c.raw.bankName || '').toLowerCase().includes(query.toLowerCase()) || (c.raw.iban || '').toLowerCase().includes(query.toLowerCase()));
     if (typeFilter) arr = arr.filter((c) => c.type === typeFilter);
     if (balanceFilter === 'has') arr = arr.filter((c) => c.type === 'tedarikci' && (farmerBalances[c.id] || 0) > 0);
     else if (balanceFilter === 'closed') arr = arr.filter((c) => c.type !== 'tedarikci' || (farmerBalances[c.id] || 0) <= 0);
@@ -125,7 +125,7 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         <div style={{ position: 'relative', flex: '2 1 220px', maxWidth: 320 }}>
           <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: COLORS.inkSoft }} />
-          <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="İsim, telefon veya adrese göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input className="zk-input" style={{ paddingLeft: 32 }} placeholder="İsim, telefon, adres veya bankaya göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <select className="zk-select" style={{ flex: '1 1 140px', maxWidth: 170 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="">Tümü (tedarikçi + cari)</option>
@@ -151,6 +151,7 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
                 <th>Tür</th>
                 <th>Telefon</th>
                 <th>Adres</th>
+                <th>Banka</th>
                 <SortableTh label="Bakiye" sortKeyName="balance" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <th></th>
               </tr>
@@ -167,6 +168,7 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
                     <td><span className={`zk-badge ${c.type === 'tedarikci' ? 'zk-badge-olive' : 'zk-badge-blue'}`}>{c.type === 'tedarikci' ? 'Tedarikçi' : 'Cari'}</span></td>
                     <td style={{ color: COLORS.inkSoft }}>{c.phone || '—'}</td>
                     <td style={{ color: COLORS.inkSoft }}>{c.address || '—'}</td>
+                    <td style={{ color: COLORS.inkSoft, fontSize: 11 }} title={c.raw?.iban || ''}>{c.raw?.bankName || '—'}</td>
                     <td>
                       {c.type === 'tedarikci' ? (
                         <span className={`zk-badge ${bal > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
