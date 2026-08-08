@@ -10,8 +10,8 @@ import {
   Landmark,
   CreditCard,
 } from 'lucide-react';
-import { ExpiryBadge, ListFooterControls, Modal, StatCard } from '../common/index';
-import { usePagedList } from '../../hooks/index';
+import { ExpiryBadge, ListFooterControls, Modal, PaymentMethodBadge, PaymentMethodPicker, SortableTh, StatCard } from '../common/index';
+import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppPaymentText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -132,7 +132,15 @@ export function ChecksNotesSection({ items, setItems }) {
     if (editingId === id) resetForm();
   };
 
-  const sorted = [...items].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+  const [query, setQuery] = useState('');
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('dueDate', 'asc');
+  const filtered = useMemo(() => {
+    if (!query) return items;
+    const q = query.toLowerCase();
+    return items.filter((i) => i.party.toLowerCase().includes(q) || (i.note || '').toLowerCase().includes(q));
+  }, [items, query]);
+  const sorted = sortRows(filtered, (i, key) => i[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sorted);
 
   return (
     <div>
@@ -165,13 +173,25 @@ export function ChecksNotesSection({ items, setItems }) {
         </div>
       </div>
       <div className="zk-card">
+        <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="Kimden/kime veya nota göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
         {sorted.length === 0 ? (
-          <div className="zk-empty">Henüz çek/senet kaydı yok.</div>
+          <div className="zk-empty">{items.length === 0 ? 'Henüz çek/senet kaydı yok.' : 'Aramanızla eşleşen kayıt bulunamadı.'}</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Tür</th><th>Yön</th><th>Kimden/kime</th><th>Tutar</th><th>Vade</th><th>Durum</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Tür</th>
+                <th>Yön</th>
+                <SortableTh label="Kimden/kime" sortKeyName="party" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Tutar" sortKeyName="amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Vade" sortKeyName="dueDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Durum</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {sorted.map((i) => (
+              {paged.map((i) => (
                 <tr key={i.id}>
                   <td><span className="zk-badge zk-badge-blue">{i.type === 'çek' ? 'Çek' : 'Senet'}</span></td>
                   <td>{i.direction === 'alınan' ? 'Alınan' : 'Verilen'}</td>
@@ -189,18 +209,22 @@ export function ChecksNotesSection({ items, setItems }) {
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
   );
 }
 
-export function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases, buyers, buyerPayments, setBuyerPayments, sales, settings, onPrintPayment }) {
+export function PaymentsCollectionsSection({ farmers, payments, setPayments, purchases, buyers, buyerPayments, setBuyerPayments, sales, settings, onPrintPayment, bankAccounts }) {
   const [type, setType] = useState('odeme');
   const [partyId, setPartyId] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [payType, setPayType] = useState('odeme');
+  const [method, setMethod] = useState('nakit');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [query, setQuery] = useState('');
   const [sortOrder, setSortOrder] = useState('date_desc');
 
@@ -220,23 +244,23 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
     return map;
   }, [buyers, sales, buyerPayments]);
 
-  const canSave = partyId && parseFloat(amount) > 0;
+  const canSave = partyId && parseFloat(amount) > 0 && (method !== 'banka' || bankAccountId);
 
   const save = async () => {
     if (!canSave) return;
     const amt = parseFloat(amount);
     if (type === 'odeme') {
-      const record = { id: uid(), farmerId: partyId, date: todayStr(), amount: amt, note, payType, createdAt: Date.now() };
+      const record = { id: uid(), farmerId: partyId, date: todayStr(), amount: amt, note, payType, method, bankAccountId: method === 'banka' ? bankAccountId : null, createdAt: Date.now() };
       const next = [...payments, record];
       setPayments(next);
       await storageSet('zk:payments', next);
     } else {
-      const record = { id: uid(), buyerId: partyId, date: todayStr(), amount: amt, note, createdAt: Date.now() };
+      const record = { id: uid(), buyerId: partyId, date: todayStr(), amount: amt, note, method, bankAccountId: method === 'banka' ? bankAccountId : null, createdAt: Date.now() };
       const next = [...buyerPayments, record];
       setBuyerPayments(next);
       await storageSet('zk:buyerPayments', next);
     }
-    setAmount(''); setNote(''); setPartyId('');
+    setAmount(''); setNote(''); setPartyId(''); setMethod('nakit'); setBankAccountId('');
   };
 
   const combined = useMemo(() => {
@@ -276,6 +300,8 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
   const [editAmount, setEditAmount] = useState('');
   const [editNote, setEditNote] = useState('');
   const [editPayType, setEditPayType] = useState('odeme');
+  const [editMethod, setEditMethod] = useState('nakit');
+  const [editBankAccountId, setEditBankAccountId] = useState('');
 
   const startEdit = (row) => {
     setEditingRow(row);
@@ -283,17 +309,21 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
     setEditAmount(String(row.amount));
     setEditNote(row.note || '');
     setEditPayType(row.payType || 'odeme');
+    setEditMethod(row.method || 'nakit');
+    setEditBankAccountId(row.bankAccountId || '');
   };
 
   const saveEdit = async () => {
     const amt = parseFloat(editAmount);
     if (!amt || amt <= 0) return;
+    if (editMethod === 'banka' && !editBankAccountId) return;
+    const extra = { method: editMethod, bankAccountId: editMethod === 'banka' ? editBankAccountId : null };
     if (editingRow.kind === 'odeme') {
-      const next = payments.map((x) => (x.id === editingRow.id ? { ...x, date: editDate, amount: amt, note: editNote, payType: editPayType } : x));
+      const next = payments.map((x) => (x.id === editingRow.id ? { ...x, date: editDate, amount: amt, note: editNote, payType: editPayType, ...extra } : x));
       setPayments(next);
       await storageSet('zk:payments', next);
     } else {
-      const next = buyerPayments.map((x) => (x.id === editingRow.id ? { ...x, date: editDate, amount: amt, note: editNote } : x));
+      const next = buyerPayments.map((x) => (x.id === editingRow.id ? { ...x, date: editDate, amount: amt, note: editNote, ...extra } : x));
       setBuyerPayments(next);
       await storageSet('zk:buyerPayments', next);
     }
@@ -328,6 +358,7 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
             </select>
           )}
           <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ flex: '1 1 130px' }} value={amount} onChange={(e) => setAmount(e.target.value.replace(',', '.'))} />
+          <PaymentMethodPicker method={method} setMethod={setMethod} bankAccountId={bankAccountId} setBankAccountId={setBankAccountId} bankAccounts={bankAccounts} />
           <input className="zk-input" placeholder="Not (opsiyonel)" style={{ flex: '1 1 150px' }} value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="zk-btn zk-btn-primary" disabled={!canSave} onClick={save}>Kaydet</button>
         </div>
@@ -341,7 +372,7 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
         ) : (
           <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Tür</th><th>Kişi/firma</th><th>Tutar</th><th>Not</th><th></th></tr></thead>
+            <thead><tr><th>Tarih</th><th>Tür</th><th>Kişi/firma</th><th>Tutar</th><th>Yöntem</th><th>Not</th><th></th></tr></thead>
             <tbody>
               {paged.map((row) => {
                 const waPhone = formatPhoneForWhatsApp(row.partyPhone);
@@ -355,6 +386,7 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
                     </td>
                     <td>{row.partyName}</td>
                     <td style={{ fontWeight: 600 }}>{fmtTL(row.amount)}</td>
+                    <td><PaymentMethodBadge method={row.method} bankAccounts={bankAccounts} bankAccountId={row.bankAccountId} /></td>
                     <td style={{ color: COLORS.inkSoft }}>{row.note || '—'}</td>
                     <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => startEdit(row)}><Pencil size={12} /></button>
@@ -403,6 +435,12 @@ export function PaymentsCollectionsSection({ farmers, payments, setPayments, pur
           <div style={{ marginBottom: 12 }}>
             <label className="zk-label">Tutar (TL)</label>
             <input className="zk-input" type="text" inputMode="decimal" value={editAmount} onChange={(e) => setEditAmount(e.target.value.replace(',', '.'))} />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Ödeme yöntemi</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <PaymentMethodPicker method={editMethod} setMethod={setEditMethod} bankAccountId={editBankAccountId} setBankAccountId={setEditBankAccountId} bankAccounts={bankAccounts} />
+            </div>
           </div>
           <div style={{ marginBottom: 18 }}>
             <label className="zk-label">Not</label>
