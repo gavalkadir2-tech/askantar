@@ -3,7 +3,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { Modal } from '../common/index';
+import { Modal, PaymentMethodPicker } from '../common/index';
 import { fmtKg, fmtTL, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 
@@ -98,10 +98,12 @@ export function AddFarmerModal({ onClose, onSave, initialData }) {
   const [tcNo, setTcNo] = useState(initialData?.tcNo || '');
   const [address, setAddress] = useState(initialData?.address || '');
   const [bagkurStatus, setBagkurStatus] = useState(initialData?.bagkurStatus || false);
+  const [bankName, setBankName] = useState(initialData?.bankName || '');
+  const [iban, setIban] = useState(initialData?.iban || '');
 
   const submit = () => {
     if (!name.trim()) return;
-    onSave({ name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus });
+    onSave({ name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus, bankName: bankName.trim(), iban: iban.trim() });
   };
 
   return (
@@ -124,6 +126,16 @@ export function AddFarmerModal({ onClose, onSave, initialData }) {
         <label className="zk-label">Adres (müstahsil makbuzu için)</label>
         <input className="zk-input" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Köy / ilçe / il" />
       </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+        <div>
+          <label className="zk-label">Banka (opsiyonel)</label>
+          <input className="zk-input" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="örn. Ziraat Bankası" />
+        </div>
+        <div>
+          <label className="zk-label">IBAN (opsiyonel)</label>
+          <input className="zk-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="TR.." />
+        </div>
+      </div>
       <div style={{ marginBottom: 18 }}>
         <label className="zk-checkbox-row">
           <input type="checkbox" checked={bagkurStatus} onChange={(e) => setBagkurStatus(e.target.checked)} />
@@ -142,10 +154,12 @@ export function AddCariModal({ onClose, onSave, initialData, lockType }) {
   const [tcNo, setTcNo] = useState(initialData?.tcNo || '');
   const [address, setAddress] = useState(initialData?.address || '');
   const [bagkurStatus, setBagkurStatus] = useState(initialData?.bagkurStatus || false);
+  const [bankName, setBankName] = useState(initialData?.bankName || '');
+  const [iban, setIban] = useState(initialData?.iban || '');
 
   const submit = () => {
     if (!name.trim()) return;
-    onSave({ type, name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus });
+    onSave({ type, name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus, bankName: bankName.trim(), iban: iban.trim() });
   };
 
   return (
@@ -178,20 +192,32 @@ export function AddCariModal({ onClose, onSave, initialData, lockType }) {
             <label className="zk-label">Adres (müstahsil makbuzu için)</label>
             <input className="zk-input" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Köy / ilçe / il" />
           </div>
-          <div style={{ marginBottom: 18 }}>
-            <label className="zk-checkbox-row">
-              <input type="checkbox" checked={bagkurStatus} onChange={(e) => setBagkurStatus(e.target.checked)} />
-              Tarım BAĞ-KUR'lu (SGK kesintisi uygulanır)
-            </label>
-          </div>
         </>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+        <div>
+          <label className="zk-label">Banka (opsiyonel)</label>
+          <input className="zk-input" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="örn. Ziraat Bankası" />
+        </div>
+        <div>
+          <label className="zk-label">IBAN (opsiyonel)</label>
+          <input className="zk-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="TR.." />
+        </div>
+      </div>
+      {type === 'tedarikci' && (
+        <div style={{ marginBottom: 18 }}>
+          <label className="zk-checkbox-row">
+            <input type="checkbox" checked={bagkurStatus} onChange={(e) => setBagkurStatus(e.target.checked)} />
+            Tarım BAĞ-KUR'lu (SGK kesintisi uygulanır)
+          </label>
+        </div>
       )}
       <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: type === 'cari' ? 6 : 0 }} onClick={submit}>Kaydet</button>
     </Modal>
   );
 }
 
-export function EditSaleModal({ sale, buyers, vehicles, onClose, onSave }) {
+export function EditSaleModal({ sale, buyers, vehicles, bankAccounts, onClose, onSave }) {
   const [buyerId, setBuyerId] = useState(sale.buyerId);
   const [date, setDate] = useState(sale.date);
   const [grade, setGrade] = useState(sale.grade || '');
@@ -199,6 +225,8 @@ export function EditSaleModal({ sale, buyers, vehicles, onClose, onSave }) {
   const [pricePerKg, setPricePerKg] = useState(String(sale.pricePerKg));
   const [vehicleId, setVehicleId] = useState(sale.vehicleId || '');
   const [note, setNote] = useState(sale.note || '');
+  const [method, setMethod] = useState(sale.paymentMethod || 'nakit');
+  const [bankAccountId, setBankAccountId] = useState(sale.bankAccountId || '');
 
   const amount = (parseFloat(kg) || 0) * (parseFloat(pricePerKg) || 0);
 
@@ -207,6 +235,7 @@ export function EditSaleModal({ sale, buyers, vehicles, onClose, onSave }) {
     onSave({
       ...sale, buyerId, date, grade, kg: parseFloat(kg) || 0, pricePerKg: parseFloat(pricePerKg) || 0,
       amount, vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '', note,
+      paymentMethod: method, bankAccountId: method === 'banka' ? bankAccountId : null,
     });
   };
 
@@ -245,6 +274,12 @@ export function EditSaleModal({ sale, buyers, vehicles, onClose, onSave }) {
           {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
         </select>
       </div>
+      <div style={{ marginBottom: 10 }}>
+        <label className="zk-label">Ödeme yöntemi</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <PaymentMethodPicker method={method} setMethod={setMethod} bankAccountId={bankAccountId} setBankAccountId={setBankAccountId} bankAccounts={bankAccounts} />
+        </div>
+      </div>
       <div style={{ marginBottom: 14 }}>
         <label className="zk-label">Not</label>
         <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -257,7 +292,7 @@ export function EditSaleModal({ sale, buyers, vehicles, onClose, onSave }) {
   );
 }
 
-export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onClose, onSave }) {
+export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, bankAccounts, onClose, onSave }) {
   const [farmerId, setFarmerId] = useState(purchase.farmerId);
   const [date, setDate] = useState(purchase.date);
   const [time, setTime] = useState(purchase.time || '');
@@ -270,6 +305,8 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onCl
   const [nakliyeTutari, setNakliyeTutari] = useState(String(purchase.nakliyeTutari ?? 0));
   const [cuvalKesintisi, setCuvalKesintisi] = useState(String(purchase.cuvalKesintisi ?? 0));
   const [note, setNote] = useState(purchase.note || '');
+  const [method, setMethod] = useState(purchase.paymentMethod || 'nakit');
+  const [bankAccountId, setBankAccountId] = useState(purchase.bankAccountId || '');
 
   const updateItem = (id, field, value) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value, amount: field === 'kg' || field === 'pricePerKg' ? (parseFloat(field === 'kg' ? value : it.kg) || 0) * (parseFloat(field === 'pricePerKg' ? value : it.pricePerKg) || 0) : it.amount } : it)));
@@ -300,6 +337,7 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onCl
       nakliyeTutari: parseFloat(nakliyeTutari) || 0,
       cuvalKesintisi: parseFloat(cuvalKesintisi) || 0,
       netPayment, note,
+      paymentMethod: method, bankAccountId: method === 'banka' ? bankAccountId : null,
     });
   };
 
@@ -373,6 +411,12 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, onCl
           <div>
             <label className="zk-label">Çuval/kasa (₺)</label>
             <input className="zk-input" type="text" inputMode="decimal" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value.replace(',', '.'))} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="zk-label">Ödeme yöntemi</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <PaymentMethodPicker method={method} setMethod={setMethod} bankAccountId={bankAccountId} setBankAccountId={setBankAccountId} bankAccounts={bankAccounts} />
           </div>
         </div>
         <div style={{ marginBottom: 14 }}>
