@@ -10,13 +10,13 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { Modal, StatCard } from '../common/index';
+import { Modal, PaymentMethodPicker, StatCard } from '../common/index';
 import { AddVehicleModal } from '../modals/index';
 import { fmtDate, fmtKg, fmtTL, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppSaleReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
-export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, settings, onPrintSaleReceipt, buyerPayments, setBuyerPayments }) {
+export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, settings, onPrintSaleReceipt, buyerPayments, setBuyerPayments, bankAccounts }) {
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState(null);
   const [buyerName, setBuyerName] = useState('');
@@ -31,6 +31,8 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
   const [note, setNote] = useState('');
   const [vehicleId, setVehicleId] = useState('');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('nakit');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [lastSaved, setLastSaved] = useState(null);
   const [collectionAmount, setCollectionAmount] = useState('');
   const [collectionNote, setCollectionNote] = useState('');
@@ -88,7 +90,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
 
   const availableForGrade = grade ? (purchasedByGrade[grade] || 0) - (soldByGrade[grade] || 0) : 0;
   const amount = (parseFloat(kg) || 0) * (parseFloat(pricePerKg) || 0);
-  const canSave = buyerId && grade && parseFloat(kg) > 0 && parseFloat(pricePerKg) > 0 && parseFloat(kg) <= availableForGrade + 0.001;
+  const canSave = buyerId && grade && parseFloat(kg) > 0 && parseFloat(pricePerKg) > 0 && parseFloat(kg) <= availableForGrade + 0.001 && (paymentMethod !== 'banka' || paymentBankAccountId);
 
   const addBuyer = async () => {
     if (!buyerName.trim()) return;
@@ -132,13 +134,16 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
     const record = {
       id: uid(), makbuzNo: nextReceiptNo(sales, settings?.salesReceiptNext), buyerId, date, grade,
       kg: parseFloat(kg), pricePerKg: parseFloat(pricePerKg), amount, note,
-      vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '', createdAt: Date.now(),
+      vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '',
+      paymentMethod, bankAccountId: paymentMethod === 'banka' ? paymentBankAccountId : null,
+      createdAt: Date.now(),
     };
     const next = [...sales, record];
     setSales(next);
     await storageSet('zk:sales', next);
     setLastSaved(record);
     setKg(''); setPricePerKg(''); setNote('');
+    setPaymentMethod('nakit'); setPaymentBankAccountId('');
   };
 
   const buyerBalances = useMemo(() => {
@@ -226,6 +231,12 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13, flexWrap: 'wrap', gap: 8,}}>
             <span style={{ color: COLORS.inkSoft }}>Toplam tutar</span>
             <span style={{ fontWeight: 700 }}>{fmtTL(amount)}</span>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Ödeme yöntemi</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <PaymentMethodPicker method={paymentMethod} setMethod={setPaymentMethod} bankAccountId={paymentBankAccountId} setBankAccountId={setPaymentBankAccountId} bankAccounts={bankAccounts} />
+            </div>
           </div>
           <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={!canSave} onClick={saveSale}>
             Satışı kaydet

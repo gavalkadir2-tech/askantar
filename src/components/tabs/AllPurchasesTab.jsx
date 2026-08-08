@@ -9,14 +9,14 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { ListFooterControls, SortableTh } from '../common/index';
+import { ListFooterControls, PaymentMethodBadge, SortableTh } from '../common/index';
 import { EditPurchaseModal } from '../modals/index';
 import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
-export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, vehicles, onPrintReceipt, settings }) {
+export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, vehicles, onPrintReceipt, settings, bankAccounts }) {
   const [query, setQuery] = useState('');
   const [farmerFilter, setFarmerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -107,6 +107,7 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
                 <th>Sınıflar</th>
                 <SortableTh label="Net kg" sortKeyName="netKg" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortableTh label="Net ödeme" sortKeyName="netPayment" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Yöntem</th>
                 <th></th>
               </tr>
             </thead>
@@ -124,6 +125,7 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
                     <td style={{ fontSize: 11.5, color: COLORS.inkSoft }}>{p.gradesLabel}</td>
                     <td>{fmtKg(p.netKg)}</td>
                     <td style={{ fontWeight: 600 }}>{fmtTL(p.netPayment)}</td>
+                    <td>{p.paymentMethod ? <PaymentMethodBadge method={p.paymentMethod} bankAccounts={bankAccounts} bankAccountId={p.bankAccountId} /> : <span style={{ color: COLORS.inkSoft, fontSize: 10.5 }}>—</span>}</td>
                     <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => setEditingPurchase(p)}><Pencil size={12} /></button>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintReceipt(p)}><Printer size={12} /></button>

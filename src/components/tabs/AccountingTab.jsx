@@ -29,12 +29,12 @@ export function AccountingTab({ bankAccounts, setBankAccounts, checksNotes, setC
         ))}
       </div>
       {section === 'kasa' && (
-        <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} />
+        <CashTab settings={settings} setSettings={setSettings} payments={payments} expenses={expenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} purchases={purchases} sales={sales} buyerPayments={buyerPayments} />
       )}
       {section === 'odeme' && (
-        <PaymentsCollectionsSection farmers={farmers} payments={payments} setPayments={setPayments} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} settings={settings} onPrintPayment={onPrintPayment} />
+        <PaymentsCollectionsSection farmers={farmers} payments={payments} setPayments={setPayments} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} settings={settings} onPrintPayment={onPrintPayment} bankAccounts={bankAccounts} />
       )}
-      {section === 'giderler' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} />}
+      {section === 'giderler' && <ExpensesTab expenses={expenses} setExpenses={setExpenses} settings={settings} bankAccounts={bankAccounts} />}
       {section === 'cek' && <ChecksNotesSection items={checksNotes} setItems={setChecksNotes} settings={settings} />}
     </div>
   );

@@ -5,18 +5,20 @@ import {
   ChevronUp,
   ChevronDown,
 } from 'lucide-react';
-import { ListFooterControls, StatCard } from '../common/index';
+import { ListFooterControls, PaymentMethodBadge, PaymentMethodPicker, StatCard } from '../common/index';
 import { usePagedList } from '../../hooks/index';
 import { EXPENSE_CATEGORIES } from '../../lib/constants';
 import { fmtDate, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 
-export function ExpensesTab({ expenses, setExpenses, settings }) {
+export function ExpensesTab({ expenses, setExpenses, settings, bankAccounts }) {
   const categories = (settings?.expenseCategories && settings.expenseCategories.length > 0) ? settings.expenseCategories : EXPENSE_CATEGORIES;
   const [date, setDate] = useState(todayStr());
   const [category, setCategory] = useState(categories[0]);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [method, setMethod] = useState('nakit');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [range, setRange] = useState('month');
   const [sortOrder, setSortOrder] = useState('date_desc');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -55,11 +57,12 @@ export function ExpensesTab({ expenses, setExpenses, settings }) {
   const save = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
-    const record = { id: uid(), date, category, amount: amt, note, createdAt: Date.now() };
+    if (method === 'banka' && !bankAccountId) return;
+    const record = { id: uid(), date, category, amount: amt, note, method, bankAccountId: method === 'banka' ? bankAccountId : null, createdAt: Date.now() };
     const next = [...expenses, record];
     setExpenses(next);
     await storageSet('zk:expenses', next);
-    setAmount(''); setNote('');
+    setAmount(''); setNote(''); setMethod('nakit'); setBankAccountId('');
   };
 
   const removeExpense = async (id) => {
@@ -107,6 +110,12 @@ export function ExpensesTab({ expenses, setExpenses, settings }) {
             <label className="zk-label">Tutar (TL)</label>
             <input className="zk-input" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(',', '.'))} placeholder="0.00" />
           </div>
+          <div style={{ marginBottom: 10 }}>
+            <label className="zk-label">Ödeme yöntemi</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <PaymentMethodPicker method={method} setMethod={setMethod} bankAccountId={bankAccountId} setBankAccountId={setBankAccountId} bankAccounts={bankAccounts} />
+            </div>
+          </div>
           <div style={{ marginBottom: 12 }}>
             <label className="zk-label">Not</label>
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="opsiyonel" />
@@ -151,6 +160,7 @@ export function ExpensesTab({ expenses, setExpenses, settings }) {
                 <th>Kategori</th>
                 <th>Not</th>
                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => setSortOrder('amount_desc')}>Tutar {sortOrder === 'amount_desc' ? <ChevronDown size={12} /> : <ArrowUpDown size={11} style={{ opacity: 0.35 }} />}</th>
+                <th>Yöntem</th>
                 <th></th>
               </tr>
             </thead>
@@ -161,6 +171,7 @@ export function ExpensesTab({ expenses, setExpenses, settings }) {
                   <td><span className="zk-badge zk-badge-red">{e.category}</span></td>
                   <td style={{ color: COLORS.inkSoft }}>{e.note || '—'}</td>
                   <td style={{ fontWeight: 600 }}>{fmtTL(e.amount)}</td>
+                  <td><PaymentMethodBadge method={e.method} bankAccounts={bankAccounts} bankAccountId={e.bankAccountId} /></td>
                   <td><button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => removeExpense(e.id)}><X size={12} /></button></td>
                 </tr>
               ))}

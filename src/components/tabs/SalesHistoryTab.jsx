@@ -7,14 +7,14 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { ListFooterControls, SortableTh } from '../common/index';
+import { ListFooterControls, PaymentMethodBadge, SortableTh } from '../common/index';
 import { EditSaleModal } from '../modals/index';
 import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppSaleReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
-export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt, vehicles }) {
+export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSaleReceipt, vehicles, bankAccounts }) {
   const [query, setQuery] = useState('');
   const [buyerFilter, setBuyerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -97,6 +97,7 @@ export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSale
                 <SortableTh label="Fiyat" sortKeyName="pricePerKg" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortableTh label="Tutar" sortKeyName="amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortableTh label="Araç" sortKeyName="vehiclePlaka" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Yöntem</th>
                 <th></th>
               </tr>
             </thead>
@@ -114,6 +115,7 @@ export function SalesHistoryTab({ buyers, sales, setSales, settings, onPrintSale
                     <td>{fmtTL(s.pricePerKg)}/kg</td>
                     <td>{fmtTL(s.amount)}</td>
                     <td style={{ color: COLORS.inkSoft }}>{s.vehiclePlaka || '—'}</td>
+                    <td>{s.paymentMethod ? <PaymentMethodBadge method={s.paymentMethod} bankAccounts={bankAccounts} bankAccountId={s.bankAccountId} /> : <span style={{ color: COLORS.inkSoft, fontSize: 10.5 }}>—</span>}</td>
                     <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
                       <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => setEditingSale(s)}><Pencil size={12} /></button>
                       {s.makbuzNo && <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintSaleReceipt(s)}><Printer size={12} /></button>}

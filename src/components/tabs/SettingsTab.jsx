@@ -31,6 +31,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
   const [cariRiskDays, setCariRiskDays] = useState(settings.cariRiskDays ?? 45);
   const [cariRiskWarningDays, setCariRiskWarningDays] = useState(settings.cariRiskWarningDays ?? 20);
   const [maintenanceWarningKm, setMaintenanceWarningKm] = useState(settings.maintenanceWarningKm ?? 500);
+  const [openingCashBalance, setOpeningCashBalance] = useState(settings.openingCashBalance ?? 0);
 
   const [logo, setLogo] = useState(settings.logo || '');
   const [businessName, setBusinessName] = useState(settings.businessName || '');
@@ -77,7 +78,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     theme, accentColor, sidebarDensity, fontSize,
     aiVoiceEnabled,
     groqApiKey,
-    openingCashBalance: settings.openingCashBalance ?? 0,
+    openingCashBalance: parseFloat(openingCashBalance) || 0,
   });
 
   const save = async () => {
@@ -242,6 +243,17 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
                 <input type="checkbox" checked={aiVoiceEnabled} onChange={(e) => setAiVoiceEnabled(e.target.checked)} />
                 Edge Function ile AI destekli sesli komut kullan (GitHub sürümü, API anahtarı girilmediyse)
               </label>
+            </div>
+
+            <div className="zk-card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>💰 Nakit kasa açılış bakiyesi</div>
+              <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 12 }}>
+                Muhasebe → Kasa sayfasındaki güncel bakiye hesaplaması bu değerden başlar.
+              </div>
+              <div style={{ maxWidth: 240 }}>
+                <label className="zk-label">Açılış bakiyesi (TL)</label>
+                <input className="zk-input" type="text" inputMode="decimal" value={openingCashBalance} onChange={(e) => setOpeningCashBalance(e.target.value.replace(',', '.'))} />
+              </div>
             </div>
 
             <div className="zk-card">

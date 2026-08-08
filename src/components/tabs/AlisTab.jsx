@@ -7,7 +7,7 @@ import { AllPurchasesTab } from './AllPurchasesTab';
 // "Alış" (ManualPurchaseTab) ve "Alış Geçmişi" (AllPurchasesTab) modüllerini
 // tek bir "Alış" sekmesi altında birleştirir.
 export function AlisTab({
-  farmers, setFarmers, purchases, setPurchases, priceList, personnel, vehicles, settings, onPrintReceipt,
+  farmers, setFarmers, purchases, setPurchases, priceList, personnel, vehicles, settings, onPrintReceipt, bankAccounts,
 }) {
   const [mode, setMode] = useState('yeni'); // 'yeni' | 'gecmis'
 
@@ -50,7 +50,7 @@ export function AlisTab({
       {mode === 'gecmis' && (
         <AllPurchasesTab
           farmers={farmers} purchases={purchases} setPurchases={setPurchases} personnel={personnel}
-          vehicles={vehicles} onPrintReceipt={onPrintReceipt} settings={settings}
+          vehicles={vehicles} onPrintReceipt={onPrintReceipt} settings={settings} bankAccounts={bankAccounts}
         />
       )}
     </div>

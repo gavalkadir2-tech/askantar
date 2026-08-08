@@ -8,13 +8,13 @@ import {
   RefreshCw,
   Pencil,
 } from 'lucide-react';
-import { CustomerDisplayButtons, Modal, ScaleWidget } from '../common/index';
+import { CustomerDisplayButtons, Modal, PaymentMethodPicker, ScaleWidget } from '../common/index';
 import { BuyerQuickForm } from '../modals/index';
 import { fmtDate, fmtKg, fmtTL, localDateStr, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppSaleReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
-export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList, personnel, vehicles, settings, onPrintSaleReceipt, broadcastLive, openCustomerDisplay, customerDisplayUrl }) {
+export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList, personnel, vehicles, settings, onPrintSaleReceipt, broadcastLive, openCustomerDisplay, customerDisplayUrl, bankAccounts }) {
   const [buyerId, setBuyerId] = useState('');
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [personnelId, setPersonnelId] = useState('');
@@ -30,6 +30,8 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
   const [crateWeight] = useState(settings.crateWeight ?? 2);
   const [crateCount, setCrateCount] = useState(Math.max(0, Math.min(7, settings.defaultCrateCount ?? 5)));
   const [lastSavedBatch, setLastSavedBatch] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('nakit');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
 
   const lineDara = crateCount * crateWeight;
   const adjustCrateCount = (delta) => setCrateCount((c) => Math.max(0, Math.min(7, c + delta)));
@@ -114,7 +116,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
 
   const netKg = items.reduce((s, it) => s + it.kg, 0);
   const totalAmount = items.reduce((s, it) => s + it.amount, 0);
-  const canSave = buyerId && items.length > 0;
+  const canSave = buyerId && items.length > 0 && (paymentMethod !== 'banka' || paymentBankAccountId);
 
   const saveNewBuyer = async (data) => {
     if (!data.name || !data.name.trim()) return;
@@ -136,6 +138,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
         id: uid(), makbuzNo: counter, buyerId, date, grade: it.grade, kg: it.kg, pricePerKg: it.pricePerKg, amount: it.amount,
         note: '', vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '',
         personnelId: personnelId || null, personnelName: person ? person.name : '',
+        paymentMethod, bankAccountId: paymentMethod === 'banka' ? paymentBankAccountId : null,
         createdAt: Date.now(),
       };
       counter += 1;
@@ -146,6 +149,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
     await storageSet('zk:sales', next);
     setLastSavedBatch(newRecords);
     setItems([]);
+    setPaymentMethod('nakit'); setPaymentBankAccountId('');
     if (broadcastLive) broadcastLive({ type: 'sale_done', partyName: buyer ? buyer.name : '', netKg, total: totalAmount, items: newRecords.map((r) => ({ grade: r.grade, kg: r.kg })) });
   };
 
@@ -286,6 +290,12 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13 }}>
             <span style={{ color: COLORS.inkSoft }}>Toplam {fmtKg(netKg)}</span>
             <span style={{ fontWeight: 700 }}>{fmtTL(totalAmount)}</span>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Ödeme yöntemi</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <PaymentMethodPicker method={paymentMethod} setMethod={setPaymentMethod} bankAccountId={paymentBankAccountId} setBankAccountId={setPaymentBankAccountId} bankAccounts={bankAccounts} />
+            </div>
           </div>
           <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={!canSave} onClick={save}>
             Satışı kaydet

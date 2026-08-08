@@ -9,7 +9,7 @@ import { ScaleSaleTab } from './ScaleSaleTab';
 // segmented control ile alış/satış görünümü arasında geçiş yapılır.
 export function KantarTab({
   // ortak
-  settings, priceList, personnel, vehicles, broadcastLive, openCustomerDisplay, customerDisplayUrl,
+  settings, priceList, personnel, vehicles, broadcastLive, openCustomerDisplay, customerDisplayUrl, bankAccounts,
   // alış tarafı
   farmers, setFarmers, purchases, setPurchases, onPrintReceipt, setPersonnel, setVehicles,
   // satış tarafı
@@ -51,7 +51,7 @@ export function KantarTab({
           farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases}
           onPrintReceipt={onPrintReceipt} settings={settings} priceList={priceList} personnel={personnel}
           setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive}
-          openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl}
+          openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} bankAccounts={bankAccounts}
         />
       )}
       {mode === 'satis' && (
@@ -59,7 +59,7 @@ export function KantarTab({
           buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} purchases={purchases}
           priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings}
           onPrintSaleReceipt={onPrintSaleReceipt} broadcastLive={broadcastLive}
-          openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl}
+          openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} bankAccounts={bankAccounts}
         />
       )}
     </div>

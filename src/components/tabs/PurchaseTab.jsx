@@ -11,13 +11,13 @@ import {
   RefreshCw,
   Pencil,
 } from 'lucide-react';
-import { CustomerDisplayButtons, ScaleWidget } from '../common/index';
+import { CustomerDisplayButtons, PaymentMethodPicker, ScaleWidget } from '../common/index';
 import { AddFarmerModal, AddPersonnelModal, AddVehicleModal } from '../modals/index';
 import { fmtDate, fmtKg, fmtTL, localDateStr, nextReceiptNo, stopajOraniHesapla, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
-export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles, broadcastLive, openCustomerDisplay, customerDisplayUrl }) {
+export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintReceipt, settings, priceList, personnel, setPersonnel, vehicles, setVehicles, broadcastLive, openCustomerDisplay, customerDisplayUrl, bankAccounts }) {
   const [farmerId, setFarmerId] = useState('');
   const [showAddFarmer, setShowAddFarmer] = useState(false);
   const [personnelId, setPersonnelId] = useState('');
@@ -31,6 +31,8 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const [commissionRate, setCommissionRate] = useState((settings.defaultCommissionRate ?? 0.5).toString());
   const [borsaTescilli, setBorsaTescilli] = useState(false);
   const [noDeduction, setNoDeduction] = useState(settings.defaultNoDeduction ?? true);
+  const [paymentMethod, setPaymentMethod] = useState('nakit');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [note, setNote] = useState('');
   const [applyBagkur, setApplyBagkur] = useState(false);
   const [bagkurRate, setBagkurRate] = useState((settings.defaultBagkurRate ?? 1).toString());
@@ -168,7 +170,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const cuvalVal = parseFloat(cuvalKesintisi) || 0;
   const netPayment = amountAfterFire - commissionAmount - stopajTutari - bagkurTutari - hammaliyeVal - nakliyeVal - cuvalVal;
 
-  const canSave = farmerId && items.length > 0;
+  const canSave = farmerId && items.length > 0 && (paymentMethod !== 'banka' || paymentBankAccountId);
 
   useEffect(() => {
     if (!broadcastLive) return;
@@ -256,6 +258,8 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
       photo: photo || '',
       amount,
       netPayment,
+      paymentMethod,
+      bankAccountId: paymentMethod === 'banka' ? paymentBankAccountId : null,
       note,
       createdAt: Date.now(),
     };
@@ -267,6 +271,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
     setRandiman(''); setAsit(''); setNem(''); setFirePercent('');
     setHammaliyeTutari(''); setNakliyeTutari(''); setCuvalKesintisi(''); setPhoto('');
     setManualDateTime(false);
+    setPaymentMethod('nakit'); setPaymentBankAccountId('');
     if (broadcastLive) broadcastLive({ type: 'purchase_done', partyName: farmer ? farmer.name : '', netKg, total: netPayment, items: record.items.map((it) => ({ grade: it.grade, kg: it.kg })) });
   };
 
@@ -548,6 +553,13 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
             {cuvalVal > 0 && (<><div>Çuval/kasa</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(cuvalVal)}</div></>)}
             <div style={{ fontWeight: 700, borderTop: `1px solid ${COLORS.border}`, paddingTop: 8 }}>Çiftçiye ödenecek</div>
             <div style={{ textAlign: 'right', fontWeight: 700, borderTop: `1px solid ${COLORS.border}`, paddingTop: 8, color: COLORS.olive }}>{fmtTL(netPayment)}</div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label className="zk-label">Ödeme yöntemi</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <PaymentMethodPicker method={paymentMethod} setMethod={setPaymentMethod} bankAccountId={paymentBankAccountId} setBankAccountId={setPaymentBankAccountId} bankAccounts={bankAccounts} />
+            </div>
           </div>
 
           <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={!canSave} onClick={save}>
