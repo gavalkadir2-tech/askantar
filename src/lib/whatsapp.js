@@ -25,7 +25,7 @@ export function buildWhatsAppReceiptText(purchase, farmer, settings) {
   lines.push(`Toplam net: ${fmtKg(purchase.netKg)}`);
   lines.push(`Ürün tutarı: ${fmtTL(purchase.amount)}`);
   if (!purchase.noDeduction) {
-    lines.push(`Komisyon (%${purchase.commissionRate}): -${fmtTL(purchase.commissionAmount)}`);
+    lines.push(`Komisyon (${purchase.commissionRate} ₺/kg): -${fmtTL(purchase.commissionAmount)}`);
     lines.push(`Stopaj (%${purchase.stopajOrani}): -${fmtTL(purchase.stopajTutari)}`);
     if (purchase.applyBagkur) lines.push(`BAĞ-KUR (%${purchase.bagkurRate}): -${fmtTL(purchase.bagkurTutari)}`);
   }
