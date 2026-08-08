@@ -199,11 +199,11 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
               <label className="zk-label">Miktar (kg){grade ? ` · stokta ${fmtKg(availableForGrade)}` : ''}</label>
-              <input className="zk-input" type="number" value={kg} onChange={(e) => setKg(e.target.value)} placeholder="0" />
+              <input className="zk-input" type="text" inputMode="decimal" value={kg} onChange={(e) => setKg(e.target.value.replace(',', '.'))} placeholder="0" />
             </div>
             <div>
               <label className="zk-label">Kg fiyatı (TL)</label>
-              <input className="zk-input" type="number" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value)} placeholder="0.00" />
+              <input className="zk-input" type="text" inputMode="decimal" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value.replace(',', '.'))} placeholder="0.00" />
               {grade && costByGrade[grade] > 0 && (
                 <div style={{ fontSize: 10.5, color: COLORS.inkSoft, marginTop: 3 }}>
                   Alış + komisyona göre önerilen: {costByGrade[grade].toFixed(2)} ₺ — isterseniz değiştirebilirsiniz.
@@ -257,7 +257,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', borderTop: `1px dashed ${COLORS.border}`, paddingTop: 8 }}>
                   <span style={{ fontSize: 11.5, color: COLORS.inkSoft }}>Hemen tahsilat al:</span>
-                  <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ maxWidth: 130 }} value={collectionAmount} onChange={(e) => setCollectionAmount(e.target.value)} />
+                  <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ maxWidth: 130 }} value={collectionAmount} onChange={(e) => setCollectionAmount(e.target.value.replace(',', '.'))} />
                   <input className="zk-input" placeholder="Not (opsiyonel)" style={{ maxWidth: 150 }} value={collectionNote} onChange={(e) => setCollectionNote(e.target.value)} />
                   <button className="zk-btn zk-btn-primary" style={{ padding: '6px 12px' }} onClick={() => addCollection(lastSaved.buyerId)}>Tahsilatı kaydet</button>
                 </div>
@@ -294,7 +294,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 16, background: COLORS.paper, borderRadius: 8, padding: 10 }}>
               <span style={{ fontSize: 12, fontWeight: 600 }}>Tahsilat ekle:</span>
-              <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ maxWidth: 140 }} value={detailCollectionAmount} onChange={(e) => setDetailCollectionAmount(e.target.value)} />
+              <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ maxWidth: 140 }} value={detailCollectionAmount} onChange={(e) => setDetailCollectionAmount(e.target.value.replace(',', '.'))} />
               <input className="zk-input" placeholder="Not (opsiyonel)" style={{ maxWidth: 160 }} value={detailCollectionNote} onChange={(e) => setDetailCollectionNote(e.target.value)} />
               <button className="zk-btn zk-btn-primary" onClick={addDetailCollection}>Ekle</button>
             </div>

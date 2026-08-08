@@ -105,7 +105,7 @@ export function ExpensesTab({ expenses, setExpenses, settings }) {
           </div>
           <div style={{ marginBottom: 10 }}>
             <label className="zk-label">Tutar (TL)</label>
-            <input className="zk-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+            <input className="zk-input" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(',', '.'))} placeholder="0.00" />
           </div>
           <div style={{ marginBottom: 12 }}>
             <label className="zk-label">Not</label>

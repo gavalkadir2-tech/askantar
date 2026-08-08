@@ -354,7 +354,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
               )}
               <div>
                 <label className="zk-label">Ölçülen (kg)</label>
-                <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
+                <input className="zk-input" type="text" inputMode="decimal" value={lineKg} onChange={(e) => setLineKg(e.target.value.replace(',', '.'))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
               </div>
               <div>
                 <label className="zk-label" style={{ textAlign: 'center' }}>Kasa</label>
@@ -368,7 +368,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
               </div>
               <div>
                 <label className="zk-label">Fiyat/kg</label>
-                <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
+                <input className="zk-input" type="text" inputMode="decimal" value={linePrice} onChange={(e) => setLinePrice(e.target.value.replace(',', '.'))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
               </div>
               <div>
                 <label className="zk-label" style={{ visibility: 'hidden' }}>Ekle</label>
@@ -438,7 +438,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
             <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 12 }}>
               <div>
                 <label className="zk-label">Komisyon (₺/kg)</label>
-                <input className="zk-input" type="number" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} placeholder="0.50" />
+                <input className="zk-input" type="text" inputMode="decimal" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value.replace(',', '.'))} placeholder="0.50" />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 6 }}>
                 <label className="zk-checkbox-row">
@@ -450,9 +450,9 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
                   BAĞ-KUR kesintisi uygula (%)
                   <input
                     className="zk-input"
-                    type="number"
+                    type="text" inputMode="decimal"
                     value={bagkurRate}
-                    onChange={(e) => setBagkurRate(e.target.value)}
+                    onChange={(e) => setBagkurRate(e.target.value.replace(',', '.'))}
                     style={{ width: 55, padding: '4px 6px' }}
                     disabled={!applyBagkur}
                   />
@@ -489,33 +489,33 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                 <div style={{ flex: '1 1 100px' }}>
                   <label className="zk-label">Randıman (%)</label>
-                  <input className="zk-input" type="number" value={randiman} onChange={(e) => setRandiman(e.target.value)} placeholder="—" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={randiman} onChange={(e) => setRandiman(e.target.value.replace(',', '.'))} placeholder="—" />
                 </div>
                 <div style={{ flex: '1 1 100px' }}>
                   <label className="zk-label">Asit oranı (%)</label>
-                  <input className="zk-input" type="number" value={asit} onChange={(e) => setAsit(e.target.value)} placeholder="—" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={asit} onChange={(e) => setAsit(e.target.value.replace(',', '.'))} placeholder="—" />
                 </div>
                 <div style={{ flex: '1 1 100px' }}>
                   <label className="zk-label">Nem oranı (%)</label>
-                  <input className="zk-input" type="number" value={nem} onChange={(e) => setNem(e.target.value)} placeholder="—" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={nem} onChange={(e) => setNem(e.target.value.replace(',', '.'))} placeholder="—" />
                 </div>
                 <div style={{ flex: '1 1 100px' }}>
                   <label className="zk-label">Fire/İskonto (%)</label>
-                  <input className="zk-input" type="number" value={firePercent} onChange={(e) => setFirePercent(e.target.value)} placeholder="0" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={firePercent} onChange={(e) => setFirePercent(e.target.value.replace(',', '.'))} placeholder="0" />
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                 <div style={{ flex: '1 1 120px' }}>
                   <label className="zk-label">Hammaliye kesintisi (₺)</label>
-                  <input className="zk-input" type="number" value={hammaliyeTutari} onChange={(e) => setHammaliyeTutari(e.target.value)} placeholder="0" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={hammaliyeTutari} onChange={(e) => setHammaliyeTutari(e.target.value.replace(',', '.'))} placeholder="0" />
                 </div>
                 <div style={{ flex: '1 1 120px' }}>
                   <label className="zk-label">Nakliye kesintisi (₺)</label>
-                  <input className="zk-input" type="number" value={nakliyeTutari} onChange={(e) => setNakliyeTutari(e.target.value)} placeholder="0" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={nakliyeTutari} onChange={(e) => setNakliyeTutari(e.target.value.replace(',', '.'))} placeholder="0" />
                 </div>
                 <div style={{ flex: '1 1 120px' }}>
                   <label className="zk-label">Çuval/kasa kesintisi (₺)</label>
-                  <input className="zk-input" type="number" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value)} placeholder="0" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={cuvalKesintisi} onChange={(e) => setCuvalKesintisi(e.target.value.replace(',', '.'))} placeholder="0" />
                 </div>
               </div>
               <div>

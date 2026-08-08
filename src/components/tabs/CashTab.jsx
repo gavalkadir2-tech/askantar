@@ -1,18 +1,24 @@
 import React, { useState, useMemo } from 'react';
-import { ListFooterControls, SortableTh, StatCard } from '../common/index';
-import { usePagedList, useSortableColumns } from '../../hooks/index';
+import { ListFooterControls, StatCard } from '../common/index';
+import { usePagedList } from '../../hooks/index';
 import { INCOME_CATEGORIES } from '../../lib/constants';
 import { fmtDate, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
-import { Landmark, Pencil, Plus, Trash2 } from 'lucide-react';
 
-export function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCashEntries, farmers, bankAccounts, setBankAccounts }) {
+export function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCashEntries, farmers }) {
+  const [openingBalance, setOpeningBalance] = useState(settings.openingCashBalance ?? 0);
   const [entryType, setEntryType] = useState('giris');
   const [entryAmount, setEntryAmount] = useState('');
   const [entryNote, setEntryNote] = useState('');
   const [entryCategory, setEntryCategory] = useState('');
 
   const incomeCategories = (settings?.incomeCategories && settings.incomeCategories.length > 0) ? settings.incomeCategories : INCOME_CATEGORIES;
+
+  const saveOpening = async () => {
+    const next = { ...settings, openingCashBalance: parseFloat(openingBalance) || 0 };
+    setSettings(next);
+    await storageSet('zk:settings', next);
+  };
 
   const addEntry = async () => {
     const amt = parseFloat(entryAmount);
@@ -67,57 +73,25 @@ export function CashTab({ settings, setSettings, payments, expenses, cashEntries
   }, [withRunning, query]);
   const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filteredMovements);
 
-  // ---- Banka hesapları (eskiden ayrı bir sekmeydi, artık Kasa sayfasinda) ----
-  const [editingBankId, setEditingBankId] = useState(null);
-  const [bankName, setBankName] = useState('');
-  const [accountName, setAccountName] = useState('');
-  const [iban, setIban] = useState('');
-  const [bankBalance, setBankBalance] = useState('');
-  const { sortKey: bankSortKey, sortDir: bankSortDir, toggleSort: bankToggleSort, sortRows: bankSortRows } = useSortableColumns();
-
-  const totalBankBalance = (bankAccounts || []).reduce((s, a) => s + a.balance, 0);
-  const sortedBankAccounts = bankSortRows(bankAccounts || [], (a, key) => a[key]);
-
-  const resetBankForm = () => { setEditingBankId(null); setBankName(''); setAccountName(''); setIban(''); setBankBalance(''); };
-  const startEditBank = (a) => { setEditingBankId(a.id); setBankName(a.bankName); setAccountName(a.accountName || ''); setIban(a.iban || ''); setBankBalance(String(a.balance)); };
-
-  const saveBank = async () => {
-    if (!bankName.trim()) return;
-    let next;
-    const data = { bankName: bankName.trim(), accountName: accountName.trim(), iban: iban.trim(), balance: parseFloat(bankBalance) || 0 };
-    if (editingBankId) {
-      next = (bankAccounts || []).map((a) => (a.id === editingBankId ? { ...a, ...data } : a));
-    } else {
-      next = [...(bankAccounts || []), { id: uid(), ...data, createdAt: Date.now() }];
-    }
-    setBankAccounts(next);
-    await storageSet('zk:bankAccounts', next);
-    resetBankForm();
-  };
-
-  const removeBank = async (id) => {
-    if (!window.confirm('Bu banka hesabını silmek istediğinize emin misiniz?')) return;
-    const next = (bankAccounts || []).filter((a) => a.id !== id);
-    setBankAccounts(next);
-    await storageSet('zk:bankAccounts', next);
-    if (editingBankId === id) resetBankForm();
-  };
-
   return (
     <div>
       <div className="zk-h1">Kasa</div>
       <div className="zk-h1-sub">Nakit takibi — çiftçi ödemeleri/avanslar ve giderler otomatik düşülür</div>
 
-      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 8 }}>
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
         <StatCard label="Güncel kasa bakiyesi" value={fmtTL(currentBalance)} tone={currentBalance < 0 ? COLORS.red : COLORS.olive} />
         <StatCard label="Açılış bakiyesi" value={fmtTL(opening)} />
       </div>
-      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
-        <StatCard label="Toplam banka bakiyesi" value={fmtTL(totalBankBalance)} tone={COLORS.olive} icon={Landmark} />
-        <StatCard label="Hesap sayısı" value={(bankAccounts || []).length} />
-      </div>
 
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start', marginBottom: 16 }}>
+        <div className="zk-card">
+          <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Açılış bakiyesi</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="zk-input" type="text" inputMode="decimal" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value.replace(',', '.'))} />
+            <button className="zk-btn zk-btn-primary" onClick={saveOpening}>Kaydet</button>
+          </div>
+        </div>
+
         <div className="zk-card">
           <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Manuel kasa hareketi ekle</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -131,17 +105,14 @@ export function CashTab({ settings, setSettings, payments, expenses, cashEntries
                 {incomeCategories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
-            <input className="zk-input" type="number" placeholder="Tutar" value={entryAmount} onChange={(e) => setEntryAmount(e.target.value)} style={{ maxWidth: 130 }} />
+            <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar" value={entryAmount} onChange={(e) => setEntryAmount(e.target.value.replace(',', '.'))} style={{ maxWidth: 130 }} />
             <input className="zk-input" placeholder="Not (örn. satış tahsilatı)" value={entryNote} onChange={(e) => setEntryNote(e.target.value)} style={{ flex: 1, minWidth: 130 }} />
-            <button className="zk-btn zk-btn-gold" onClick={addEntry}>Ekle</button>
           </div>
-          <div style={{ fontSize: 11, color: COLORS.inkSoft }}>
-            Açılış bakiyesini değiştirmek için Ayarlar → Genel sayfasına gidin.
-          </div>
+          <button className="zk-btn zk-btn-gold" style={{ width: '100%', justifyContent: 'center' }} onClick={addEntry}>Ekle</button>
         </div>
       </div>
 
-      <div className="zk-card" style={{ marginBottom: 16 }}>
+      <div className="zk-card">
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Kasa hareketleri</div>
         <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="İşlem veya nota göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
         {filteredMovements.length === 0 ? (
@@ -163,50 +134,6 @@ export function CashTab({ settings, setSettings, payments, expenses, cashEntries
           </table>
           <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
           </>
-        )}
-      </div>
-
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, marginTop: 22 }}>🏦 Banka Hesapları</div>
-      <div className="zk-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingBankId ? 'Hesabı düzenle' : 'Yeni banka hesabı'}</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <input className="zk-input" placeholder="Banka adı" style={{ flex: '1 1 140px' }} value={bankName} onChange={(e) => setBankName(e.target.value)} />
-          <input className="zk-input" placeholder="Hesap adı (opsiyonel)" style={{ flex: '1 1 140px' }} value={accountName} onChange={(e) => setAccountName(e.target.value)} />
-          <input className="zk-input" placeholder="IBAN (opsiyonel)" style={{ flex: '2 1 200px' }} value={iban} onChange={(e) => setIban(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Bakiye (TL)" style={{ flex: '1 1 120px' }} value={bankBalance} onChange={(e) => setBankBalance(e.target.value)} />
-          <button className="zk-btn zk-btn-gold" onClick={saveBank}>{editingBankId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
-          {editingBankId && <button className="zk-btn zk-btn-secondary" onClick={resetBankForm}>İptal</button>}
-        </div>
-      </div>
-      <div className="zk-card">
-        {(bankAccounts || []).length === 0 ? (
-          <div className="zk-empty">Henüz banka hesabı yok.</div>
-        ) : (
-          <table className="zk-table">
-            <thead>
-              <tr>
-                <SortableTh label="Banka" sortKeyName="bankName" sortKey={bankSortKey} sortDir={bankSortDir} onSort={bankToggleSort} />
-                <th>Hesap adı</th>
-                <th>IBAN</th>
-                <SortableTh label="Bakiye" sortKeyName="balance" sortKey={bankSortKey} sortDir={bankSortDir} onSort={bankToggleSort} />
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedBankAccounts.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.bankName}</td>
-                  <td style={{ color: COLORS.inkSoft }}>{a.accountName || '—'}</td>
-                  <td style={{ fontSize: 11, color: COLORS.inkSoft }}>{a.iban || '—'}</td>
-                  <td style={{ fontWeight: 600 }}>{fmtTL(a.balance)}</td>
-                  <td style={{ display: 'flex', gap: 6 }}>
-                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => startEditBank(a)}><Pencil size={12} /></button>
-                    <button className="zk-btn zk-btn-secondary" style={{ padding: '4px 8px' }} onClick={() => removeBank(a.id)}><Trash2 size={12} /></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         )}
       </div>
     </div>

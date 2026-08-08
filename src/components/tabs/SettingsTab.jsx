@@ -197,11 +197,11 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
                 </div>
                 <div>
                   <label className="zk-label">Varsayılan KDV oranı (%)</label>
-                  <input className="zk-input" type="number" value={defaultVatRate} onChange={(e) => setDefaultVatRate(e.target.value)} placeholder="20" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={defaultVatRate} onChange={(e) => setDefaultVatRate(e.target.value.replace(',', '.'))} placeholder="20" />
                 </div>
                 <div>
                   <label className="zk-label">Varsayılan yakıt fiyatı (₺/Lt)</label>
-                  <input className="zk-input" type="number" value={defaultFuelPrice} onChange={(e) => setDefaultFuelPrice(e.target.value)} placeholder="örn. 45" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={defaultFuelPrice} onChange={(e) => setDefaultFuelPrice(e.target.value.replace(',', '.'))} placeholder="örn. 45" />
                 </div>
               </div>
               <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 10 }}>
@@ -217,11 +217,11 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 14 }}>
                 <div>
                   <label className="zk-label">Sonraki alış (müstahsil) makbuz no</label>
-                  <input className="zk-input" type="number" min="1" value={purchaseReceiptNext} onChange={(e) => setPurchaseReceiptNext(e.target.value)} />
+                  <input className="zk-input" type="text" inputMode="decimal" min="1" value={purchaseReceiptNext} onChange={(e) => setPurchaseReceiptNext(e.target.value.replace(',', '.'))} />
                 </div>
                 <div>
                   <label className="zk-label">Sonraki satış makbuz no</label>
-                  <input className="zk-input" type="number" min="1" value={salesReceiptNext} onChange={(e) => setSalesReceiptNext(e.target.value)} />
+                  <input className="zk-input" type="text" inputMode="decimal" min="1" value={salesReceiptNext} onChange={(e) => setSalesReceiptNext(e.target.value.replace(',', '.'))} />
                 </div>
               </div>
             </div>
@@ -249,11 +249,11 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: 14 }}>
                 <div>
                   <label className="zk-label">Kasa ağırlığı (kg)</label>
-                  <input className="zk-input" type="number" value={crateWeight} onChange={(e) => setCrateWeight(e.target.value)} placeholder="2" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={crateWeight} onChange={(e) => setCrateWeight(e.target.value.replace(',', '.'))} placeholder="2" />
                 </div>
                 <div>
                   <label className="zk-label">Varsayılan kasa sayısı (dara)</label>
-                  <input className="zk-input" type="number" min="0" max="7" value={defaultCrateCount} onChange={(e) => setDefaultCrateCount(e.target.value)} placeholder="5" />
+                  <input className="zk-input" type="text" inputMode="decimal" min="0" max="7" value={defaultCrateCount} onChange={(e) => setDefaultCrateCount(e.target.value.replace(',', '.'))} placeholder="5" />
                 </div>
               </div>
               <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 8 }}>
@@ -267,11 +267,11 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: 14 }}>
                 <div>
                   <label className="zk-label">Varsayılan komisyon (₺/kg)</label>
-                  <input className="zk-input" type="number" step="0.01" value={defaultCommissionRate} onChange={(e) => setDefaultCommissionRate(e.target.value)} placeholder="0.50" />
+                  <input className="zk-input" type="text" inputMode="decimal" step="0.01" value={defaultCommissionRate} onChange={(e) => setDefaultCommissionRate(e.target.value.replace(',', '.'))} placeholder="0.50" />
                 </div>
                 <div>
                   <label className="zk-label">Varsayılan BAĞ-KUR oranı (%)</label>
-                  <input className="zk-input" type="number" value={defaultBagkurRate} onChange={(e) => setDefaultBagkurRate(e.target.value)} placeholder="1" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={defaultBagkurRate} onChange={(e) => setDefaultBagkurRate(e.target.value.replace(',', '.'))} placeholder="1" />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 10 }}>
                   <label className="zk-checkbox-row">
@@ -288,19 +288,19 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))', gap: 14 }}>
                 <div>
                   <label className="zk-label">Evrak/sigorta uyarısı (gün kala)</label>
-                  <input className="zk-input" type="number" value={docWarningDays} onChange={(e) => setDocWarningDays(e.target.value)} placeholder="30" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={docWarningDays} onChange={(e) => setDocWarningDays(e.target.value.replace(',', '.'))} placeholder="30" />
                 </div>
                 <div>
                   <label className="zk-label">Cari risk — "yüksek" eşiği (gün)</label>
-                  <input className="zk-input" type="number" value={cariRiskDays} onChange={(e) => setCariRiskDays(e.target.value)} placeholder="45" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={cariRiskDays} onChange={(e) => setCariRiskDays(e.target.value.replace(',', '.'))} placeholder="45" />
                 </div>
                 <div>
                   <label className="zk-label">Cari risk — "orta" eşiği (gün)</label>
-                  <input className="zk-input" type="number" value={cariRiskWarningDays} onChange={(e) => setCariRiskWarningDays(e.target.value)} placeholder="20" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={cariRiskWarningDays} onChange={(e) => setCariRiskWarningDays(e.target.value.replace(',', '.'))} placeholder="20" />
                 </div>
                 <div>
                   <label className="zk-label">Bakım uyarısı (km kala)</label>
-                  <input className="zk-input" type="number" value={maintenanceWarningKm} onChange={(e) => setMaintenanceWarningKm(e.target.value)} placeholder="500" />
+                  <input className="zk-input" type="text" inputMode="decimal" value={maintenanceWarningKm} onChange={(e) => setMaintenanceWarningKm(e.target.value.replace(',', '.'))} placeholder="500" />
                 </div>
               </div>
             </div>
@@ -369,9 +369,9 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <input
-                  className="zk-input" type="number" step="0.01" style={{ width: 160 }}
+                  className="zk-input" type="text" inputMode="decimal" step="0.01" style={{ width: 160 }}
                   placeholder="örn. 2 veya -1.5 (₺/kg)"
-                  value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}
+                  value={bulkValue} onChange={(e) => setBulkValue(e.target.value.replace(',', '.'))}
                 />
                 <button className="zk-btn zk-btn-gold" onClick={bulkUpdatePrices}>Tüm fiyatları güncelle</button>
               </div>

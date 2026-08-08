@@ -115,17 +115,17 @@ export function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
               <label className="zk-label">Miktar (kg)</label>
-              <input className="zk-input" type="number" value={kg} onChange={(e) => setKg(e.target.value)} placeholder="0" />
+              <input className="zk-input" type="text" inputMode="decimal" value={kg} onChange={(e) => setKg(e.target.value.replace(',', '.'))} placeholder="0" />
             </div>
             <div>
               <label className="zk-label">Kg fiyatı (TL)</label>
-              <input className="zk-input" type="number" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value)} placeholder="0.00" />
+              <input className="zk-input" type="text" inputMode="decimal" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value.replace(',', '.'))} placeholder="0.00" />
             </div>
           </div>
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
               <label className="zk-label">Komisyon (₺/kg)</label>
-              <input className="zk-input" type="number" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} placeholder="0.50" />
+              <input className="zk-input" type="text" inputMode="decimal" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value.replace(',', '.'))} placeholder="0.50" />
             </div>
             <div>
               <label className="zk-label">Personel (opsiyonel)</label>

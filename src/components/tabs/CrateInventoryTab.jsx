@@ -143,11 +143,11 @@ export function CrateInventoryTab({ farmers, movements, setMovements, settings, 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
             <div style={{ flex: '1 1 160px' }}>
               <label className="zk-label">Toplam kasa (adet)</label>
-              <input className="zk-input" type="number" value={totalKasaInput} onChange={(e) => setTotalKasaInput(e.target.value)} />
+              <input className="zk-input" type="text" inputMode="decimal" value={totalKasaInput} onChange={(e) => setTotalKasaInput(e.target.value.replace(',', '.'))} />
             </div>
             <div style={{ flex: '1 1 160px' }}>
               <label className="zk-label">Toplam çuval (adet)</label>
-              <input className="zk-input" type="number" value={totalCuvalInput} onChange={(e) => setTotalCuvalInput(e.target.value)} />
+              <input className="zk-input" type="text" inputMode="decimal" value={totalCuvalInput} onChange={(e) => setTotalCuvalInput(e.target.value.replace(',', '.'))} />
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
               <button className="zk-btn zk-btn-primary" onClick={saveTotals}>Kaydet</button>
@@ -168,8 +168,8 @@ export function CrateInventoryTab({ farmers, movements, setMovements, settings, 
             {CRATE_MOVEMENT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
           </select>
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Adet" style={{ flex: '1 1 90px' }} value={quantity} onChange={(e) => { setQuantity(e.target.value); setFormError(''); }} />
-          <input className="zk-input" type="number" placeholder="Depozito (TL, opsiyonel)" style={{ flex: '1 1 140px' }} value={deposit} onChange={(e) => setDeposit(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Adet" style={{ flex: '1 1 90px' }} value={quantity} onChange={(e) => { setQuantity(e.target.value.replace(',', '.')); setFormError(''); }} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Depozito (TL, opsiyonel)" style={{ flex: '1 1 140px' }} value={deposit} onChange={(e) => setDeposit(e.target.value.replace(',', '.'))} />
           <input className="zk-input" placeholder="Not" style={{ flex: '1 1 140px' }} value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>
           {editingId && <button className="zk-btn zk-btn-secondary" onClick={resetForm}>İptal</button>}

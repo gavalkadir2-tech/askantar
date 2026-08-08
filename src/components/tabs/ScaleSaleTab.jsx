@@ -218,7 +218,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
             </div>
             <div>
               <label className="zk-label">Ölçülen (kg)</label>
-              <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
+              <input className="zk-input" type="text" inputMode="decimal" value={lineKg} onChange={(e) => setLineKg(e.target.value.replace(',', '.'))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
             </div>
             <div>
               <label className="zk-label" style={{ textAlign: 'center' }}>Kasa</label>
@@ -232,7 +232,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
             </div>
             <div>
               <label className="zk-label">Fiyat/kg</label>
-              <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
+              <input className="zk-input" type="text" inputMode="decimal" value={linePrice} onChange={(e) => setLinePrice(e.target.value.replace(',', '.'))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
             </div>
             <div>
               <label className="zk-label" style={{ visibility: 'hidden' }}>Ekle</label>

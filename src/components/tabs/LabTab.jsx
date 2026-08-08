@@ -91,9 +91,9 @@ export function LabTab({ farmers, purchases, results, setResults }) {
           <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <input className="zk-input" type="number" placeholder="Randıman (%)" style={{ flex: '1 1 120px' }} value={randiman} onChange={(e) => setRandiman(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Asit (%)" style={{ flex: '1 1 100px' }} value={asit} onChange={(e) => setAsit(e.target.value)} />
-          <input className="zk-input" type="number" placeholder="Nem (%)" style={{ flex: '1 1 100px' }} value={nem} onChange={(e) => setNem(e.target.value)} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Randıman (%)" style={{ flex: '1 1 120px' }} value={randiman} onChange={(e) => setRandiman(e.target.value.replace(',', '.'))} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Asit (%)" style={{ flex: '1 1 100px' }} value={asit} onChange={(e) => setAsit(e.target.value.replace(',', '.'))} />
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Nem (%)" style={{ flex: '1 1 100px' }} value={nem} onChange={(e) => setNem(e.target.value.replace(',', '.'))} />
           <input className="zk-input" placeholder="Kalite notu" style={{ flex: '1 1 130px' }} value={kalite} onChange={(e) => setKalite(e.target.value)} />
           <input className="zk-input" placeholder="Not" style={{ flex: '1 1 130px' }} value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="zk-btn zk-btn-gold" onClick={save}>{editingId ? 'Güncelle' : <><Plus size={14} /> Ekle</>}</button>

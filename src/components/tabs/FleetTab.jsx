@@ -28,7 +28,7 @@ import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 
-export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers, maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance, damages, setDamages, fines, setFines, tires, setTires, settings, setSettings, crateMovements, setCrateMovements, personnelAttendance = [], setPersonnelAttendance, personnelPayments = [], setPersonnelPayments, lockedView }) {
+export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers, maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance, damages, setDamages, fines, setFines, tires, setTires, settings, crateMovements, setCrateMovements, personnelAttendance, setPersonnelAttendance, personnelPayments, setPersonnelPayments, lockedView }) {
   const [view, setView] = useState(lockedView || 'vehicles');
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [vehicleSubTab, setVehicleSubTab] = useState('overview');
@@ -262,7 +262,7 @@ export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purch
 
       {view === 'crates' && (
         <div style={{ marginTop: 16 }}>
-          <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} settings={settings} setSettings={setSettings} />
+          <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} />
         </div>
       )}
 
@@ -547,7 +547,7 @@ export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purch
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
               <input className="zk-input" type="date" style={{ flex: '1 1 130px' }} value={earnDate} onChange={(e) => setEarnDate(e.target.value)} />
-              <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 120px' }} value={earnAmount} onChange={(e) => setEarnAmount(e.target.value)} />
+              <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ flex: '1 1 120px' }} value={earnAmount} onChange={(e) => setEarnAmount(e.target.value.replace(',', '.'))} />
               <input className="zk-input" placeholder="Not (opsiyonel)" style={{ flex: '2 1 160px' }} value={earnNote} onChange={(e) => setEarnNote(e.target.value)} />
               <button className="zk-btn zk-btn-gold" onClick={() => addManualEarning(selectedPersonnel.id)}><Plus size={14} /> Ekle</button>
             </div>
@@ -573,7 +573,7 @@ export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purch
           <div className="zk-card" style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>Ödeme yap</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-              <input className="zk-input" type="number" placeholder="Tutar (TL)" style={{ flex: '1 1 120px' }} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+              <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" style={{ flex: '1 1 120px' }} value={payAmount} onChange={(e) => setPayAmount(e.target.value.replace(',', '.'))} />
               <input className="zk-input" placeholder="Not (opsiyonel)" style={{ flex: '2 1 160px' }} value={payNote} onChange={(e) => setPayNote(e.target.value)} />
               <button className="zk-btn zk-btn-primary" onClick={() => addWagePayment(selectedPersonnel.id)}><Plus size={14} /> Ödeme kaydet</button>
             </div>

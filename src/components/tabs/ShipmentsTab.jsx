@@ -163,7 +163,7 @@ export function ShipmentsTab({ vehicles, personnel, buyers, shipments, setShipme
           </div>
           <div style={{ flex: '1 1 100px' }}>
             <label className="zk-label">Kg</label>
-            <input className="zk-input" type="number" value={kg} onChange={(e) => setKg(e.target.value)} />
+            <input className="zk-input" type="text" inputMode="decimal" value={kg} onChange={(e) => setKg(e.target.value.replace(',', '.'))} />
           </div>
           <div style={{ flex: '1 1 130px' }}>
             <label className="zk-label">Durum</label>
