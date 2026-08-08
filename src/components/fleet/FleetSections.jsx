@@ -10,7 +10,8 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { ExpiryBadge, StatCard } from '../common/index';
+import { ExpiryBadge, ListFooterControls, SortableTh, StatCard } from '../common/index';
+import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { DOC_TYPES, MAINTENANCE_TYPES, TIRE_POSITIONS, TIRE_STATUSES } from '../../lib/constants';
 import { daysUntil, fmtDate, fmtKg, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
@@ -25,6 +26,9 @@ export function MaintenanceSection({ vehicleId, records, setRecords }) {
 
   const vehicleRecords = records.filter((r) => r.vehicleId === vehicleId).sort((a, b) => b.createdAt - a.createdAt);
   const total = vehicleRecords.reduce((s, r) => s + r.cost, 0);
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns();
+  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
 
   const resetForm = () => { setEditingId(null); setDate(todayStr()); setKm(''); setType(MAINTENANCE_TYPES[0]); setCost(''); setNote(''); };
 
@@ -76,10 +80,20 @@ export function MaintenanceSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Bakım kaydı yok.</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Km</th><th>Tür</th><th>Maliyet</th><th>Not</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Km" sortKeyName="km" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Tür</th>
+                <SortableTh label="Maliyet" sortKeyName="cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Not</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {vehicleRecords.map((r) => (
+              {paged.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.km ? fmtKg(r.km).replace('kg', 'km') : '—'}</td>
@@ -94,6 +108,8 @@ export function MaintenanceSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -148,6 +164,10 @@ export function FuelSection({ vehicleId, records, setRecords, settings }) {
     if (editingId === id) resetForm();
   };
 
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('date', 'desc');
+  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
+
   return (
     <div>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
@@ -171,10 +191,20 @@ export function FuelSection({ vehicleId, records, setRecords, settings }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Yakıt kaydı yok.</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Km</th><th>Litre</th><th>Litre fiyatı</th><th>Tutar</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Km" sortKeyName="km" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Litre" sortKeyName="liters" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Litre fiyatı</th>
+                <SortableTh label="Tutar" sortKeyName="totalCost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {[...vehicleRecords].reverse().map((r) => (
+              {paged.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.km || '—'}</td>
@@ -189,6 +219,8 @@ export function FuelSection({ vehicleId, records, setRecords, settings }) {
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -229,6 +261,10 @@ export function DocumentsSection({ vehicleId, records, setRecords }) {
     if (editingId === id) resetForm();
   };
 
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns();
+  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
+
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
@@ -257,10 +293,20 @@ export function DocumentsSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Evrak kaydı yok.</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Belge</th><th>Düzenleme</th><th>Bitiş</th><th>Durum</th><th>Not</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Belge</th>
+                <SortableTh label="Düzenleme" sortKeyName="issueDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Bitiş" sortKeyName="expiryDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Durum</th>
+                <th>Not</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {vehicleRecords.map((r) => (
+              {paged.map((r) => (
                 <tr key={r.id}>
                   <td><span className="zk-badge zk-badge-blue">{r.docType}</span></td>
                   <td>{r.issueDate ? fmtDate(r.issueDate) : '—'}</td>
@@ -275,6 +321,8 @@ export function DocumentsSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -349,6 +397,14 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
     if (editingDamageId === id) resetDamageForm();
   };
 
+  const { sortKey: polSortKey, sortDir: polSortDir, toggleSort: polToggleSort, sortRows: polSortRows } = useSortableColumns();
+  const sortedPolicies = polSortRows(vehiclePolicies, (r, key) => r[key]);
+  const policiesPaged = usePagedList(sortedPolicies);
+
+  const { sortKey: dmgSortKey, sortDir: dmgSortDir, toggleSort: dmgToggleSort, sortRows: dmgSortRows } = useSortableColumns('date', 'desc');
+  const sortedDamages = dmgSortRows(vehicleDamages, (r, key) => r[key]);
+  const damagesPaged = usePagedList(sortedDamages);
+
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
@@ -369,10 +425,20 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
         {vehiclePolicies.length === 0 ? (
           <div className="zk-empty">Poliçe kaydı yok.</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Tür</th><th>Şirket</th><th>Bitiş</th><th>Durum</th><th>Prim</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Tür</th>
+                <SortableTh label="Şirket" sortKeyName="company" sortKey={polSortKey} sortDir={polSortDir} onSort={polToggleSort} />
+                <SortableTh label="Bitiş" sortKeyName="endDate" sortKey={polSortKey} sortDir={polSortDir} onSort={polToggleSort} />
+                <th>Durum</th>
+                <SortableTh label="Prim" sortKeyName="premium" sortKey={polSortKey} sortDir={polSortDir} onSort={polToggleSort} />
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {vehiclePolicies.map((r) => (
+              {policiesPaged.paged.map((r) => (
                 <tr key={r.id}>
                   <td><span className="zk-badge zk-badge-blue">{r.policyType}</span></td>
                   <td>{r.company}</td>
@@ -387,6 +453,8 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={policiesPaged.page} setPage={policiesPaged.setPage} pageSize={policiesPaged.pageSize} setPageSize={policiesPaged.setPageSize} totalPages={policiesPaged.totalPages} totalCount={policiesPaged.totalCount} />
+          </>
         )}
       </div>
 
@@ -412,10 +480,19 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
         {vehicleDamages.length === 0 ? (
           <div className="zk-empty">Hasar kaydı yok.</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Açıklama</th><th>Maliyet</th><th>Durum</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <SortableTh label="Tarih" sortKeyName="date" sortKey={dmgSortKey} sortDir={dmgSortDir} onSort={dmgToggleSort} />
+                <th>Açıklama</th>
+                <SortableTh label="Maliyet" sortKeyName="cost" sortKey={dmgSortKey} sortDir={dmgSortDir} onSort={dmgToggleSort} />
+                <th>Durum</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {vehicleDamages.map((r) => (
+              {damagesPaged.paged.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.description}</td>
@@ -431,6 +508,8 @@ export function InsuranceDamageSection({ vehicleId, insurance, setInsurance, dam
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={damagesPaged.page} setPage={damagesPaged.setPage} pageSize={damagesPaged.pageSize} setPageSize={damagesPaged.setPageSize} totalPages={damagesPaged.totalPages} totalCount={damagesPaged.totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -479,6 +558,10 @@ export function FinesSection({ vehicleId, records, setRecords }) {
     if (editingId === id) resetForm();
   };
 
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('date', 'desc');
+  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
+
   return (
     <div>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
@@ -500,10 +583,20 @@ export function FinesSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Ceza kaydı yok.</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Tarih</th><th>Açıklama</th><th>Tutar</th><th>Son ödeme</th><th>Durum</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <SortableTh label="Tarih" sortKeyName="date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Açıklama</th>
+                <SortableTh label="Tutar" sortKeyName="amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Son ödeme" sortKeyName="dueDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Durum</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {vehicleRecords.map((r) => (
+              {paged.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td>{r.description}</td>
@@ -522,6 +615,8 @@ export function FinesSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
@@ -563,6 +658,10 @@ export function TiresSection({ vehicleId, records, setRecords }) {
     if (editingId === id) resetForm();
   };
 
+  const { sortKey, sortDir, toggleSort, sortRows } = useSortableColumns('installDate', 'desc');
+  const sortedRecords = sortRows(vehicleRecords, (r, key) => r[key]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(sortedRecords);
+
   return (
     <div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
@@ -586,10 +685,21 @@ export function TiresSection({ vehicleId, records, setRecords }) {
         {vehicleRecords.length === 0 ? (
           <div className="zk-empty">Lastik kaydı yok.</div>
         ) : (
+          <>
           <table className="zk-table">
-            <thead><tr><th>Konum</th><th>Marka</th><th>Takılma</th><th>Km</th><th>Durum</th><th>Not</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Konum</th>
+                <SortableTh label="Marka" sortKeyName="brand" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Takılma" sortKeyName="installDate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Km" sortKeyName="installKm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Durum</th>
+                <th>Not</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
-              {vehicleRecords.map((r) => (
+              {paged.map((r) => (
                 <tr key={r.id}>
                   <td><span className="zk-badge zk-badge-blue">{r.position}</span></td>
                   <td>{r.brand}</td>
@@ -607,6 +717,8 @@ export function TiresSection({ vehicleId, records, setRecords }) {
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
