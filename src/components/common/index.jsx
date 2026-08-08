@@ -14,6 +14,34 @@ import {
 } from 'lucide-react';
 import { daysUntil } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
+import { PAYMENT_METHODS } from '../../lib/constants';
+
+// Odeme/tahsilat/gider/alim/satim formlarinda ortak kullanilan "Nakit / Banka"
+// secici. Banka secilince ilgili banka hesabini secmeyi de zorunlu kilar.
+export function PaymentMethodPicker({ method, setMethod, bankAccountId, setBankAccountId, bankAccounts, flex }) {
+  return (
+    <>
+      <select className="zk-select" style={{ flex: flex || '1 1 130px' }} value={method} onChange={(e) => setMethod(e.target.value)}>
+        {PAYMENT_METHODS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+      </select>
+      {method === 'banka' && (
+        <select className="zk-select" style={{ flex: flex || '1 1 160px' }} value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+          <option value="">Banka hesabı seçin...</option>
+          {(bankAccounts || []).map((a) => <option key={a.id} value={a.id}>{a.bankName}{a.accountName ? ` · ${a.accountName}` : ''}</option>)}
+        </select>
+      )}
+    </>
+  );
+}
+
+// Listelerde odeme yontemini gostermek icin kucuk bir rozet.
+export function PaymentMethodBadge({ method, bankAccounts, bankAccountId }) {
+  if (method !== 'banka') {
+    return <span className="zk-badge zk-badge-gold" style={{ fontSize: 10 }}>Nakit</span>;
+  }
+  const acc = (bankAccounts || []).find((a) => a.id === bankAccountId);
+  return <span className="zk-badge zk-badge-blue" style={{ fontSize: 10 }}>Banka{acc ? ` · ${acc.bankName}` : ''}</span>;
+}
 
 export function SortableTh({ label, sortKeyName, sortKey, sortDir, onSort, style }) {
   const active = sortKey === sortKeyName;
