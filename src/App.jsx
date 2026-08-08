@@ -1330,7 +1330,7 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                 <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
               </div>
               <div>
-                <label className="zk-label">Kasa</label>
+                <label className="zk-label" style={{ textAlign: 'center' }}>Kasa</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                   <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
                   <div style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>
@@ -1343,7 +1343,10 @@ function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPrintRece
                 <label className="zk-label">Fiyat/kg</label>
                 <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
               </div>
-              <button className="zk-btn zk-btn-gold" style={{ justifyContent: 'center' }} onClick={addLine}><Plus size={14} /> Ekle</button>
+              <div>
+                <label className="zk-label" style={{ visibility: 'hidden' }}>Ekle</label>
+                <button className="zk-btn zk-btn-gold" style={{ width: '100%', justifyContent: 'center' }} onClick={addLine}><Plus size={14} /> Ekle</button>
+              </div>
             </div>
             {lineKg && (
               <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginTop: 8 }}>
@@ -2112,7 +2115,7 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
               <input className="zk-input" type="number" value={lineKg} onChange={(e) => setLineKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0" />
             </div>
             <div>
-              <label className="zk-label">Kasa</label>
+              <label className="zk-label" style={{ textAlign: 'center' }}>Kasa</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                 <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
                 <div style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>
@@ -2125,7 +2128,10 @@ function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, priceList
               <label className="zk-label">Fiyat/kg</label>
               <input className="zk-input" type="number" value={linePrice} onChange={(e) => setLinePrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} placeholder="0.00" />
             </div>
-            <button className="zk-btn zk-btn-gold" style={{ justifyContent: 'center' }} onClick={addLine}><Plus size={14} /> Ekle</button>
+            <div>
+              <label className="zk-label" style={{ visibility: 'hidden' }}>Ekle</label>
+              <button className="zk-btn zk-btn-gold" style={{ width: '100%', justifyContent: 'center' }} onClick={addLine}><Plus size={14} /> Ekle</button>
+            </div>
           </div>
           {lineKg && (
             <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 8 }}>
