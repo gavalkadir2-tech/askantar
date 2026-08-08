@@ -18,3 +18,8 @@ export const CRATE_MOVEMENT_TYPES = [
 ];
 
 export const SHIPMENT_STATUSES = ['Yükleniyor', 'Yolda', 'Teslim Edildi'];
+
+export const PAYMENT_METHODS = [
+  { key: 'nakit', label: 'Nakit' },
+  { key: 'banka', label: 'Banka / Havale' },
+];

@@ -127,3 +127,20 @@ export function lastNMonthKeys(n) {
   }
   return keys;
 }
+
+// Banka hesabı bakiyesi artık sabit bir sayı değil: hesabın kayıtlı "balance"
+// alanı başlangıç/temel bakiye olarak kullanılır, üzerine yöntemi "banka" ve
+// bankAccountId'si o hesaba eşleşen tüm ödeme/tahsilat/gider/alım/satış
+// hareketlerinin etkisi eklenir. Çiftçiye yapılan ödeme ve gider hesaptan
+// PARA ÇIKIŞI (-), alıcıdan tahsilat ve satış geliri PARA GİRİŞİ (+) sayılır.
+export function computeBankAccountBalances(bankAccounts, { payments = [], buyerPayments = [], expenses = [], purchases = [], sales = [] } = {}) {
+  const map = {};
+  (bankAccounts || []).forEach((a) => { map[a.id] = a.balance || 0; });
+  payments.forEach((p) => { if (p.method === 'banka' && p.bankAccountId && map[p.bankAccountId] != null) map[p.bankAccountId] -= p.amount; });
+  buyerPayments.forEach((p) => { if (p.method === 'banka' && p.bankAccountId && map[p.bankAccountId] != null) map[p.bankAccountId] += p.amount; });
+  expenses.forEach((e) => { if (e.method === 'banka' && e.bankAccountId && map[e.bankAccountId] != null) map[e.bankAccountId] -= e.amount; });
+  purchases.forEach((p) => { if (p.paymentMethod === 'banka' && p.bankAccountId && map[p.bankAccountId] != null) map[p.bankAccountId] -= p.netPayment; });
+  sales.forEach((s) => { if (s.paymentMethod === 'banka' && s.bankAccountId && map[s.bankAccountId] != null) map[s.bankAccountId] += s.amount; });
+  return map;
+}
+
