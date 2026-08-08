@@ -28,7 +28,7 @@ import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 
-export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers, maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance, damages, setDamages, fines, setFines, tires, setTires, settings, crateMovements, setCrateMovements, personnelAttendance, setPersonnelAttendance, personnelPayments, setPersonnelPayments, lockedView }) {
+export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers, maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance, damages, setDamages, fines, setFines, tires, setTires, settings, setSettings, crateMovements, setCrateMovements, personnelAttendance = [], setPersonnelAttendance, personnelPayments = [], setPersonnelPayments, lockedView }) {
   const [view, setView] = useState(lockedView || 'vehicles');
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [vehicleSubTab, setVehicleSubTab] = useState('overview');
@@ -262,7 +262,7 @@ export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purch
 
       {view === 'crates' && (
         <div style={{ marginTop: 16 }}>
-          <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} />
+          <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} settings={settings} setSettings={setSettings} />
         </div>
       )}
 
