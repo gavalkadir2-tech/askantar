@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { ListFooterControls, Modal, PaymentMethodPicker, StatCard } from '../common/index';
 import { AddVehicleModal } from '../modals/index';
-import { usePagedList } from '../../hooks/index';
+import { usePagedList, useBuyerLedger } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppSaleReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -157,31 +157,21 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
       kg: parseFloat(kg), pricePerKg: parseFloat(pricePerKg), amount, note,
       vehicleId: vehicleId || null, vehiclePlaka: vehicle ? vehicle.plaka : '',
       paymentMethod, bankAccountId: paymentMethod === 'banka' ? paymentBankAccountId : null,
+      vadeTarihi: vade || null,
       createdAt: Date.now(),
     };
     const next = [...sales, record];
     setSales(next);
     await storageSet('zk:sales', next);
     setLastSaved(record);
-    setKg(''); setPricePerKg(''); setNote('');
+    setKg(''); setPricePerKg(''); setNote(''); setVade('');
     setPaymentMethod('nakit'); setPaymentBankAccountId('');
   };
 
-  const buyerBalances = useMemo(() => {
-    const map = {};
-    buyers.forEach((b) => { map[b.id] = 0; });
-    sales.forEach((s) => { map[s.buyerId] = (map[s.buyerId] || 0) + s.amount; });
-    (buyerPayments || []).forEach((p) => { map[p.buyerId] = (map[p.buyerId] || 0) - p.amount; });
-    return map;
-  }, [buyers, sales, buyerPayments]);
+  const { buyerBalances, addCollection: addCollectionShared } = useBuyerLedger(buyers, sales, buyerPayments, setBuyerPayments);
 
   const addCollection = async (buyerId2) => {
-    const amt = parseFloat(collectionAmount);
-    if (!amt || amt <= 0) return;
-    const record = { id: uid(), buyerId: buyerId2, date: todayStr(), amount: amt, note: collectionNote, createdAt: Date.now() };
-    const next = [...(buyerPayments || []), record];
-    setBuyerPayments(next);
-    await storageSet('zk:buyerPayments', next);
+    await addCollectionShared(buyerId2, collectionAmount, collectionNote);
     setCollectionAmount(''); setCollectionNote('');
   };
 
@@ -249,6 +239,11 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
             <label className="zk-label">Not</label>
             <input className="zk-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="opsiyonel" />
           </div>
+          <div style={{ marginBottom: 12 }}>
+            <label className="zk-label">Vade tarihi (opsiyonel)</label>
+            <input className="zk-input" type="date" style={{ maxWidth: 180 }} value={vade} onChange={(e) => setVade(e.target.value)} />
+            <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 4 }}>Boş bırakılırsa satış tarihi vade kabul edilir.</div>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13, flexWrap: 'wrap', gap: 8,}}>
             <span style={{ color: COLORS.inkSoft }}>Toplam tutar</span>
             <span style={{ fontWeight: 700 }}>{fmtTL(amount)}</span>
@@ -306,12 +301,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
         const buyerColls = (buyerPayments || []).filter((p) => p.buyerId === viewingBuyerId).sort((a, b) => b.createdAt - a.createdAt);
         const bal = buyerBalances[viewingBuyerId] || 0;
         const addDetailCollection = async () => {
-          const amt = parseFloat(detailCollectionAmount);
-          if (!amt || amt <= 0) return;
-          const record = { id: uid(), buyerId: viewingBuyerId, date: todayStr(), amount: amt, note: detailCollectionNote, createdAt: Date.now() };
-          const next = [...(buyerPayments || []), record];
-          setBuyerPayments(next);
-          await storageSet('zk:buyerPayments', next);
+          await addCollectionShared(viewingBuyerId, detailCollectionAmount, detailCollectionNote);
           setDetailCollectionAmount(''); setDetailCollectionNote('');
         };
         return (

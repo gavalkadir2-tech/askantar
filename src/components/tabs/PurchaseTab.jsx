@@ -34,6 +34,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const [paymentMethod, setPaymentMethod] = useState('nakit');
   const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [note, setNote] = useState('');
+  const [vadeTarihi, setVadeTarihi] = useState('');
   const [applyBagkur, setApplyBagkur] = useState(false);
   const [bagkurRate, setBagkurRate] = useState((settings.defaultBagkurRate ?? 1).toString());
   const [lastSaved, setLastSaved] = useState(null);
@@ -261,13 +262,14 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
       paymentMethod,
       bankAccountId: paymentMethod === 'banka' ? paymentBankAccountId : null,
       note,
+      vadeTarihi: vadeTarihi || null,
       createdAt: Date.now(),
     };
     const next = [...purchases, record];
     setPurchases(next);
     await storageSet('zk:purchases', next);
     setLastSaved(record);
-    setItems([]); setNote(''); setLineKg('');
+    setItems([]); setNote(''); setLineKg(''); setVadeTarihi('');
     setRandiman(''); setAsit(''); setNem(''); setFirePercent('');
     setHammaliyeTutari(''); setNakliyeTutari(''); setCuvalKesintisi(''); setPhoto('');
     setManualDateTime(false);
@@ -553,6 +555,12 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
             {cuvalVal > 0 && (<><div>Çuval/kasa</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(cuvalVal)}</div></>)}
             <div style={{ fontWeight: 700, borderTop: `1px solid ${COLORS.border}`, paddingTop: 8 }}>Çiftçiye ödenecek</div>
             <div style={{ textAlign: 'right', fontWeight: 700, borderTop: `1px solid ${COLORS.border}`, paddingTop: 8, color: COLORS.olive }}>{fmtTL(netPayment)}</div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label className="zk-label">Vade tarihi (opsiyonel)</label>
+            <input className="zk-input" type="date" style={{ maxWidth: 180 }} value={vadeTarihi} onChange={(e) => setVadeTarihi(e.target.value)} />
+            <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 4 }}>Boş bırakılırsa alım tarihi vade kabul edilir.</div>
           </div>
 
           <div style={{ marginBottom: 16 }}>
