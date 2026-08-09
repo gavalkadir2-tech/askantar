@@ -9,6 +9,7 @@ import {
   Pencil,
   Landmark,
   CreditCard,
+  Hash,
 } from 'lucide-react';
 import { ExpiryBadge, ListFooterControls, Modal, PaymentMethodBadge, PaymentMethodPicker, SortableTh, StatCard } from '../common/index';
 import { usePagedList, useSortableColumns } from '../../hooks/index';
@@ -54,7 +55,7 @@ export function BankAccountsSection({ accounts, setAccounts }) {
     <div>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
         <StatCard label="Toplam banka bakiyesi" value={fmtTL(totalBalance)} tone={COLORS.olive} icon={Landmark} />
-        <StatCard label="Hesap sayısı" value={accounts.length} />
+        <StatCard label="Hesap sayısı" value={accounts.length} icon={Hash} />
       </div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Hesabı düzenle' : 'Yeni banka hesabı'}</div>
@@ -146,7 +147,7 @@ export function ChecksNotesSection({ items, setItems }) {
     <div>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
         <StatCard label="Bekleyen net tutar" value={fmtTL(totalPending)} tone={totalPending >= 0 ? COLORS.olive : COLORS.red} icon={CreditCard} />
-        <StatCard label="Toplam kayıt" value={items.length} />
+        <StatCard label="Toplam kayıt" value={items.length} icon={Hash} />
       </div>
       <div className="zk-card" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{editingId ? 'Kaydı düzenle' : 'Yeni çek/senet kaydı'}</div>
