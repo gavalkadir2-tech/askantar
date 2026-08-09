@@ -7,7 +7,8 @@ import {
   CheckCircle2,
   ClipboardList,
 } from 'lucide-react';
-import { StatCard } from '../common/index';
+import { ListFooterControls, StatCard } from '../common/index';
+import { usePagedList } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppBalanceReminderText, buildWhatsAppReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
@@ -46,6 +47,15 @@ export function LedgerTab({ farmers, purchases, payments, setPayments, selectedF
     setPayments(next);
     await storageSet('zk:payments', next);
   };
+
+  const [query, setQuery] = useState('');
+  const reversedWithRunning = [...withRunning].reverse();
+  const filteredEntries = useMemo(() => {
+    if (!query) return reversedWithRunning;
+    const q = query.toLowerCase();
+    return reversedWithRunning.filter((e) => (e.data.note || '').toLowerCase().includes(q) || (e.type === 'purchase' ? 'alım' : (e.data.payType === 'avans' ? 'avans' : 'ödeme')).includes(q));
+  }, [reversedWithRunning, query]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filteredEntries);
 
   if (!farmer) {
     return (
@@ -106,13 +116,15 @@ export function LedgerTab({ farmers, purchases, payments, setPayments, selectedF
 
       <div className="zk-card">
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Hareketler</div>
-        {withRunning.length === 0 ? (
-          <div className="zk-empty">Henüz hareket yok.</div>
+        <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="Not veya işlem türüne göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        {filteredEntries.length === 0 ? (
+          <div className="zk-empty">{withRunning.length === 0 ? 'Henüz hareket yok.' : 'Aramanızla eşleşen hareket bulunamadı.'}</div>
         ) : (
+          <>
           <table className="zk-table">
             <thead><tr><th>Tarih</th><th>İşlem</th><th>Tutar</th><th>Bakiye</th><th></th></tr></thead>
             <tbody>
-              {withRunning.slice().reverse().map((e, i) => (
+              {paged.map((e, i) => (
                 <tr key={i}>
                   <td>{fmtDate(e.date)}</td>
                   <td>
@@ -142,6 +154,8 @@ export function LedgerTab({ farmers, purchases, payments, setPayments, selectedF
               ))}
             </tbody>
           </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
         )}
       </div>
     </div>
