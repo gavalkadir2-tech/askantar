@@ -4,6 +4,8 @@ import {
   Warehouse,
   Plus,
   Package,
+  Banknote,
+  Wallet,
 } from 'lucide-react';
 import { StatCard } from '../common/index';
 import { fmtDate, fmtDateShort, fmtKg, fmtTL, localDateStr, todayStr } from '../../lib/format';
@@ -83,10 +85,10 @@ export function DashboardTab({ farmers, purchases, payments, sales, setTab }) {
       <div className="zk-h1-sub">{fmtDate(today)} · genel durum</div>
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 16 }}>
-        <StatCard label="Bugün alınan" value={fmtKg(totalKgToday)} />
-        <StatCard label="Bugünkü net ödeme" value={fmtTL(totalAmountToday)} />
+        <StatCard label="Bugün alınan" value={fmtKg(totalKgToday)} icon={Package} />
+        <StatCard label="Bugünkü net ödeme" value={fmtTL(totalAmountToday)} icon={Banknote} />
         <StatCard label="Mevcut stok" value={fmtKg(currentStock)} tone={COLORS.blue} icon={Warehouse} />
-        <StatCard label="Ödenecek bakiye" value={fmtTL(totalDebt)} tone={totalDebt > 0 ? COLORS.red : COLORS.olive} />
+        <StatCard label="Ödenecek bakiye" value={fmtTL(totalDebt)} tone={totalDebt > 0 ? COLORS.red : COLORS.olive} icon={Wallet} />
       </div>
 
       <div className="zk-card" style={{ marginBottom: 16 }}>

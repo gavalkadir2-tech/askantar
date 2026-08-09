@@ -4,6 +4,8 @@ import {
   ArrowUpDown,
   ChevronUp,
   ChevronDown,
+  Receipt,
+  Hash,
 } from 'lucide-react';
 import { ListFooterControls, PaymentMethodBadge, PaymentMethodPicker, StatCard } from '../common/index';
 import { usePagedList } from '../../hooks/index';
@@ -87,8 +89,8 @@ export function ExpensesTab({ expenses, setExpenses, settings, bankAccounts }) {
       </div>
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
-        <StatCard label="Toplam gider" value={fmtTL(total)} tone={COLORS.red} />
-        <StatCard label="Kayıt sayısı" value={filtered.length} />
+        <StatCard label="Toplam gider" value={fmtTL(total)} tone={COLORS.red} icon={Receipt} />
+        <StatCard label="Kayıt sayısı" value={filtered.length} icon={Hash} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>

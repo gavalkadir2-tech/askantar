@@ -3,6 +3,9 @@ import {
   Printer,
   MessageCircle,
   Trash2,
+  Wallet,
+  CheckCircle2,
+  ClipboardList,
 } from 'lucide-react';
 import { StatCard } from '../common/index';
 import { fmtDate, fmtKg, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
@@ -83,9 +86,9 @@ export function LedgerTab({ farmers, purchases, payments, setPayments, selectedF
       </div>
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
-        <StatCard label="Güncel bakiye" value={fmtTL(Math.abs(balance))} tone={balance > 0 ? COLORS.red : COLORS.olive} />
-        <StatCard label="Durum" value={balance > 0 ? 'Ödenecek' : 'Kapalı'} />
-        <StatCard label="Toplam işlem" value={entries.length} />
+        <StatCard label="Güncel bakiye" value={fmtTL(Math.abs(balance))} tone={balance > 0 ? COLORS.red : COLORS.olive} icon={Wallet} />
+        <StatCard label="Durum" value={balance > 0 ? 'Ödenecek' : 'Kapalı'} icon={CheckCircle2} />
+        <StatCard label="Toplam işlem" value={entries.length} icon={ClipboardList} />
       </div>
 
       <div className="zk-card" style={{ marginBottom: 16 }}>

@@ -19,6 +19,8 @@ import {
   Pencil,
   Package2,
   CheckCircle2,
+  Banknote,
+  AlertCircle,
 } from 'lucide-react';
 import { ListFooterControls, SortableTh, StatCard } from '../common/index';
 import { CostAnalysisSection, DocumentsSection, FinesSection, FuelSection, InsuranceDamageSection, MaintenanceSection, TiresSection } from '../fleet/FleetSections';
@@ -358,9 +360,9 @@ export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purch
             <div>
               <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
                 <StatCard label="Toplama sayısı" value={vehiclePickups.length} icon={Package} />
-                <StatCard label="Toplam toplanan" value={fmtKg(vehicleStats[selectedVehicle.id]?.pickupKg || 0)} tone={COLORS.olive} />
+                <StatCard label="Toplam toplanan" value={fmtKg(vehicleStats[selectedVehicle.id]?.pickupKg || 0)} tone={COLORS.olive} icon={Package} />
                 <StatCard label="Teslimat sayısı" value={vehicleDeliveries.length} icon={ShoppingCart} />
-                <StatCard label="Toplam teslim edilen" value={fmtKg(vehicleStats[selectedVehicle.id]?.deliveryKg || 0)} tone={COLORS.blue} />
+                <StatCard label="Toplam teslim edilen" value={fmtKg(vehicleStats[selectedVehicle.id]?.deliveryKg || 0)} tone={COLORS.blue} icon={ShoppingCart} />
               </div>
 
               <div className="zk-card" style={{ marginBottom: 16 }}>
@@ -533,11 +535,12 @@ export function FleetTab({ vehicles, setVehicles, personnel, setPersonnel, purch
 
           <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
             <StatCard label="Toplam hakediş" value={fmtTL(wageBalances[selectedPersonnel.id]?.earned || 0)} icon={Wallet} />
-            <StatCard label="Toplam ödenen" value={fmtTL(wageBalances[selectedPersonnel.id]?.paid || 0)} tone={COLORS.blue} />
+            <StatCard label="Toplam ödenen" value={fmtTL(wageBalances[selectedPersonnel.id]?.paid || 0)} tone={COLORS.blue} icon={Banknote} />
             <StatCard
               label="Kalan alacağı"
               value={fmtTL((wageBalances[selectedPersonnel.id]?.earned || 0) - (wageBalances[selectedPersonnel.id]?.paid || 0))}
               tone={(wageBalances[selectedPersonnel.id]?.earned || 0) - (wageBalances[selectedPersonnel.id]?.paid || 0) > 0 ? COLORS.red : COLORS.olive}
+              icon={AlertCircle}
             />
           </div>
 

@@ -3,6 +3,14 @@ import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   Download,
+  Package,
+  Banknote,
+  Percent,
+  ShieldAlert,
+  Wallet,
+  ShoppingCart,
+  Receipt,
+  TrendingUp,
 } from 'lucide-react';
 import { ListFooterControls, StatCard } from '../common/index';
 import { usePagedList } from '../../hooks/index';
@@ -264,14 +272,14 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
       </div>
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
-        <StatCard label="Toplam kg" value={fmtKg(totalKg)} />
-        <StatCard label="Ürün tutarı" value={fmtTL(totalAmount)} />
-        <StatCard label="Komisyon" value={fmtTL(totalCommission)} tone={COLORS.gold} />
-        <StatCard label="Stopaj" value={fmtTL(totalStopaj)} tone={COLORS.blue} />
-        <StatCard label="Çiftçilere ödenen" value={fmtTL(totalPayable)} tone={COLORS.olive} />
-        <StatCard label="Satış tutarı" value={fmtTL(totalSalesAmount)} />
-        <StatCard label="Giderler" value={fmtTL(totalExpenses)} tone={COLORS.red} />
-        <StatCard label="Tahmini kâr" value={fmtTL(estimatedProfit)} tone={estimatedProfit >= 0 ? COLORS.olive : COLORS.red} />
+        <StatCard label="Toplam kg" value={fmtKg(totalKg)} icon={Package} />
+        <StatCard label="Ürün tutarı" value={fmtTL(totalAmount)} icon={Banknote} />
+        <StatCard label="Komisyon" value={fmtTL(totalCommission)} tone={COLORS.gold} icon={Percent} />
+        <StatCard label="Stopaj" value={fmtTL(totalStopaj)} tone={COLORS.blue} icon={ShieldAlert} />
+        <StatCard label="Çiftçilere ödenen" value={fmtTL(totalPayable)} tone={COLORS.olive} icon={Wallet} />
+        <StatCard label="Satış tutarı" value={fmtTL(totalSalesAmount)} icon={ShoppingCart} />
+        <StatCard label="Giderler" value={fmtTL(totalExpenses)} tone={COLORS.red} icon={Receipt} />
+        <StatCard label="Tahmini kâr" value={fmtTL(estimatedProfit)} tone={estimatedProfit >= 0 ? COLORS.olive : COLORS.red} icon={TrendingUp} />
       </div>
       <div style={{ fontSize: 11, color: COLORS.inkSoft, marginBottom: 16, marginTop: -8 }}>
         Tahmini kâr = komisyon geliri + satış tutarı − giderler (kaba bir tahmindir, muhasebe kaydı yerine geçmez).

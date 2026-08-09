@@ -4,7 +4,7 @@ import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { INCOME_CATEGORIES } from '../../lib/constants';
 import { computeBankAccountBalances, fmtDate, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
-import { Landmark, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Banknote, Hash, Landmark, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
 
 export function CashTab({ settings, setSettings, payments, expenses, cashEntries, setCashEntries, farmers, bankAccounts, setBankAccounts, purchases = [], sales = [], buyerPayments = [] }) {
   const [entryType, setEntryType] = useState('giris');
@@ -132,12 +132,12 @@ export function CashTab({ settings, setSettings, payments, expenses, cashEntries
       <div className="zk-h1-sub">Nakit takibi — çiftçi ödemeleri/avanslar ve giderler otomatik düşülür</div>
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 8 }}>
-        <StatCard label="Güncel kasa bakiyesi" value={fmtTL(currentBalance)} tone={currentBalance < 0 ? COLORS.red : COLORS.olive} />
-        <StatCard label="Açılış bakiyesi" value={fmtTL(opening)} />
+        <StatCard label="Güncel kasa bakiyesi" value={fmtTL(currentBalance)} tone={currentBalance < 0 ? COLORS.red : COLORS.olive} icon={Wallet} />
+        <StatCard label="Açılış bakiyesi" value={fmtTL(opening)} icon={Banknote} />
       </div>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
         <StatCard label="Toplam banka bakiyesi" value={fmtTL(totalBankBalance)} tone={COLORS.olive} icon={Landmark} />
-        <StatCard label="Hesap sayısı" value={(bankAccounts || []).length} />
+        <StatCard label="Hesap sayısı" value={(bankAccounts || []).length} icon={Hash} />
       </div>
 
       <div style={{ marginBottom: 16 }}>

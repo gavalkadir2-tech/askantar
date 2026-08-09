@@ -9,6 +9,8 @@ import {
   MessageCircle,
   Trash2,
   Pencil,
+  Wallet,
+  Banknote,
 } from 'lucide-react';
 import { Modal, PaymentMethodPicker, StatCard } from '../common/index';
 import { AddVehicleModal } from '../modals/index';
@@ -307,9 +309,9 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{buyer.name}</div>
             <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 14 }}>{buyer.phone || 'Telefon kayıtlı değil'}</div>
             <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', marginBottom: 16 }}>
-              <StatCard label="Toplam satış" value={fmtTL(buyerSales.reduce((s, x) => s + x.amount, 0))} />
-              <StatCard label="Toplam tahsilat" value={fmtTL(buyerColls.reduce((s, x) => s + x.amount, 0))} tone={COLORS.blue} />
-              <StatCard label="Kalan bakiye" value={fmtTL(bal)} tone={bal > 0 ? COLORS.red : COLORS.olive} />
+              <StatCard label="Toplam satış" value={fmtTL(buyerSales.reduce((s, x) => s + x.amount, 0))} icon={ShoppingCart} />
+              <StatCard label="Toplam tahsilat" value={fmtTL(buyerColls.reduce((s, x) => s + x.amount, 0))} tone={COLORS.blue} icon={Banknote} />
+              <StatCard label="Kalan bakiye" value={fmtTL(bal)} tone={bal > 0 ? COLORS.red : COLORS.olive} icon={Wallet} />
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 16, background: COLORS.paper, borderRadius: 8, padding: 10 }}>
               <span style={{ fontSize: 12, fontWeight: 600 }}>Tahsilat ekle:</span>

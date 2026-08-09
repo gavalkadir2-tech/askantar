@@ -4,6 +4,8 @@ import {
   Trash2,
   Pencil,
   FlaskConical,
+  Droplet,
+  ClipboardList,
 } from 'lucide-react';
 import { ListFooterControls, SortableTh, StatCard } from '../common/index';
 import { usePagedList, useSortableColumns } from '../../hooks/index';
@@ -73,8 +75,8 @@ export function LabTab({ farmers, purchases, results, setResults }) {
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
         <StatCard label="Ortalama randıman" value={avgRandiman ? `%${avgRandiman.toFixed(1)}` : '—'} tone={COLORS.olive} icon={FlaskConical} />
-        <StatCard label="Ortalama asit" value={avgAsit ? `%${avgAsit.toFixed(2)}` : '—'} tone={COLORS.blue} />
-        <StatCard label="Toplam sonuç" value={results.length} />
+        <StatCard label="Ortalama asit" value={avgAsit ? `%${avgAsit.toFixed(2)}` : '—'} tone={COLORS.blue} icon={Droplet} />
+        <StatCard label="Toplam sonuç" value={results.length} icon={ClipboardList} />
       </div>
 
       <div className="zk-card" style={{ marginBottom: 16 }}>

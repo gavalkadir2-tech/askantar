@@ -7,6 +7,8 @@ import {
   Navigation,
   MapPin,
   PackageCheck,
+  Truck,
+  Package,
 } from 'lucide-react';
 import { ListFooterControls, SortableTh, StatCard } from '../common/index';
 import { usePagedList, useSortableColumns } from '../../hooks/index';
@@ -134,8 +136,8 @@ export function ShipmentsTab({ vehicles, personnel, buyers, shipments, setShipme
 
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
         <StatCard label="Toplam sevkiyat" value={shipments.length} icon={PackageCheck} />
-        <StatCard label="Devam eden" value={activeCount} tone={COLORS.gold} />
-        <StatCard label="Toplam taşınan" value={fmtKg(totalKg)} tone={COLORS.olive} />
+        <StatCard label="Devam eden" value={activeCount} tone={COLORS.gold} icon={Truck} />
+        <StatCard label="Toplam taşınan" value={fmtKg(totalKg)} tone={COLORS.olive} icon={Package} />
       </div>
 
       <div className="zk-card" style={{ marginBottom: 16 }}>
