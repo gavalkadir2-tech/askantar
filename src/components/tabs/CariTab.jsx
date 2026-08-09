@@ -10,16 +10,18 @@ import {
 import { ListFooterControls, SortableTh } from '../common/index';
 import { AddCariModal } from '../modals/index';
 import { LedgerTab } from './LedgerTab';
+import { BuyerLedgerTab } from './BuyerLedgerTab';
 import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtTL, storageSet, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppBalanceReminderText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
-export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, setPayments, sales, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings }) {
+export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, setPayments, sales, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings, buyerPayments, setBuyerPayments, onPrintSaleReceipt }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingFarmer, setEditingFarmer] = useState(null);
   const [editingBuyer, setEditingBuyer] = useState(null);
   const [viewingLedger, setViewingLedger] = useState(false);
+  const [viewingBuyerId, setViewingBuyerId] = useState('');
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [balanceFilter, setBalanceFilter] = useState('');
@@ -33,20 +35,30 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
     return map;
   }, [farmers, purchases, payments]);
 
+  const buyerBalances = useMemo(() => {
+    const map = {};
+    buyers.forEach((b) => { map[b.id] = 0; });
+    sales.forEach((s) => { map[s.buyerId] = (map[s.buyerId] || 0) + s.amount; });
+    (buyerPayments || []).forEach((p) => { map[p.buyerId] = (map[p.buyerId] || 0) - p.amount; });
+    return map;
+  }, [buyers, sales, buyerPayments]);
+
   const combined = useMemo(() => {
     const f = farmers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, address: x.address || '', type: 'tedarikci', raw: x }));
     const b = buyers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, address: x.address || '', type: 'cari', raw: x }));
     let arr = [...f, ...b].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()) || (c.phone || '').includes(query) || (c.address || '').toLowerCase().includes(query.toLowerCase()) || (c.raw.bankName || '').toLowerCase().includes(query.toLowerCase()) || (c.raw.iban || '').toLowerCase().includes(query.toLowerCase()));
     if (typeFilter) arr = arr.filter((c) => c.type === typeFilter);
-    if (balanceFilter === 'has') arr = arr.filter((c) => c.type === 'tedarikci' && (farmerBalances[c.id] || 0) > 0);
-    else if (balanceFilter === 'closed') arr = arr.filter((c) => c.type !== 'tedarikci' || (farmerBalances[c.id] || 0) <= 0);
-    return sortRows(arr, (c, key) => (key === 'balance' ? (c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : null) : c[key]));
-  }, [farmers, buyers, query, sortRows, typeFilter, balanceFilter, farmerBalances]);
+    if (balanceFilter === 'has') arr = arr.filter((c) => (c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : (buyerBalances[c.id] || 0)) > 0);
+    else if (balanceFilter === 'closed') arr = arr.filter((c) => (c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : (buyerBalances[c.id] || 0)) <= 0);
+    return sortRows(arr, (c, key) => (key === 'balance' ? (c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : (buyerBalances[c.id] || 0)) : c[key]));
+  }, [farmers, buyers, query, sortRows, typeFilter, balanceFilter, farmerBalances, buyerBalances]);
 
   const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(combined);
 
   const openLedger = (farmerId) => { setSelectedFarmerId(farmerId); setViewingLedger(true); };
   const closeLedger = () => { setViewingLedger(false); setSelectedFarmerId(''); };
+  const openBuyerLedger = (buyerId) => { setViewingBuyerId(buyerId); };
+  const closeBuyerLedger = () => { setViewingBuyerId(''); };
 
   const addCari = async (data) => {
     if (data.type === 'tedarikci') {
@@ -112,6 +124,19 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
     );
   }
 
+  if (viewingBuyerId) {
+    return (
+      <div>
+        <button className="zk-btn zk-btn-secondary" style={{ marginBottom: 14 }} onClick={closeBuyerLedger}>← Cariler listesine dön</button>
+        <BuyerLedgerTab
+          buyers={buyers} sales={sales} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments}
+          selectedBuyerId={viewingBuyerId} setSelectedBuyerId={setViewingBuyerId}
+          onPrintSaleReceipt={onPrintSaleReceipt} settings={settings}
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
@@ -158,11 +183,11 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
             </thead>
             <tbody>
               {paged.map((c) => {
-                const bal = c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : null;
+                const bal = c.type === 'tedarikci' ? (farmerBalances[c.id] || 0) : (buyerBalances[c.id] || 0);
                 return (
                   <tr
                     key={`${c.type}-${c.id}`} style={{ cursor: 'pointer' }}
-                    onClick={() => (c.type === 'tedarikci' ? openLedger(c.id) : setEditingBuyer(c.raw))}
+                    onClick={() => (c.type === 'tedarikci' ? openLedger(c.id) : openBuyerLedger(c.id))}
                   >
                     <td style={{ fontWeight: 700 }}>{c.name}</td>
                     <td><span className={`zk-badge ${c.type === 'tedarikci' ? 'zk-badge-olive' : 'zk-badge-blue'}`}>{c.type === 'tedarikci' ? 'Tedarikçi' : 'Cari'}</span></td>
@@ -170,11 +195,9 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
                     <td style={{ color: COLORS.inkSoft }}>{c.address || '—'}</td>
                     <td style={{ color: COLORS.inkSoft, fontSize: 11 }} title={c.raw?.iban || ''}>{c.raw?.bankName || '—'}</td>
                     <td>
-                      {c.type === 'tedarikci' ? (
-                        <span className={`zk-badge ${bal > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
-                          {bal > 0 ? fmtTL(bal) : 'Kapalı'}
-                        </span>
-                      ) : '—'}
+                      <span className={`zk-badge ${bal > 0 ? 'zk-badge-red' : 'zk-badge-olive'}`}>
+                        {bal > 0 ? fmtTL(bal) : 'Kapalı'}
+                      </span>
                     </td>
                     <td style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
                       {c.type === 'tedarikci' && bal > 0 && formatPhoneForWhatsApp(c.phone) && (
