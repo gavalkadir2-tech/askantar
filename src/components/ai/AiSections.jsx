@@ -12,6 +12,15 @@ import {
   Target,
   Radar,
   Trash2,
+  Package,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Users,
+  Wallet,
+  Truck,
+  Receipt,
+  CalendarClock,
 } from 'lucide-react';
 import { AiSectionShell, StatCard } from '../common/index';
 import { daysUntil, fmtDate, fmtKg, fmtTL, lastNMonthKeys, linearTrend, mean, monthKey, stdDev, storageGet, storageSet, todayStr, uid } from '../../lib/format';
@@ -67,10 +76,10 @@ export function ExecutiveSummarySection({ farmers, purchases, sales, expenses, p
   return (
     <AiSectionShell title="Yönetici Özeti" subtitle="Bu ayın verilerinden otomatik oluşturulan özet" icon={Sparkles}>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
-        <StatCard label="Bu ay alınan" value={fmtKg(totalKg)} />
-        <StatCard label="Çiftçilere ödenen" value={fmtTL(totalPaid)} tone={COLORS.olive} />
-        <StatCard label="Tahmini kâr" value={fmtTL(estProfit)} tone={estProfit >= 0 ? COLORS.olive : COLORS.red} />
-        <StatCard label="Açık bakiye toplamı" value={fmtTL(totalOutstanding)} tone={totalOutstanding > 0 ? COLORS.red : COLORS.olive} />
+        <StatCard label="Bu ay alınan" value={fmtKg(totalKg)} icon={Package} />
+        <StatCard label="Çiftçilere ödenen" value={fmtTL(totalPaid)} tone={COLORS.olive} icon={Banknote} />
+        <StatCard label="Tahmini kâr" value={fmtTL(estProfit)} tone={estProfit >= 0 ? COLORS.olive : COLORS.red} icon={TrendingUp} />
+        <StatCard label="Açık bakiye toplamı" value={fmtTL(totalOutstanding)} tone={totalOutstanding > 0 ? COLORS.red : COLORS.olive} icon={Wallet} />
       </div>
       <div className="zk-card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 14, lineHeight: 1.8, color: COLORS.ink }}>
@@ -165,9 +174,9 @@ export function CariRiskSection({ farmers, purchases, payments }) {
   return (
     <AiSectionShell title="Cari Risk Analizi" subtitle="Ödenmemiş bakiyesi olan çiftçiler, son hareketten geçen süreye göre risk seviyesi" icon={ShieldAlert}>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
-        <StatCard label="Açık bakiyesi olan çiftçi" value={riskList.length} />
-        <StatCard label="Yüksek risk" value={riskList.filter((r) => r.risk === 'Yüksek').length} tone={COLORS.red} />
-        <StatCard label="Toplam açık bakiye" value={fmtTL(riskList.reduce((s, r) => s + r.balance, 0))} tone={COLORS.red} />
+        <StatCard label="Açık bakiyesi olan çiftçi" value={riskList.length} icon={Users} />
+        <StatCard label="Yüksek risk" value={riskList.filter((r) => r.risk === 'Yüksek').length} tone={COLORS.red} icon={AlertTriangle} />
+        <StatCard label="Toplam açık bakiye" value={fmtTL(riskList.reduce((s, r) => s + r.balance, 0))} tone={COLORS.red} icon={Wallet} />
       </div>
       <div className="zk-card">
         {riskList.length === 0 ? (
@@ -260,9 +269,9 @@ export function BusinessCostSection({ expenses, vehicles, maintenance, fuel, fin
   return (
     <AiSectionShell title="Maliyet Analizi" subtitle="İşletme giderleri ve tüm filo maliyetlerinin birleşik görünümü" icon={Banknote}>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
-        <StatCard label="Toplam işletme maliyeti" value={fmtTL(grandTotal)} tone={COLORS.red} />
-        <StatCard label="Araç maliyetleri" value={fmtTL(totalMaint + totalFuel + totalFines + totalInsurance + totalDamage)} />
-        <StatCard label="Genel giderler" value={fmtTL(totalExpenses)} />
+        <StatCard label="Toplam işletme maliyeti" value={fmtTL(grandTotal)} tone={COLORS.red} icon={TrendingDown} />
+        <StatCard label="Araç maliyetleri" value={fmtTL(totalMaint + totalFuel + totalFines + totalInsurance + totalDamage)} icon={Truck} />
+        <StatCard label="Genel giderler" value={fmtTL(totalExpenses)} icon={Receipt} />
       </div>
       <div className="zk-card">
         {chartData.length === 0 ? (
@@ -372,8 +381,8 @@ export function DemandForecastSection({ purchases, sales }) {
   return (
     <AiSectionShell title="Talep Tahmini" subtitle="Son 6 ayın alım/satış trendine göre basit doğrusal projeksiyon" icon={Radar}>
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
-        <StatCard label="Gelecek ay tahmini alım" value={nextPurchaseForecast !== null ? fmtKg(nextPurchaseForecast) : 'Yetersiz veri'} tone={COLORS.olive} />
-        <StatCard label="Gelecek ay tahmini satış" value={nextSalesForecast !== null ? fmtKg(nextSalesForecast) : 'Yetersiz veri'} tone={COLORS.blue} />
+        <StatCard label="Gelecek ay tahmini alım" value={nextPurchaseForecast !== null ? fmtKg(nextPurchaseForecast) : 'Yetersiz veri'} tone={COLORS.olive} icon={CalendarClock} />
+        <StatCard label="Gelecek ay tahmini satış" value={nextSalesForecast !== null ? fmtKg(nextSalesForecast) : 'Yetersiz veri'} tone={COLORS.blue} icon={CalendarClock} />
       </div>
       <div className="zk-card">
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Son 6 ay trendi</div>
