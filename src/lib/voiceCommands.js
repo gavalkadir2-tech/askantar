@@ -193,11 +193,13 @@ export function extractAmountLoose(lower) {
   return m ? parseTrNumber(m[1]) : null;
 }
 
-export function parsePurchaseCommand(text, farmers, priceList) {
+export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
   const lower = normalizeTr(text);
 
   const kgMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:kilo|kg)/);
-  const kg = kgMatch ? parseTrNumber(kgMatch[1]) : null;
+  let kg = kgMatch ? parseTrNumber(kgMatch[1]) : null;
+  let kgFromScale = false;
+  if (!kg && scaleKg != null) { kg = scaleKg; kgFromScale = true; }
   let price = extractAmount(lower);
   const vadeTarihi = extractVadeTarihi(lower);
 
@@ -231,11 +233,11 @@ export function parsePurchaseCommand(text, farmers, priceList) {
     };
   }
   if (!farmer) return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al".' };
-  if (!kg) return { ok: false, message: `${farmer.name} anladım ama kilo miktarını anlayamadım. "50 kilo" gibi net söyleyin.` };
+  if (!kg) return { ok: false, message: `${farmer.name} anladım ama kilo miktarını anlayamadım. "50 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
   if (!varietyLabel) return { ok: false, message: 'Zeytin türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
   if (!price) return { ok: false, message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
 
-  return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel, vadeTarihi };
+  return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel, vadeTarihi, kgFromScale };
 }
 
 export function parseAddFarmerCommand(text) {
@@ -266,11 +268,13 @@ export function parsePaymentCommand(text, farmers) {
   return { ok: true, type: 'payment', farmer, amount, payType };
 }
 
-export function parseSaleCommand(text, buyers, priceList) {
+export function parseSaleCommand(text, buyers, priceList, scaleKg) {
   const lower = normalizeTr(text);
 
   const kgMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:kilo|kg)/);
-  const kg = kgMatch ? parseTrNumber(kgMatch[1]) : null;
+  let kg = kgMatch ? parseTrNumber(kgMatch[1]) : null;
+  let kgFromScale = false;
+  if (!kg && scaleKg != null) { kg = scaleKg; kgFromScale = true; }
   let price = extractAmount(lower);
   const vadeTarihi = extractVadeTarihi(lower);
 
@@ -299,10 +303,10 @@ export function parseSaleCommand(text, buyers, priceList) {
     };
   }
   if (!buyer) return { ok: false, message: 'Hangi cariye satış yapıldığını anlayamadım. Örnek: "Ege Zeytinyağı\'na 200 kilo 120 liradan sat".' };
-  if (!kg) return { ok: false, message: `${buyer.name} anladım ama kilo miktarını anlayamadım. "200 kilo" gibi net söyleyin.` };
+  if (!kg) return { ok: false, message: `${buyer.name} anladım ama kilo miktarını anlayamadım. "200 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
   if (!price) return { ok: false, message: 'Kilo fiyatını anlayamadım. "120 liradan" gibi belirtin.' };
 
-  return { ok: true, type: 'sale', buyer, kg, price, varietyLabel, vadeTarihi };
+  return { ok: true, type: 'sale', buyer, kg, price, varietyLabel, vadeTarihi, kgFromScale };
 }
 
 export function parseCollectionCommand(text, buyers) {
@@ -398,6 +402,83 @@ export function parseQueryCommand(text, ctx) {
   return null;
 }
 
+// ---------- Zincirleme komut ayırma ----------
+// "Ahmet'ten 50 kilo al, 200 lira da avans ver" gibi tek cümlede birden fazla
+// işlem geçen komutları, her biri ayrı ayrı ayrıştırılabilecek parçalara
+// böler. Sadece açık bağlaçlarda ("ve", "ayrıca", "bir de") ve virgülde
+// böler; virgülle yanlışlıkla bölünmüş çıplak sayı parçalarını (örn. "1,
+// 500" gibi bir konuşma tanıma hatası) bir önceki parçaya geri birleştirir.
+export function splitChainedCommands(text) {
+  const rough = String(text)
+    .split(/,|\bve\b|\bayrıca\b|\bayrica\b|\bbir de\b/gi)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (rough.length <= 1) return [String(text).trim()];
+  const merged = [];
+  for (const part of rough) {
+    if (merged.length > 0 && part.split(/\s+/).length <= 1) {
+      merged[merged.length - 1] += ' ' + part;
+    } else {
+      merged.push(part);
+    }
+  }
+  return merged.length > 1 ? merged : [String(text).trim()];
+}
+
+// ---------- Bağlamsal düzeltme ----------
+// Bekleyen (onay bekleyen) bir kayıt varken kullanıcının söylediği kısa
+// düzeltmeyi ("hayır 60 kilo", "150 lira olacak") baştan komutu iptal edip
+// yeniden söyletmek yerine doğrudan o kaydın ilgili alanına uygular. Yanlışlıkla
+// yeni bir işlem başlatma ihtimaline karşı yalnızca "hayır" içeren ya da kısa
+// ve eylem sözcüğü barındırmayan ifadelerde denenir.
+export function shouldTryCorrection(text) {
+  const lower = normalizeTr(text);
+  if (lower.includes('hayır') || lower.includes('hayir')) return true;
+  const words = lower.trim().split(/\s+/).filter(Boolean);
+  const actionWords = ['al', 'sat', 'avans', 'ödeme', 'odeme', 'gider', 'masraf', 'tahsil', 'hatırlat', 'ekle', 'çiftçi', 'ciftci'];
+  return words.length > 0 && words.length <= 5 && /\d/.test(lower) && !actionWords.some((w) => lower.includes(w));
+}
+
+export function applyVoiceCorrection(text, pending, ctx) {
+  const converted = turkishWordsToNumber(text);
+  const lower = normalizeTr(converted);
+
+  if (pending.type === 'purchase' || pending.type === 'sale') {
+    const kgMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:kilo|kg)/);
+    if (kgMatch) return { ...pending, kg: parseTrNumber(kgMatch[1]), kgFromScale: false };
+    const priceMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:lira|tl|₺)/);
+    if (priceMatch) return { ...pending, price: parseTrNumber(priceMatch[1]) };
+    if (lower.includes('hayır') || lower.includes('hayir')) {
+      const bareMatch = lower.match(/(\d+(?:[.,]\d+)?)/);
+      if (bareMatch) return { ...pending, kg: parseTrNumber(bareMatch[1]), kgFromScale: false };
+    }
+    for (const v of ctx.priceList || []) {
+      const vNorm = normalizeTr(v.name);
+      if (lower.includes(vNorm) || bestWordSimilarity(lower, vNorm) >= FUZZY_THRESHOLD) {
+        return { ...pending, varietyLabel: v.name };
+      }
+    }
+    return null;
+  }
+
+  if (pending.type === 'payment' || pending.type === 'collection' || pending.type === 'expense') {
+    const amount = extractAmountLoose(lower);
+    if (amount != null) return { ...pending, amount };
+    return null;
+  }
+
+  return null;
+}
+
+// ---------- Sesli geri alma ----------
+// "son işlemi iptal et" / "son kaydı sil" gibi ifadeleri tanır.
+export function isUndoCommand(text) {
+  const lower = normalizeTr(text);
+  const mentionsLast = lower.includes('son işlem') || lower.includes('son islem') || lower.includes('son kayıt') || lower.includes('son kayit') || lower.includes('son kaydı') || lower.includes('son kaydi');
+  const mentionsUndo = lower.includes('iptal et') || lower.includes('geri al') || lower.includes(' sil') || lower.endsWith('sil');
+  return mentionsLast && mentionsUndo;
+}
+
 export function parseVoiceCommandLocal(text, ctx) {
   const converted = turkishWordsToNumber(text);
   const lower = normalizeTr(converted);
@@ -410,9 +491,9 @@ export function parseVoiceCommandLocal(text, ctx) {
   if (lower.includes('gider') || lower.includes('masraf')) return parseExpenseCommand(converted);
   if (lower.includes('tahsil')) return parseCollectionCommand(converted, ctx.buyers || []);
   if (lower.includes('avans') || lower.includes('ödeme') || lower.includes('odeme')) return parsePaymentCommand(converted, ctx.farmers);
-  if (/\bsatt|satış|satis|\bsat\b/.test(lower)) return parseSaleCommand(converted, ctx.buyers || [], ctx.priceList);
+  if (/\bsatt|satış|satis|\bsat\b/.test(lower)) return parseSaleCommand(converted, ctx.buyers || [], ctx.priceList, ctx.scaleKg);
   if (lower.includes('çiftçi ekle') || lower.includes('ciftci ekle') || lower.includes('yeni çiftçi') || lower.includes('yeni ciftci')) return parseAddFarmerCommand(converted);
-  return parsePurchaseCommand(converted, ctx.farmers, ctx.priceList);
+  return parsePurchaseCommand(converted, ctx.farmers, ctx.priceList, ctx.scaleKg);
 }
 
 export function interpretAiParsedResult(parsed, ctx, text) {
@@ -421,9 +502,11 @@ export function interpretAiParsedResult(parsed, ctx, text) {
   if (parsed.action === 'purchase') {
     const farmer = ctx.farmers.find((f) => f.name.toLowerCase() === String(parsed.farmerName || '').toLowerCase())
       || ctx.farmers.find((f) => f.name.toLowerCase().includes(String(parsed.farmerName || '').toLowerCase()));
-    if (!farmer || !parsed.kg || !parsed.price) return null;
+    let kg = parsed.kg, kgFromScale = false;
+    if (!kg && ctx.scaleKg != null) { kg = ctx.scaleKg; kgFromScale = true; }
+    if (!farmer || !kg || !parsed.price) return null;
     const varietyLabel = parsed.grade ? `${parsed.variety} · ${parsed.grade}` : parsed.variety;
-    return { ok: true, type: 'purchase', farmer, kg: parsed.kg, price: parsed.price, varietyLabel, vadeTarihi: parsed.vadeTarihi || null, viaAi: true };
+    return { ok: true, type: 'purchase', farmer, kg, price: parsed.price, varietyLabel, vadeTarihi: parsed.vadeTarihi || null, kgFromScale, viaAi: true };
   }
   if (parsed.action === 'add_farmer' && parsed.name) {
     return { ok: true, type: 'add_farmer', name: parsed.name, phone: parsed.phone || '', viaAi: true };
@@ -434,11 +517,14 @@ export function interpretAiParsedResult(parsed, ctx, text) {
     if (!farmer) return null;
     return { ok: true, type: 'payment', farmer, amount: parsed.amount, payType: parsed.payType === 'avans' ? 'avans' : 'odeme', viaAi: true };
   }
-  if (parsed.action === 'sale' && parsed.kg && parsed.price) {
+  if (parsed.action === 'sale' && parsed.price) {
+    let kg = parsed.kg, kgFromScale = false;
+    if (!kg && ctx.scaleKg != null) { kg = ctx.scaleKg; kgFromScale = true; }
+    if (!kg) return null;
     const buyer = (ctx.buyers || []).find((b) => b.name.toLowerCase() === String(parsed.buyerName || '').toLowerCase())
       || (ctx.buyers || []).find((b) => b.name.toLowerCase().includes(String(parsed.buyerName || '').toLowerCase()));
     if (!buyer) return null;
-    return { ok: true, type: 'sale', buyer, kg: parsed.kg, price: parsed.price, varietyLabel: parsed.variety || null, vadeTarihi: parsed.vadeTarihi || null, viaAi: true };
+    return { ok: true, type: 'sale', buyer, kg, price: parsed.price, varietyLabel: parsed.variety || null, vadeTarihi: parsed.vadeTarihi || null, kgFromScale, viaAi: true };
   }
   if (parsed.action === 'collection' && parsed.amount) {
     const buyer = (ctx.buyers || []).find((b) => b.name.toLowerCase() === String(parsed.buyerName || '').toLowerCase())
@@ -473,7 +559,7 @@ Hiçbiri değilse: {"action":"unknown"}
 Bilinen çiftçiler: ${ctx.farmers.map((f) => f.name).join(', ') || 'yok'}
 Bilinen cariler (alıcılar): ${(ctx.buyers || []).map((b) => b.name).join(', ') || 'yok'}
 Bilinen zeytin türleri: ${ctx.priceList.map((v) => v.name).join(', ') || 'yok'}
-Bugünün tarihi: ${todayStr()}`;
+Bugünün tarihi: ${todayStr()}${ctx.scaleKg != null ? `\nKantar bağlı ve şu an ${ctx.scaleKg} kg okuyor — kullanıcı alım/satış cümlesinde kilo söylemediyse "kg" alanını boş bırak, otomatik doldurulacak.` : ''}`;
 
 // Tarayıcıdan doğrudan Groq API'sine istek atar — kullanıcı Ayarlar'dan kendi
 // ücretsiz Groq API anahtarını girdiyse çalışır. Anahtar tarayıcıda saklanır,
@@ -540,10 +626,11 @@ export async function parseVoiceCommandAI(text, ctx) {
 }
 
 export function pendingSummaryText(p) {
-  if (p.type === 'purchase') return `Alım: ${p.farmer.name} — ${p.varietyLabel} — ${fmtKg(p.kg)} — ${fmtTL(p.price)}/kg. Toplam ${fmtTL(p.kg * p.price)}.${p.vadeTarihi ? ` Vade: ${fmtDate(p.vadeTarihi)}.` : ''}`;
+  const kgNote = p.kgFromScale ? ' (kantardan)' : '';
+  if (p.type === 'purchase') return `Alım: ${p.farmer.name} — ${p.varietyLabel} — ${fmtKg(p.kg)}${kgNote} — ${fmtTL(p.price)}/kg. Toplam ${fmtTL(p.kg * p.price)}.${p.vadeTarihi ? ` Vade: ${fmtDate(p.vadeTarihi)}.` : ''}`;
   if (p.type === 'add_farmer') return `Yeni çiftçi: ${p.name}${p.phone ? ' · ' + p.phone : ''}.`;
   if (p.type === 'payment') return `${p.payType === 'avans' ? 'Avans' : 'Ödeme'}: ${p.farmer.name} — ${fmtTL(p.amount)}.`;
-  if (p.type === 'sale') return `Satış: ${p.buyer.name}${p.varietyLabel ? ' — ' + p.varietyLabel : ''} — ${fmtKg(p.kg)} — ${fmtTL(p.price)}/kg. Toplam ${fmtTL(p.kg * p.price)}.${p.vadeTarihi ? ` Vade: ${fmtDate(p.vadeTarihi)}.` : ''}`;
+  if (p.type === 'sale') return `Satış: ${p.buyer.name}${p.varietyLabel ? ' — ' + p.varietyLabel : ''} — ${fmtKg(p.kg)}${kgNote} — ${fmtTL(p.price)}/kg. Toplam ${fmtTL(p.kg * p.price)}.${p.vadeTarihi ? ` Vade: ${fmtDate(p.vadeTarihi)}.` : ''}`;
   if (p.type === 'collection') return `Tahsilat: ${p.buyer.name} — ${fmtTL(p.amount)}.`;
   if (p.type === 'expense') return `Gider: ${p.category} — ${fmtTL(p.amount)}.`;
   if (p.type === 'reminder') return `Hatırlatma: "${p.title}" — ${fmtDate(p.date)}.`;
