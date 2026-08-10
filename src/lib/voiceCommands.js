@@ -223,6 +223,14 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
       }
     }
   }
+  // Fiyat listesinde tek bir tür/ürün varsa (çoğu küçük komisyoncuda durum
+  // budur), kullanıcı türü hiç söylemese bile otomatik o türü varsayıyoruz —
+  // her seferinde tür adı tekrarlamak zorunda kalmasın.
+  if (!varietyLabel && priceList.length === 1) {
+    const v = priceList[0];
+    if (v.hasGrades && v.grades.length > 0) { varietyLabel = `${v.name} · ${v.grades[0].name}`; matchedPrice = v.grades[0].price; }
+    else { varietyLabel = v.name; matchedPrice = v.singlePrice; }
+  }
   if (!price && matchedPrice) price = matchedPrice;
 
   if (ambiguous) {
@@ -233,9 +241,22 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
     };
   }
   if (!farmer) return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al".' };
-  if (!kg) return { ok: false, message: `${farmer.name} anladım ama kilo miktarını anlayamadım. "50 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
-  if (!varietyLabel) return { ok: false, message: 'Zeytin türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
-  if (!price) return { ok: false, message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
+
+  // Birden fazla alan aynı anda belirsizse tek tek genel "anlayamadım" yerine
+  // hepsini tek, hedefli bir soruda toplarız (ör. "kilo mu, fiyat mı net değildi?").
+  const missing = [];
+  if (!kg) missing.push('kilo');
+  if (!varietyLabel) missing.push('tür/sınıf');
+  if (!price) missing.push('fiyat');
+  if (missing.length > 1) {
+    return {
+      ok: false, missingFields: missing,
+      message: `${farmer.name} anladım ama ${missing.join(' mı, ')} mı net değildi? Örnek: "50 kilo Tirilye 100 liradan" gibi tamamlar mısınız?`,
+    };
+  }
+  if (!kg) return { ok: false, missingFields: ['kilo'], message: `${farmer.name} anladım ama kilo miktarını anlayamadım. "50 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
+  if (!varietyLabel) return { ok: false, missingFields: ['tür/sınıf'], message: 'Zeytin türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
+  if (!price) return { ok: false, missingFields: ['fiyat'], message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
 
   return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel, vadeTarihi, kgFromScale };
 }
@@ -303,8 +324,18 @@ export function parseSaleCommand(text, buyers, priceList, scaleKg) {
     };
   }
   if (!buyer) return { ok: false, message: 'Hangi cariye satış yapıldığını anlayamadım. Örnek: "Ege Zeytinyağı\'na 200 kilo 120 liradan sat".' };
-  if (!kg) return { ok: false, message: `${buyer.name} anladım ama kilo miktarını anlayamadım. "200 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
-  if (!price) return { ok: false, message: 'Kilo fiyatını anlayamadım. "120 liradan" gibi belirtin.' };
+
+  const missing = [];
+  if (!kg) missing.push('kilo');
+  if (!price) missing.push('fiyat');
+  if (missing.length > 1) {
+    return {
+      ok: false, missingFields: missing,
+      message: `${buyer.name} anladım ama ${missing.join(' mı, ')} mı net değildi? Örnek: "200 kilo 120 liradan" gibi tamamlar mısınız?`,
+    };
+  }
+  if (!kg) return { ok: false, missingFields: ['kilo'], message: `${buyer.name} anladım ama kilo miktarını anlayamadım. "200 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
+  if (!price) return { ok: false, missingFields: ['fiyat'], message: 'Kilo fiyatını anlayamadım. "120 liradan" gibi belirtin.' };
 
   return { ok: true, type: 'sale', buyer, kg, price, varietyLabel, vadeTarihi, kgFromScale };
 }
@@ -468,6 +499,39 @@ export function applyVoiceCorrection(text, pending, ctx) {
   }
 
   return null;
+}
+
+// ---------- Sesli onay/iptal ----------
+// Onay bekleyen bir kayıt varken kullanıcı butona basmadan sadece "evet" ya
+// da "hayır" (tek başına) diyerek cevap verebilsin diye. Kısa tutuyoruz ki
+// "hayır 60 kilo" gibi düzeltme cümleleri buraya değil applyVoiceCorrection'a
+// düşsün (bkz. shouldTryCorrection).
+const CONFIRM_WORDS = ['evet', 'tamam', 'onayla', 'onaylıyorum', 'onayliyorum', 'kaydet', 'olur', 'doğru', 'dogru', 'aynen', 'kesinlikle', 'evettir'];
+const CANCEL_WORDS = ['hayır', 'hayir', 'iptal', 'vazgeç', 'vazgec', 'yapma', 'boşver', 'bosver', 'gerek yok'];
+
+export function isConfirmCommand(text) {
+  const lower = normalizeTr(text).replace(/[.!?,]/g, '').trim();
+  const words = lower.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 3) return false;
+  return words.some((w) => CONFIRM_WORDS.includes(w));
+}
+
+export function isCancelCommand(text) {
+  const lower = normalizeTr(text).replace(/[.!?,]/g, '').trim();
+  const words = lower.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 2) return false;
+  return words.some((w) => CANCEL_WORDS.includes(w));
+}
+
+// ---------- Bağlamsal takip komutları ----------
+// "Aynısından 30 kilo daha al", "ona 100 lira da avans ver" gibi bir önceki
+// işlemdeki kişiye/türe zamirle atıf yapan cümleleri tanır. Gerçek doldurma
+// işlemi VoiceAssistant.jsx içinde son kaydedilen işlem hafızasıyla yapılır;
+// burada sadece "bu bir takip cümlesi mi?" tespiti yapılır.
+const FOLLOWUP_REGEX = /\b(ona|onun|ondan|aynısından|aynisindan|aynısı|aynisi|aynı fiyattan|ayni fiyattan)\b/;
+
+export function isFollowUpReference(text) {
+  return FOLLOWUP_REGEX.test(normalizeTr(text));
 }
 
 // ---------- Sesli geri alma ----------
