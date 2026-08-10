@@ -130,7 +130,4 @@ export function computeAging(debits, credits) {
   const daysOverdue = Math.round((today - vadeDate) / 86400000);
   return { daysOverdue, oldestUnpaidDate: vadeStr, isOverdue: daysOverdue > 0 };
 }
-    return sortDir === 'desc' ? sorted.reverse() : sorted;
-  };
-  return { sortKey, sortDir, toggleSort, sortRows };
-}
+    
