@@ -13,11 +13,13 @@ import { COLORS } from '../lib/theme';
 import {
   applyVoiceCorrection,
   isUndoCommand,
+  parseQueryCommand,
   parseVoiceCommandAI,
   parseVoiceCommandLocal,
   pendingSummaryText,
   shouldTryCorrection,
   splitChainedCommands,
+  turkishWordsToNumber,
 } from '../lib/voiceCommands';
 import { useScaleConnection } from '../hooks/useScaleConnection';
 
@@ -96,6 +98,14 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   });
 
   const parseOne = async (text, ctx) => {
+    // Bakiye/gecikme gibi veri sorularını her zaman önce gerçek kayıtlarla
+    // yerelde cevaplarız. AI'ye (Groq) çiftçi/cari isimleri dışında hiçbir
+    // alım/ödeme verisi gönderilmiyor; sorguyu AI'ye bırakmak, gerçek bir
+    // hesaplama yerine uydurma bir cevap ("sorgulanıyor" gibi) almak demekti.
+    const converted = turkishWordsToNumber(text);
+    const localAnswer = parseQueryCommand(converted, ctx);
+    if (localAnswer) return { ok: true, type: 'query', answer: localAnswer };
+
     let result = null;
     if (aiEnabled) {
       setThinking(true);
