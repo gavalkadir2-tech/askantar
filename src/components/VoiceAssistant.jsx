@@ -12,12 +12,14 @@ import { nextReceiptNo, storageSet, todayStr, uid } from '../lib/format';
 import { COLORS } from '../lib/theme';
 import {
   applyVoiceCorrection,
+  buildMorningBriefing,
   isCancelCommand,
   isConfirmCommand,
   isFollowUpReference,
   isHighValue,
   isUndoCommand,
   lowConfidenceWarningText,
+  normalizeTr,
   parseQueryCommand,
   parseVoiceCommandAI,
   parseVoiceCommandLocal,
@@ -70,6 +72,13 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   // kullanabilsin diye ref üzerinden çağrılır (interval'in closure'ı bayatlamasın diye).
   const promptScaleWeightRef = useRef(() => {});
   const dragStateRef = useRef({ dragging: false, moved: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+  // ---------- Uyandırma kelimesi ("Antar") ----------
+  // Ayarlardan açılırsa, tarayıcının kendi sürekli SpeechRecognition'ı ile
+  // arka planda düşük maliyetli dinleme yapılır (Groq'a ses göndermeden).
+  // Uyandırma kelimesi duyulunca asistan açılır ve gerçek komut Groq
+  // Whisper ile (daha doğru) kaydedilir — bubble'a hiç dokunmadan.
+  const wakeRecognitionRef = useRef(null);
+  const startWakeListenerRef = useRef(() => {});
   const [bubblePos, setBubblePos] = useState(() => {
     if (typeof window !== 'undefined') return { x: window.innerWidth - 76, y: window.innerHeight - 86 };
     return { x: 300, y: 300 };
@@ -80,6 +89,8 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   const ttsSupported = typeof window !== 'undefined' && !!window.speechSynthesis;
   const aiEnabled = !!(settings && (settings.aiVoiceEnabled || settings.groqApiKey));
   const groqApiKey = (settings && settings.groqApiKey) || '';
+  const wakeWordEnabled = !!(settings && settings.wakeWordEnabled) && !!speechSupported;
+  const wakeWord = normalizeTr((settings && settings.wakeWord) || 'antar');
 
   // ---------- Gelişmiş sesli komut girişi (Groq Whisper) ----------
   // Groq API anahtarı tanımlıysa ve tarayıcı mikrofon kaydını destekliyorsa
@@ -105,7 +116,95 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   // kullanılan "meşgul mü" özeti — her render'da güncellenir.
   useEffect(() => {
     busyRef.current = !!(pending || pendingBatch || ambiguity || newEntityPrompt || listening || micStage !== 'idle' || thinking);
+    if (busyRef.current) {
+      // Gercek bir komut yakalanirken (Groq kaydi, tarayici tanima, TTS
+      // vs.) mikrofon celismesini onlemek icin arka plan uyandirma
+      // dinleyicisini durdur; is bitince asagidaki dal onu yeniden baslatir.
+      if (wakeRecognitionRef.current) {
+        try { wakeRecognitionRef.current.onend = null; wakeRecognitionRef.current.stop(); } catch (e) {}
+        wakeRecognitionRef.current = null;
+      }
+    } else {
+      // Asistan mesgul degilse (ve uyandirma kelimesi acik ise) arka plan
+      // dinleyicisini yeniden baslat.
+      startWakeListenerRef.current();
+    }
   }, [pending, pendingBatch, ambiguity, newEntityPrompt, listening, micStage, thinking]);
+
+  // ---------- Uyandırma kelimesi ile sürekli dinleme ----------
+  // Tarayıcının kendi (ücretsiz) SpeechRecognition'ını arka planda sürekli
+  // çalıştırıp yalnızca uyandırma kelimesini ("antar" gibi) dinler; Groq'a
+  // ses göndermez. Kelime duyulunca asistan açılır ve aynı cümlede devamı
+  // söylenmişse doğrudan komut olarak işlenir, değilse mikrofon (Groq
+  // Whisper ile) otomatik açılır — kullanıcı bubble'a hiç dokunmadan
+  // "Antar, Mehmet'ten 50 kilo al" diyebilir.
+  startWakeListenerRef.current = () => {
+    if (!wakeWordEnabled || busyRef.current || wakeRecognitionRef.current) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    let rec;
+    try { rec = new SR(); } catch (e) { return; }
+    rec.lang = 'tr-TR';
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e) => {
+      const res = e.results[e.results.length - 1];
+      const transcript = normalizeTr(res && res[0] ? res[0].transcript : '');
+      const idx = transcript.indexOf(wakeWord);
+      if (idx === -1) return;
+      const rest = transcript.slice(idx + wakeWord.length).replace(/^[,.\s]+/, '').trim();
+      try { rec.onend = null; rec.abort(); } catch (err) {}
+      wakeRecognitionRef.current = null;
+      setOpen(true);
+      if (rest.length > 2) {
+        handleCommand(rest);
+      } else {
+        startListening();
+      }
+    };
+    rec.onerror = () => { wakeRecognitionRef.current = null; };
+    rec.onend = () => {
+      wakeRecognitionRef.current = null;
+      if (wakeWordEnabled && !busyRef.current) setTimeout(() => startWakeListenerRef.current(), 400);
+    };
+    try {
+      rec.start();
+      wakeRecognitionRef.current = rec;
+    } catch (e) { /* zaten calisiyor olabilir, sessizce yut */ }
+  };
+
+  useEffect(() => {
+    if (wakeWordEnabled) {
+      startWakeListenerRef.current();
+    } else if (wakeRecognitionRef.current) {
+      try { wakeRecognitionRef.current.onend = null; wakeRecognitionRef.current.stop(); } catch (e) {}
+      wakeRecognitionRef.current = null;
+    }
+    return () => {
+      if (wakeRecognitionRef.current) {
+        try { wakeRecognitionRef.current.onend = null; wakeRecognitionRef.current.stop(); } catch (e) {}
+        wakeRecognitionRef.current = null;
+      }
+    };
+  }, [wakeWordEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------- Sabah / mesai başı sesli özet ----------
+  // Uygulama açılınca, gün içinde ilk kez ise (localStorage ile günde bir
+  // kez sınırlanır) proaktif olarak kısa bir özet okunur: "Bugün 3 alım,
+  // 2 satış var, vadesi geçen 2 hesap var" gibi. Ayarlardan kapatılabilir.
+  useEffect(() => {
+    if (settings && settings.morningBriefingEnabled === false) return;
+    let lastDate = null;
+    try { lastDate = localStorage.getItem('zk:lastBriefingDate'); } catch (e) {}
+    if (lastDate === todayStr()) return;
+    const t = setTimeout(() => {
+      const text = buildMorningBriefing(buildCtx());
+      setOpen(true);
+      addAssistantMessage(text);
+      try { localStorage.setItem('zk:lastBriefingDate', todayStr()); } catch (e) {}
+    }, 900);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- Sesli geri okuma (TTS) ----------
   // Asistan cevabini sesli de okur, boylece eller kirliyken/tartida iken
@@ -204,9 +303,13 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
     const iv = setInterval(() => {
       const v = scale.lastValue;
       const w = scaleWatchRef.current;
-      // Boş/çok hafif tartı okumalarını (gürültü, henüz ürün konmamış) yok say.
+      // Bos/cok hafif tarti okumalarini (gurultu, henuz urun konmamis ya da
+      // arac tartidan ayrilmis) yok say. Arac ayrildiginda "prompted" da
+      // sifirlanir — boylece bir sonraki arac tesadufen ayni kiloya
+      // gelse bile (ör. iki farkli kasa ayni agirlikta) yeniden sorulur;
+      // bu, "coklu tartim modu"nda ardisik araclar icin gereklidir.
       if (v == null || v < 0.5) {
-        scaleWatchRef.current = { value: v, since: 0, prompted: w.prompted };
+        scaleWatchRef.current = { value: v, since: 0, prompted: null };
         return;
       }
       const now = Date.now();
@@ -794,6 +897,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
             <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Sesli Asistan</div>
             {aiEnabled && <span style={{ fontSize: 9.5, background: 'rgba(255,255,255,0.18)', padding: '2px 7px', borderRadius: 10 }}>AI</span>}
             {micEngine === 'groq' && <span title="Sesli komutlar Groq Whisper ile tanınıyor" style={{ fontSize: 9.5, background: 'rgba(255,255,255,0.18)', padding: '2px 7px', borderRadius: 10 }}>🎙️ Groq</span>}
+            {wakeWordEnabled && <span title={`"${(settings && settings.wakeWord) || 'Antar'}" uyandırma kelimesi dinleniyor`} style={{ fontSize: 9.5, background: 'rgba(255,255,255,0.18)', padding: '2px 7px', borderRadius: 10 }}>👂</span>}
             {scale.serialSupported && (
               <button
                 onClick={() => (scale.connected ? scale.disconnect() : scale.connect())}
@@ -881,7 +985,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
             <input
               className="zk-input"
               style={{ minHeight: 38, fontSize: 12.5, padding: '8px 10px' }}
-              placeholder={micStage === 'transcribing' ? 'Ses işleniyor...' : (listening ? 'Dinliyorum... (susunca otomatik gönderilir)' : 'Ya da buraya yazın...')}
+              placeholder={micStage === 'transcribing' ? 'Ses işleniyor...' : (listening ? 'Dinliyorum... (susunca otomatik gönderilir)' : (scale.connected && !pending && !pendingBatch ? 'Sıradaki araç bekleniyor...' : 'Ya da buraya yazın...'))}
               value={typedText}
               onChange={(e) => setTypedText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submitTyped(); }}
