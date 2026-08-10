@@ -594,6 +594,55 @@ export async function callGroqDirect(text, ctx, apiKey) {
   }
 }
 
+// ---------- Groq Whisper ile ses -> metin ----------
+// Tarayıcının kendi SpeechRecognition'ı (Web Speech API) yalnızca masaüstü
+// Chrome/Edge'de çalışıyor ve Türkçe tanıma kalitesi düzensiz. Bunun yerine
+// mikrofonu kendimiz kaydedip (useVoiceRecorder) ham sesi doğrudan Groq'un
+// Whisper modeline gönderiyoruz: hem mobil dahil her tarayıcıda çalışır hem
+// de tanıma kalitesi belirgin şekilde daha iyi ve daha hızlıdır.
+const GROQ_STT_MODEL = 'whisper-large-v3-turbo';
+
+export async function transcribeAudioGroq(blob, apiKey, { retries = 1 } = {}) {
+  if (!blob || !apiKey) return { ok: false, reason: 'no-input' };
+  const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : blob.type.includes('wav') ? 'wav' : 'webm';
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const form = new FormData();
+      form.append('file', blob, `ses.${ext}`);
+      form.append('model', GROQ_STT_MODEL);
+      form.append('language', 'tr');
+      form.append('response_format', 'json');
+      form.append('temperature', '0');
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.status === 401) return { ok: false, reason: 'auth' };
+      if (res.status === 429) return { ok: false, reason: 'rate-limit' };
+      if (!res.ok) {
+        if (attempt < retries) continue;
+        return { ok: false, reason: 'server' };
+      }
+      const data = await res.json();
+      const text = data && typeof data.text === 'string' ? data.text.trim() : '';
+      if (!text) return { ok: false, reason: 'empty' };
+      return { ok: true, text };
+    } catch (e) {
+      if (attempt < retries && e.name !== 'AbortError') continue;
+      return { ok: false, reason: e.name === 'AbortError' ? 'timeout' : 'network' };
+    }
+  }
+  return { ok: false, reason: 'unknown' };
+}
+
 // AI destekli ayrıştırma. İki yoldan biri kullanılabilir:
 // 1) Ayarlarda kişisel Groq API anahtarı girilmişse tarayıcıdan doğrudan Groq'a istek atılır.
 // 2) Yoksa ve "supabase" tanımlıysa (GitHub sürümü) sunucu tarafındaki Edge Function denenir
