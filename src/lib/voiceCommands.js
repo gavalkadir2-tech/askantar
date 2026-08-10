@@ -9,7 +9,7 @@ import { computeAging } from '../hooks/index';
 // string.includes() yerine, dusuk maliyetli bir benzerlik skoruna (Levenshtein)
 // gore en yakin adayi da deniyoruz.
 
-function normalizeTr(str) {
+export function normalizeTr(str) {
   return String(str || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase().trim();
 }
 
@@ -447,10 +447,49 @@ function balanceAndAging(debits, credits) {
   return { balance, aging };
 }
 
-// "Ahmet'in bakiyesi ne kadar?", "vadesi geçmiş kaç hesap var?" gibi veri
-// okuma komutlarini yanitlar. Islem olusturmadigi icin diger parse*Command
-// fonksiyonlarindan farkli olarak dogrudan bir metin cevabi doner (ya da
-// sorgu degilse null doner, boylece normal komut akisina devam edilir).
+// Vadesi gecmis (acik ve gecikmis) hesap sayisini ve toplam tutarini hesaplar.
+// Hem parseQueryCommand'daki "kac hesap gecikmis" sorusunda hem de sabah
+// brifinginde kullanilir, boylece iki yerde ayni mantik tekrarlanmaz.
+export function countOverdueAccounts(ctx) {
+  const { farmers = [], buyers = [], purchases = [], payments = [], sales = [], buyerPayments = [] } = ctx || {};
+  let count = 0, total = 0;
+  farmers.forEach((f) => {
+    const debits = purchases.filter((x) => x.farmerId === f.id).map((x) => ({ amount: x.netPayment, date: x.date, vadeTarihi: x.vadeTarihi, createdAt: x.createdAt }));
+    const credits = payments.filter((x) => x.farmerId === f.id).map((x) => ({ amount: x.amount, createdAt: x.createdAt }));
+    const { balance, aging } = balanceAndAging(debits, credits);
+    if (balance > 0 && aging.isOverdue) { count += 1; total += balance; }
+  });
+  buyers.forEach((b) => {
+    const debits = sales.filter((x) => x.buyerId === b.id).map((x) => ({ amount: x.amount, date: x.date, vadeTarihi: x.vadeTarihi, createdAt: x.createdAt }));
+    const credits = buyerPayments.filter((x) => x.buyerId === b.id).map((x) => ({ amount: x.amount, createdAt: x.createdAt }));
+    const { balance, aging } = balanceAndAging(debits, credits);
+    if (balance > 0 && aging.isOverdue) { count += 1; total += balance; }
+  });
+  return { count, total };
+}
+
+// "Ahmet'in son işlemi neydi?" gibi sorularda o kişiye ait tum kayit
+// turlerinden (alim/satis/odeme/tahsilat) en son olusturulani bulup metne cevirir.
+function findLastTransactionText(person, ctx, kind) {
+  const { purchases = [], payments = [], sales = [], buyerPayments = [] } = ctx || {};
+  const records = [];
+  if (kind === 'farmer') {
+    purchases.filter((x) => x.farmerId === person.id).forEach((x) => records.push({ createdAt: x.createdAt || 0, text: `${fmtDate(x.date)}: ${fmtKg(x.netKg || x.items?.[0]?.kg || 0)} alım, ${fmtTL(x.netPayment)}` }));
+    payments.filter((x) => x.farmerId === person.id).forEach((x) => records.push({ createdAt: x.createdAt || 0, text: `${fmtDate(x.date)}: ${x.payType === 'avans' ? 'avans' : 'ödeme'} ${fmtTL(x.amount)}` }));
+  } else {
+    sales.filter((x) => x.buyerId === person.id).forEach((x) => records.push({ createdAt: x.createdAt || 0, text: `${fmtDate(x.date)}: ${fmtKg(x.kg)} satış, ${fmtTL(x.amount)}` }));
+    buyerPayments.filter((x) => x.buyerId === person.id).forEach((x) => records.push({ createdAt: x.createdAt || 0, text: `${fmtDate(x.date)}: tahsilat ${fmtTL(x.amount)}` }));
+  }
+  if (records.length === 0) return `${person.name}: henüz hiç kaydı yok.`;
+  records.sort((a, b) => b.createdAt - a.createdAt);
+  return `${person.name} — son işlem: ${records[0].text}.`;
+}
+
+// "Ahmet'in bakiyesi ne kadar?", "vadesi geçmiş kaç hesap var?", "bugün kaç
+// kilo aldık?", "Ahmet'in son işlemi neydi?" gibi veri okuma komutlarini
+// yanitlar. Islem olusturmadigi icin diger parse*Command fonksiyonlarindan
+// farkli olarak dogrudan bir metin cevabi doner (ya da sorgu degilse null
+// doner, boylece normal komut akisina devam edilir).
 export function parseQueryCommand(text, ctx) {
   const lower = normalizeTr(text);
   const { farmers = [], buyers = [], purchases = [], payments = [], sales = [], buyerPayments = [] } = ctx || {};
@@ -459,21 +498,45 @@ export function parseQueryCommand(text, ctx) {
     && (lower.includes('kaç') || lower.includes('kac') || lower.includes('var mı') || lower.includes('var mi'));
 
   if (asksOverdueCount) {
-    let count = 0, total = 0;
-    farmers.forEach((f) => {
-      const debits = purchases.filter((x) => x.farmerId === f.id).map((x) => ({ amount: x.netPayment, date: x.date, vadeTarihi: x.vadeTarihi, createdAt: x.createdAt }));
-      const credits = payments.filter((x) => x.farmerId === f.id).map((x) => ({ amount: x.amount, createdAt: x.createdAt }));
-      const { balance, aging } = balanceAndAging(debits, credits);
-      if (balance > 0 && aging.isOverdue) { count += 1; total += balance; }
-    });
-    buyers.forEach((b) => {
-      const debits = sales.filter((x) => x.buyerId === b.id).map((x) => ({ amount: x.amount, date: x.date, vadeTarihi: x.vadeTarihi, createdAt: x.createdAt }));
-      const credits = buyerPayments.filter((x) => x.buyerId === b.id).map((x) => ({ amount: x.amount, createdAt: x.createdAt }));
-      const { balance, aging } = balanceAndAging(debits, credits);
-      if (balance > 0 && aging.isOverdue) { count += 1; total += balance; }
-    });
+    const { count, total } = countOverdueAccounts(ctx);
     if (count === 0) return 'Vadesi geçmiş hesap yok, her şey yolunda ✓';
     return `Vadesi geçmiş ${count} hesap var, toplam ${fmtTL(total)}.`;
+  }
+
+  // "Ahmet'in son işlemi neydi?", "Ayşe'nin son hareketi ne?" gibi sorular.
+  const asksLastTransaction = lower.includes('son işlem') || lower.includes('son islem') || lower.includes('son hareket');
+  if (asksLastTransaction) {
+    const farmerMatch = extractFarmer(lower, farmers);
+    if (farmerMatch) return findLastTransactionText(farmerMatch, ctx, 'farmer');
+    const buyerMatch = extractBuyer(lower, buyers);
+    if (buyerMatch) return findLastTransactionText(buyerMatch, ctx, 'buyer');
+    return 'Kimin son işlemini sorduğunuzu anlayamadım. "Ahmet\'in son işlemi neydi?" gibi sorun.';
+  }
+
+  // "Bugün kaç kilo aldık?", "bugün kaç kilo sattık?", "bugün kaç alım var?" gibi sorular.
+  const mentionsToday = lower.includes('bugün') || lower.includes('bugun');
+  const asksKgToday = mentionsToday && (lower.includes('kilo') || lower.includes('kg'));
+  if (asksKgToday) {
+    const today = todayStr();
+    const wantsSale = lower.includes('sat');
+    const wantsPurchase = !wantsSale && (lower.includes('al') || lower.includes('kilo'));
+    if (wantsSale) {
+      const todaySales = sales.filter((x) => x.date === today);
+      const kg = todaySales.reduce((s, x) => s + (x.kg || 0), 0);
+      return todaySales.length === 0 ? 'Bugün henüz satış yok.' : `Bugün ${fmtKg(kg)} sattık (${todaySales.length} satış).`;
+    }
+    if (wantsPurchase) {
+      const todayPurchases = purchases.filter((x) => x.date === today);
+      const kg = todayPurchases.reduce((s, x) => s + (x.netKg || 0), 0);
+      return todayPurchases.length === 0 ? 'Bugün henüz alım yok.' : `Bugün ${fmtKg(kg)} aldık (${todayPurchases.length} alım).`;
+    }
+  }
+  const asksCountToday = mentionsToday && (lower.includes('kaç alım') || lower.includes('kac alim') || lower.includes('kaç satış') || lower.includes('kac satis') || lower.includes('kaç işlem') || lower.includes('kac islem'));
+  if (asksCountToday) {
+    const today = todayStr();
+    const todayPurchases = purchases.filter((x) => x.date === today).length;
+    const todaySales = sales.filter((x) => x.date === today).length;
+    return `Bugün ${todayPurchases} alım, ${todaySales} satış var.`;
   }
 
   const asksBalance = lower.includes('bakiye') || lower.includes('ne kadar borç') || lower.includes('ne kadar borc') || lower.includes('ne kadar alacak');
@@ -498,6 +561,26 @@ export function parseQueryCommand(text, ctx) {
   }
 
   return null;
+}
+
+// ---------- Sabah / mesai başı sesli özet ----------
+// Uygulama acilinca gunun ilk kullaniminda proaktif olarak okunacak kisa
+// bir brifing metni uretir: "Bugün 3 alım, 2 satış var, vadesi geçen 2
+// hesap var" gibi. Tetikleme (gunde bir kez, ne zaman gosterilecegi)
+// VoiceAssistant.jsx tarafinda yapilir; burada sadece metin uretilir.
+export function buildMorningBriefing(ctx) {
+  const { purchases = [], sales = [] } = ctx || {};
+  const today = todayStr();
+  const purchaseCount = purchases.filter((x) => x.date === today).length;
+  const saleCount = sales.filter((x) => x.date === today).length;
+  const { count: overdueCount, total: overdueTotal } = countOverdueAccounts(ctx);
+
+  const parts = [];
+  parts.push(purchaseCount > 0 || saleCount > 0
+    ? `Bugün ${purchaseCount} alım, ${saleCount} satış var`
+    : 'Bugün henüz alım veya satış yok');
+  parts.push(overdueCount > 0 ? `vadesi geçen ${overdueCount} hesap var (${fmtTL(overdueTotal)})` : 'vadesi geçen hesap yok');
+  return `Günaydın! ${parts.join(', ')}.`;
 }
 
 // ---------- Zincirleme komut ayırma ----------
