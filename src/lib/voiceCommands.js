@@ -48,6 +48,13 @@ function bestWordSimilarity(lower, targetNorm) {
 
 const FUZZY_THRESHOLD = 0.72;
 const AMBIGUITY_GAP = 0.08; // en iyi iki aday bu kadar yakinsa netlestirme sorusu sorulur
+// Tam isim (1.0) ya da ilk-ad (0.95) eslesmesinin altindaki her skor "emin
+// degilim, ama en yakin bu" anlamina gelir. Bu durumda kullaniciya ayri bir
+// dogrulama sorusu sorulur ("Mehmet mi dediniz, emin degilim").
+const LOW_CONFIDENCE_THRESHOLD = 0.9;
+// Bu tutarin (TL) uzerindeki alim/satis/odeme/tahsilat islemlerinde ozete ek
+// olarak toplam tutar vurgulanarak ayrica sorulur.
+const DEFAULT_HIGH_VALUE_THRESHOLD = 5000;
 
 // Bir isim listesinde (ciftci ya da alici farketmez) metne en yakin adaylari
 // skorlarina gore siralar. Tam eslesme skor 1, ilk-ad eslesmesi 0.95, digerleri
@@ -71,13 +78,31 @@ function findEntityCandidates(lower, list) {
 // sorabilmesi saglanir.
 function resolveEntity(lower, list) {
   const candidates = findEntityCandidates(lower, list);
-  if (candidates.length === 0) return { entity: null, ambiguous: false, candidates: [] };
-  if (candidates.length === 1) return { entity: candidates[0].item, ambiguous: false, candidates: [] };
+  if (candidates.length === 0) return { entity: null, ambiguous: false, candidates: [], lowConfidence: false };
+  if (candidates.length === 1) {
+    return { entity: candidates[0].item, ambiguous: false, candidates: [], lowConfidence: candidates[0].score < LOW_CONFIDENCE_THRESHOLD };
+  }
   const [first, second] = candidates;
   if (first.score - second.score < AMBIGUITY_GAP) {
-    return { entity: null, ambiguous: true, candidates: candidates.slice(0, 4).map((c) => c.item) };
+    return { entity: null, ambiguous: true, candidates: candidates.slice(0, 4).map((c) => c.item), lowConfidence: false };
   }
-  return { entity: first.item, ambiguous: false, candidates: [] };
+  return { entity: first.item, ambiguous: false, candidates: [], lowConfidence: first.score < LOW_CONFIDENCE_THRESHOLD };
+}
+
+// Cumlede eslesme bulunamadiginca (ambiguous degil, entity de yok), muhtemel
+// bir isim adayi cikarmaya calisir — bas harfi buyuk 1-2 kelimelik dizi
+// (orn. "Ali Veli'den 50 kilo..." -> "Ali Veli"). Bu, sesle yeni cari/ciftci
+// ekleme onayi akisinda kullanilir. Ham (normalize edilmemis) metin uzerinde
+// calisir cunku buyuk/kucuk harf bilgisine ihtiyac duyar.
+export function extractCandidateName(rawText) {
+  const text = String(rawText || '').trim();
+  const m = text.match(/^([A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ.]*)(?:\s+([A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ.]*))?/);
+  if (!m) return null;
+  let name = [m[1], m[2]].filter(Boolean).join(' ');
+  // "'den", "'ten", "'e", "'ye" gibi hal eklerini ayir.
+  name = name.replace(/'[a-zçğıöşü]+$/i, '').replace(/[’'`]+$/, '').trim();
+  if (name.length < 2) return null;
+  return name;
 }
 
 // Turkce sayi bicimi: nokta binlik ayiraci, virgul ondalik ayiracidir (ornek:
@@ -203,7 +228,7 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
   let price = extractAmount(lower);
   const vadeTarihi = extractVadeTarihi(lower);
 
-  const { entity: farmer, ambiguous, candidates } = extractFarmerWithAmbiguity(lower, farmers);
+  const { entity: farmer, ambiguous, candidates, lowConfidence: farmerLowConfidence } = extractFarmerWithAmbiguity(lower, farmers);
 
   let varietyLabel = null, matchedPrice = null, bestVarietyScore = 0;
   for (const v of priceList) {
@@ -240,7 +265,19 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
       message: `Birden fazla kişi buldum: ${candidates.map((c) => c.name).join(', ')}. Hangisi?`,
     };
   }
-  if (!farmer) return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al".' };
+  if (!farmer) {
+    // Bilinen ciftciler arasinda hicbir eslesme yoksa, cumleden olasi bir
+    // isim adayi cikarip yeni ciftci olarak eklemeyi teklif ederiz.
+    const candidateName = extractCandidateName(text);
+    if (candidateName) {
+      return {
+        ok: false, needsNewEntity: true, entityKind: 'farmer', candidateName,
+        commandKind: 'purchase', partial: { kg, price, varietyLabel, vadeTarihi },
+        message: `"${candidateName}" adında bir çiftçi bulamadım. Yeni çiftçi olarak eklememi ister misiniz?`,
+      };
+    }
+    return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al".' };
+  }
 
   // Birden fazla alan aynı anda belirsizse tek tek genel "anlayamadım" yerine
   // hepsini tek, hedefli bir soruda toplarız (ör. "kilo mu, fiyat mı net değildi?").
@@ -258,7 +295,7 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
   if (!varietyLabel) return { ok: false, missingFields: ['tür/sınıf'], message: 'Zeytin türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
   if (!price) return { ok: false, missingFields: ['fiyat'], message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
 
-  return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel, vadeTarihi, kgFromScale };
+  return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel, vadeTarihi, kgFromScale, farmerLowConfidence };
 }
 
 export function parseAddFarmerCommand(text) {
@@ -274,7 +311,7 @@ export function parseAddFarmerCommand(text) {
 
 export function parsePaymentCommand(text, farmers) {
   const lower = normalizeTr(text);
-  const { entity: farmer, ambiguous, candidates } = extractFarmerWithAmbiguity(lower, farmers);
+  const { entity: farmer, ambiguous, candidates, lowConfidence: farmerLowConfidence } = extractFarmerWithAmbiguity(lower, farmers);
   const amount = extractAmountLoose(lower);
   const payType = lower.includes('avans') ? 'avans' : 'odeme';
   if (ambiguous) {
@@ -284,9 +321,19 @@ export function parsePaymentCommand(text, farmers) {
       message: `Birden fazla kişi buldum: ${candidates.map((c) => c.name).join(', ')}. Hangisi?`,
     };
   }
-  if (!farmer) return { ok: false, message: 'Hangi çiftçiye ödeme/avans yapıldığını anlayamadım.' };
+  if (!farmer) {
+    const candidateName = extractCandidateName(text);
+    if (candidateName) {
+      return {
+        ok: false, needsNewEntity: true, entityKind: 'farmer', candidateName,
+        commandKind: 'payment', partial: { amount, payType },
+        message: `"${candidateName}" adında bir çiftçi bulamadım. Yeni çiftçi olarak eklememi ister misiniz?`,
+      };
+    }
+    return { ok: false, message: 'Hangi çiftçiye ödeme/avans yapıldığını anlayamadım.' };
+  }
   if (!amount) return { ok: false, message: `${farmer.name} anladım ama tutarı anlayamadım. "500 lira" gibi net söyleyin.` };
-  return { ok: true, type: 'payment', farmer, amount, payType };
+  return { ok: true, type: 'payment', farmer, amount, payType, farmerLowConfidence };
 }
 
 export function parseSaleCommand(text, buyers, priceList, scaleKg) {
@@ -299,7 +346,7 @@ export function parseSaleCommand(text, buyers, priceList, scaleKg) {
   let price = extractAmount(lower);
   const vadeTarihi = extractVadeTarihi(lower);
 
-  const { entity: buyer, ambiguous, candidates } = extractBuyerWithAmbiguity(lower, buyers);
+  const { entity: buyer, ambiguous, candidates, lowConfidence: buyerLowConfidence } = extractBuyerWithAmbiguity(lower, buyers);
 
   let varietyLabel = null;
   let bestVarietyScore = 0;
@@ -323,7 +370,17 @@ export function parseSaleCommand(text, buyers, priceList, scaleKg) {
       message: `Birden fazla cari buldum: ${candidates.map((c) => c.name).join(', ')}. Hangisi?`,
     };
   }
-  if (!buyer) return { ok: false, message: 'Hangi cariye satış yapıldığını anlayamadım. Örnek: "Ege Zeytinyağı\'na 200 kilo 120 liradan sat".' };
+  if (!buyer) {
+    const candidateName = extractCandidateName(text);
+    if (candidateName) {
+      return {
+        ok: false, needsNewEntity: true, entityKind: 'buyer', candidateName,
+        commandKind: 'sale', partial: { kg, price, varietyLabel, vadeTarihi },
+        message: `"${candidateName}" adında bir cari bulamadım. Yeni cari olarak eklememi ister misiniz?`,
+      };
+    }
+    return { ok: false, message: 'Hangi cariye satış yapıldığını anlayamadım. Örnek: "Ege Zeytinyağı\'na 200 kilo 120 liradan sat".' };
+  }
 
   const missing = [];
   if (!kg) missing.push('kilo');
@@ -337,12 +394,12 @@ export function parseSaleCommand(text, buyers, priceList, scaleKg) {
   if (!kg) return { ok: false, missingFields: ['kilo'], message: `${buyer.name} anladım ama kilo miktarını anlayamadım. "200 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
   if (!price) return { ok: false, missingFields: ['fiyat'], message: 'Kilo fiyatını anlayamadım. "120 liradan" gibi belirtin.' };
 
-  return { ok: true, type: 'sale', buyer, kg, price, varietyLabel, vadeTarihi, kgFromScale };
+  return { ok: true, type: 'sale', buyer, kg, price, varietyLabel, vadeTarihi, kgFromScale, buyerLowConfidence };
 }
 
 export function parseCollectionCommand(text, buyers) {
   const lower = normalizeTr(text);
-  const { entity: buyer, ambiguous, candidates } = extractBuyerWithAmbiguity(lower, buyers);
+  const { entity: buyer, ambiguous, candidates, lowConfidence: buyerLowConfidence } = extractBuyerWithAmbiguity(lower, buyers);
   const amount = extractAmountLoose(lower);
   if (ambiguous) {
     return {
@@ -351,9 +408,19 @@ export function parseCollectionCommand(text, buyers) {
       message: `Birden fazla cari buldum: ${candidates.map((c) => c.name).join(', ')}. Hangisi?`,
     };
   }
-  if (!buyer) return { ok: false, message: 'Hangi cariden tahsilat yapıldığını anlayamadım.' };
+  if (!buyer) {
+    const candidateName = extractCandidateName(text);
+    if (candidateName) {
+      return {
+        ok: false, needsNewEntity: true, entityKind: 'buyer', candidateName,
+        commandKind: 'collection', partial: { amount },
+        message: `"${candidateName}" adında bir cari bulamadım. Yeni cari olarak eklememi ister misiniz?`,
+      };
+    }
+    return { ok: false, message: 'Hangi cariden tahsilat yapıldığını anlayamadım.' };
+  }
   if (!amount) return { ok: false, message: `${buyer.name} anladım ama tutarı anlayamadım. "500 lira" gibi net söyleyin.` };
-  return { ok: true, type: 'collection', buyer, amount };
+  return { ok: true, type: 'collection', buyer, amount, buyerLowConfidence };
 }
 
 export function parseExpenseCommand(text) {
@@ -739,6 +806,45 @@ export async function parseVoiceCommandAI(text, ctx) {
   } catch (e) {
     return null;
   }
+}
+
+// ---------- Yuksek tutar dogrulamasi ----------
+// Belirlenen esigin (varsayilan 5.000 TL) uzerindeki islemlerde, ozete ek
+// olarak toplam tutar ayrica vurgulanarak sorulur — boylece kullanici sadece
+// "Kaydedeyim mi?" gibi genel bir soruya degil, acikca soylenmis bir tutara
+// "evet" demis olur.
+export function highValueThreshold(ctx) {
+  const v = ctx && ctx.settings && ctx.settings.voiceHighValueThreshold;
+  return typeof v === 'number' && v > 0 ? v : DEFAULT_HIGH_VALUE_THRESHOLD;
+}
+
+export function pendingTotal(p) {
+  if (p.type === 'purchase' || p.type === 'sale') return p.kg * p.price;
+  if (p.type === 'payment' || p.type === 'collection' || p.type === 'expense') return p.amount;
+  return 0;
+}
+
+export function isHighValue(p, ctx) {
+  return pendingTotal(p) >= highValueThreshold(ctx);
+}
+
+// Onay sorusunu olusturur; yuksek tutarli islemlerde tutar vurgulu ayrica
+// tekrarlanir (ör. "50 kilo, 100 liradan — yani 5.000 lira, doğru mu?").
+export function pendingConfirmText(p, ctx) {
+  const base = pendingSummaryText(p);
+  if (!isHighValue(p, ctx)) return `${base} Kaydedeyim mi?`;
+  const total = pendingTotal(p);
+  if (p.type === 'purchase' || p.type === 'sale') {
+    return `${base} Dikkat, tutar yüksek — ${fmtKg(p.kg)}, ${fmtTL(p.price)}/kg, yani toplam ${fmtTL(total)}. Doğru mu, onaylıyor musunuz?`;
+  }
+  return `${base} Dikkat, tutar yüksek — toplam ${fmtTL(total)}. Doğru mu, onaylıyor musunuz?`;
+}
+
+// Dusuk guven skorlu isim eslesmelerinde ayri bir uyari metni doner (yoksa null).
+export function lowConfidenceWarningText(p) {
+  if (p.farmerLowConfidence && p.farmer) return `${p.farmer.name} mi dediniz, emin değilim ama en yakın öyle anladım.`;
+  if (p.buyerLowConfidence && p.buyer) return `${p.buyer.name} mi dediniz, emin değilim ama en yakın öyle anladım.`;
+  return null;
 }
 
 export function pendingSummaryText(p) {
