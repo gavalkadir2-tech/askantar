@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as Sentry from '@sentry/react';
 import * as XLSX from 'xlsx';
 import {
   Printer,
@@ -34,6 +35,170 @@ export function LedgerTab({ farmers, purchases, payments, setPayments, selectedF
   const balance = running;
 
   const aging = useMemo(() => {
+    if (!farmer || balance <= 0) return { daysOverdue: null, isOverdue: false };
+    const debits = purchases.filter((x) => x.farmerId === farmer.id).map((x) => ({ amount: x.netPayment, date: x.date, vadeTarihi: x.vadeTarihi, createdAt: x.createdAt }));
+    const credits = payments.filter((x) => x.farmerId === farmer.id).map((x) => ({ amount: x.amount, createdAt: x.createdAt }));
+    return computeAging(debits, credits);
+  }, [farmer, purchases, payments, balance]);
+
+  const addPayment = async () => {
+    const amt = parseFloat(payAmount);
+    if (!farmer || !amt || amt <= 0) return;
+    const record = { id: uid(), farmerId: farmer.id, date: todayStr(), amount: amt, note: payNote, payType, createdAt: Date.now() };
+    const next = [...payments, record];
+    try {
+      setPayments(next);
+      await storageSet('zk:payments', next);
+      setPayAmount(''); setPayNote('');
+    } catch (err) {
+      Sentry.captureException(err, { tags: { operation: 'addPayment' } });
+      window.alert('Ödeme kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    }
+  };
+
+  const removePayment = async (id) => {
+    if (!window.confirm('Bu ödeme/avans kaydını silmek istediğinize emin misiniz?')) return;
+    const next = payments.filter((p) => p.id !== id);
+    try {
+      setPayments(next);
+      await storageSet('zk:payments', next);
+    } catch (err) {
+      Sentry.captureException(err, { tags: { operation: 'removePayment' } });
+      window.alert('Silme işlemi kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    }
+  };
+
+  const [query, setQuery] = useState('');
+  const reversedWithRunning = [...withRunning].reverse();
+  const filteredEntries = useMemo(() => {
+    if (!query) return reversedWithRunning;
+    const q = query.toLowerCase();
+    return reversedWithRunning.filter((e) => (e.data.note || '').toLowerCase().includes(q) || (e.type === 'purchase' ? 'alım' : (e.data.payType === 'avans' ? 'avans' : 'ödeme')).includes(q));
+  }, [reversedWithRunning, query]);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, totalCount } = usePagedList(filteredEntries);
+
+  const exportLedgerExcel = () => {
+    if (!farmer) return;
+    const rows = reversedWithRunning.map((e) => ({
+      'Tarih': e.date,
+      'İşlem': e.type === 'purchase' ? 'Alım' : (e.data.payType === 'avans' ? 'Avans' : 'Ödeme'),
+      'Net kg': e.type === 'purchase' ? e.data.netKg : '',
+      'Vade tarihi': e.type === 'purchase' ? (e.data.vadeTarihi || '') : '',
+      'Not': e.data.note || '',
+      'Tutar': e.amount,
+      'Bakiye': e.running,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cari Hesap');
+    XLSX.writeFile(wb, `cari-hesap-${farmer.name.replace(/\s+/g, '-')}-${todayStr()}.xlsx`);
+  };
+
+  if (!farmer) {
+    return (
+      <div>
+        <div className="zk-h1">Cari hesap</div>
+        <div className="zk-h1-sub">Görüntülemek için bir çiftçi seçin</div>
+        <div className="zk-card">
+          <select className="zk-select" value="" onChange={(e) => setSelectedFarmerId(e.target.value)}>
+            <option value="">Çiftçi seçin...</option>
+            {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <div className="zk-h1">{farmer.name}</div>
+          <div className="zk-h1-sub">Cari hesap özeti</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="zk-btn zk-btn-blue" onClick={exportLedgerExcel}><Download size={13} /> Excel'e aktar</button>
+          {balance > 0 && formatPhoneForWhatsApp(farmer.phone) && (
+            <a
+              className="zk-btn" style={{ background: '#25D366', color: '#fff' }}
+              href={`https://wa.me/${formatPhoneForWhatsApp(farmer.phone)}?text=${encodeURIComponent(buildWhatsAppBalanceReminderText(farmer, balance, purchases.filter((p) => p.farmerId === farmer.id).sort((a, b) => b.createdAt - a.createdAt), settings))}`}
+              target="_blank" rel="noopener noreferrer"
+            >
+              <MessageCircle size={14} /> WhatsApp ile bakiye bildir
+            </a>
+          )}
+          <select className="zk-select" style={{ width: 200 }} value={selectedFarmerId} onChange={(e) => setSelectedFarmerId(e.target.value)}>
+            {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 18 }}>
+        <StatCard label="Güncel bakiye" value={fmtTL(Math.abs(balance))} tone={balance > 0 ? COLORS.red : COLORS.olive} icon={Wallet} />
+        <StatCard label="Durum" value={balance > 0 ? (aging.isOverdue ? `${aging.daysOverdue} gün gecikti` : 'Vadesinde') : 'Kapalı'} tone={aging.isOverdue ? COLORS.red : undefined} icon={CheckCircle2} />
+        <StatCard label="Toplam işlem" value={entries.length} icon={ClipboardList} />
+      </div>
+
+      <div className="zk-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Ödeme / avans ekle</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <select className="zk-select" value={payType} onChange={(e) => setPayType(e.target.value)} style={{ maxWidth: 140 }}>
+            <option value="odeme">Ödeme</option>
+            <option value="avans">Avans</option>
+          </select>
+          <input className="zk-input" type="text" inputMode="decimal" placeholder="Tutar (TL)" value={payAmount} onChange={(e) => setPayAmount(e.target.value.replace(',', '.'))} style={{ maxWidth: 160 }} />
+          <input className="zk-input" placeholder="Not (opsiyonel)" value={payNote} onChange={(e) => setPayNote(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+          <button className="zk-btn zk-btn-primary" onClick={addPayment}>Ekle</button>
+        </div>
+      </div>
+
+      <div className="zk-card">
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Hareketler</div>
+        <input className="zk-input" style={{ marginBottom: 14, maxWidth: 320 }} placeholder="Not veya işlem türüne göre ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        {filteredEntries.length === 0 ? (
+          <div className="zk-empty">{withRunning.length === 0 ? 'Henüz hareket yok.' : 'Aramanızla eşleşen hareket bulunamadı.'}</div>
+        ) : (
+          <>
+          <table className="zk-table">
+            <thead><tr><th>Tarih</th><th>İşlem</th><th>Tutar</th><th>Bakiye</th><th></th></tr></thead>
+            <tbody>
+              {paged.map((e, i) => (
+                <tr key={i}>
+                  <td>{fmtDate(e.date)}</td>
+                  <td>
+                    {e.type === 'purchase'
+                      ? <span className="zk-badge zk-badge-olive">Alım · {fmtKg(e.data.netKg)}{e.data.vadeTarihi ? ` · vade ${fmtDate(e.data.vadeTarihi)}` : ''}</span>
+                      : <span className={`zk-badge ${e.data.payType === 'avans' ? 'zk-badge-blue' : 'zk-badge-gold'}`}>{e.data.payType === 'avans' ? 'Avans' : 'Ödeme'}{e.data.note ? ` · ${e.data.note}` : ''}</span>}
+                  </td>
+                  <td style={{ color: e.amount >= 0 ? COLORS.olive : COLORS.gold, fontWeight: 600 }}>
+                    {e.amount >= 0 ? '+' : ''}{fmtTL(e.amount)}
+                  </td>
+                  <td style={{ fontWeight: 600 }}>{fmtTL(e.running)}</td>
+                  <td>
+                    {e.type === 'purchase' ? (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => onPrintReceipt(e.data)}><Printer size={12} /></button>
+                        {formatPhoneForWhatsApp(farmer.phone) && (
+                          <a className="zk-btn" style={{ padding: '5px 9px', background: '#25D366', color: '#fff' }} href={`https://wa.me/${formatPhoneForWhatsApp(farmer.phone)}?text=${encodeURIComponent(buildWhatsAppReceiptText(e.data, farmer, settings))}`} target="_blank" rel="noopener noreferrer">
+                            <MessageCircle size={12} />
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <button className="zk-btn zk-btn-secondary" style={{ padding: '5px 9px' }} onClick={() => removePayment(e.data.id)}><Trash2 size={12} /></button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ListFooterControls page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} totalCount={totalCount} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
     if (!farmer || balance <= 0) return { daysOverdue: null, isOverdue: false };
     const debits = purchases.filter((x) => x.farmerId === farmer.id).map((x) => ({ amount: x.netPayment, date: x.date, vadeTarihi: x.vadeTarihi, createdAt: x.createdAt }));
     const credits = payments.filter((x) => x.farmerId === farmer.id).map((x) => ({ amount: x.amount, createdAt: x.createdAt }));
