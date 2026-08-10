@@ -15,10 +15,13 @@ import {
   isCancelCommand,
   isConfirmCommand,
   isFollowUpReference,
+  isHighValue,
   isUndoCommand,
+  lowConfidenceWarningText,
   parseQueryCommand,
   parseVoiceCommandAI,
   parseVoiceCommandLocal,
+  pendingConfirmText,
   pendingSummaryText,
   shouldTryCorrection,
   splitChainedCommands,
@@ -28,7 +31,7 @@ import {
 import { useScaleConnection } from '../hooks/useScaleConnection';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 
-export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchases, payments, setPayments, expenses, setExpenses, reminders, setReminders, settings, buyers, sales, setSales, buyerPayments, setBuyerPayments }) {
+export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setPurchases, payments, setPayments, expenses, setExpenses, reminders, setReminders, settings, buyers, setBuyers, sales, setSales, buyerPayments, setBuyerPayments }) {
   const [open, setOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
@@ -38,6 +41,10 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   const [pending, setPending] = useState(null);
   const [pendingBatch, setPendingBatch] = useState(null);
   const [ambiguity, setAmbiguity] = useState(null);
+  // Sesle söylenen ama bilinen çiftçi/cari listesinde bulunamayan bir isim
+  // için "yeni ekleyeyim mi?" onayı beklerken tutulan durum. { entityKind,
+  // candidateName, commandKind, partial, message }
+  const [newEntityPrompt, setNewEntityPrompt] = useState(null);
   const [typedText, setTypedText] = useState('');
   const [ttsEnabled, setTtsEnabled] = useState(() => {
     try { return typeof window !== 'undefined' && localStorage.getItem('zk:voiceTts') !== '0'; } catch (e) { return true; }
@@ -97,8 +104,8 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   // Kantar önerisinin (aşağıda) araya girip girmeyeceğine karar verirken
   // kullanılan "meşgul mü" özeti — her render'da güncellenir.
   useEffect(() => {
-    busyRef.current = !!(pending || pendingBatch || ambiguity || listening || micStage !== 'idle' || thinking);
-  }, [pending, pendingBatch, ambiguity, listening, micStage, thinking]);
+    busyRef.current = !!(pending || pendingBatch || ambiguity || newEntityPrompt || listening || micStage !== 'idle' || thinking);
+  }, [pending, pendingBatch, ambiguity, newEntityPrompt, listening, micStage, thinking]);
 
   // ---------- Sesli geri okuma (TTS) ----------
   // Asistan cevabini sesli de okur, boylece eller kirliyken/tartida iken
@@ -240,30 +247,46 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
     return result;
   };
 
-  const reportResult = (result) => {
+  const reportResult = (result, ctx) => {
     if (result.ok && result.type === 'query') {
       setPending(null);
       setPendingBatch(null);
       setAmbiguity(null);
+      setNewEntityPrompt(null);
       addAssistantMessage(`${result.viaAi ? '✨ ' : ''}${result.answer}`);
       return;
     }
     if (!result.ok && result.ambiguous) {
       setPending(null);
       setPendingBatch(null);
+      setNewEntityPrompt(null);
       setAmbiguity(result);
+      addAssistantMessage(result.message);
+      return;
+    }
+    if (!result.ok && result.needsNewEntity) {
+      setPending(null);
+      setPendingBatch(null);
+      setAmbiguity(null);
+      setNewEntityPrompt(result);
       addAssistantMessage(result.message);
       return;
     }
     if (result.ok) {
       setAmbiguity(null);
       setPendingBatch(null);
+      setNewEntityPrompt(null);
       setPending(result);
-      addAssistantMessage(`${result.viaAi ? '✨ ' : ''}Anladığım: ${pendingSummaryText(result)} Kaydedeyim mi?`);
+      // Dusuk guven uyarisi varsa, onay mesajinin basina eklenir (tek mesaj
+      // olarak) — boylece TTS acik/kapali fark etmeksizin her zaman gorulur/duyulur.
+      const warning = lowConfidenceWarningText(result);
+      const confirmMsg = `${warning ? warning + ' ' : ''}${result.viaAi ? '✨ ' : ''}Anladığım: ${pendingConfirmText(result, ctx || buildCtx())}`;
+      addAssistantMessage(confirmMsg);
     } else {
       setPending(null);
       setPendingBatch(null);
       setAmbiguity(null);
+      setNewEntityPrompt(null);
       let msg = result.message || 'Anlayamadım, tekrar deneyin.';
       if (!aiEnabled && !hintShownRef.current) {
         msg += ' İpucu: Ayarlar\'dan ücretsiz bir Groq API anahtarı ekleyerek sesli komutları çok daha akıllı hale getirebilirsiniz.';
@@ -287,7 +310,16 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       if (!r.ok && r.ambiguous) {
         setPending(null);
         setPendingBatch(null);
+        setNewEntityPrompt(null);
         setAmbiguity(r);
+        addAssistantMessage(`"${seg}" için: ${r.message}`);
+        return;
+      }
+      if (!r.ok && r.needsNewEntity) {
+        setPending(null);
+        setPendingBatch(null);
+        setAmbiguity(null);
+        setNewEntityPrompt(r);
         addAssistantMessage(`"${seg}" için: ${r.message}`);
         return;
       }
@@ -295,18 +327,22 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
         addAssistantMessage(`"${seg}" kısmını anlayamadım: ${r.message || 'tekrar deneyin.'}`);
         continue;
       }
+      const warning = lowConfidenceWarningText(r);
+      if (warning) addAssistantMessage(warning);
       actionable.push(r);
     }
     if (actionable.length === 0) return;
     if (actionable.length === 1) {
-      reportResult(actionable[0]);
+      reportResult(actionable[0], ctx);
       return;
     }
     setAmbiguity(null);
     setPending(null);
+    setNewEntityPrompt(null);
     setPendingBatch(actionable);
+    const highValueNote = actionable.some((r) => isHighValue(r, ctx)) ? ' Dikkat, içlerinde yüksek tutarlı işlem(ler) var.' : '';
     const summary = actionable.map((r, i) => `${i + 1}) ${pendingSummaryText(r)}`).join('  ');
-    addAssistantMessage(`Anladığım: ${summary}  Hepsini kaydedeyim mi?`);
+    addAssistantMessage(`Anladığım: ${summary}${highValueNote} Hepsini kaydedeyim mi?`);
   };
 
   const handleCommand = async (text) => {
@@ -328,6 +364,14 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
     if (pending || pendingBatch) {
       if (isConfirmCommand(text)) { await confirmSave(); return; }
       if (isCancelCommand(text)) { cancelPending(); return; }
+    }
+
+    // ---------- Yeni çiftçi/cari onayı ----------
+    // "'Ali Veli' adında bir çiftçi bulamadım, yeni çiftçi olarak ekleyeyim
+    // mi?" sorusuna sesle "evet"/"hayır" ile cevap verilebilsin diye.
+    if (newEntityPrompt) {
+      if (isConfirmCommand(text)) { await confirmNewEntity(); return; }
+      if (isCancelCommand(text)) { cancelNewEntity(); return; }
     }
 
     // ---------- Bağlamsal düzeltme ----------
@@ -392,7 +436,57 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       return;
     }
     setPending(result);
-    addAssistantMessage(`Anladığım: ${pendingSummaryText(result)} Kaydedeyim mi?`);
+    addAssistantMessage(`Anladığım: ${pendingConfirmText(result, buildCtx())}`);
+  };
+
+  // Yeni çiftçi/cari ekleme onayı sesle/tıkla "evet" alınca: önce ilgili
+  // listeye yeni kaydı ekler, sonra bekleyen işlemi (varsa) o kayıtla
+  // tamamlayıp normal onay akışına sokar.
+  const confirmNewEntity = async () => {
+    if (!newEntityPrompt) return;
+    const { entityKind, candidateName, commandKind, partial } = newEntityPrompt;
+    setNewEntityPrompt(null);
+
+    let entity;
+    if (entityKind === 'farmer') {
+      entity = { id: uid(), name: candidateName, phone: '', tcNo: '', address: '', bagkurStatus: false, createdAt: Date.now() };
+      const next = [...farmers, entity];
+      setFarmers(next);
+      await storageSet('zk:farmers', next);
+    } else {
+      if (!setBuyers) {
+        addAssistantMessage('Yeni cari ekleme özelliği bu ekranda henüz bağlı değil, lütfen cariyi elle ekleyin.');
+        return;
+      }
+      entity = { id: uid(), name: candidateName, phone: '', address: '', createdAt: Date.now() };
+      const next = [...(buyers || []), entity];
+      setBuyers(next);
+      await storageSet('zk:buyers', next);
+    }
+
+    const p = partial || {};
+    let result = null;
+    if (commandKind === 'purchase') result = { ok: true, type: 'purchase', farmer: entity, kg: p.kg, price: p.price, varietyLabel: p.varietyLabel, vadeTarihi: p.vadeTarihi };
+    if (commandKind === 'payment') result = { ok: true, type: 'payment', farmer: entity, amount: p.amount, payType: p.payType };
+    if (commandKind === 'sale') result = { ok: true, type: 'sale', buyer: entity, kg: p.kg, price: p.price, varietyLabel: p.varietyLabel, vadeTarihi: p.vadeTarihi };
+    if (commandKind === 'collection') result = { ok: true, type: 'collection', buyer: entity, amount: p.amount };
+
+    const incomplete = !result
+      || (result.type === 'purchase' && (!result.kg || !result.price || !result.varietyLabel))
+      || (result.type === 'sale' && (!result.kg || !result.price))
+      || (result.type === 'payment' && !result.amount)
+      || (result.type === 'collection' && !result.amount);
+    if (incomplete) {
+      addAssistantMessage(`${entity.name} ${entityKind === 'farmer' ? 'çiftçi' : 'cari'} olarak eklendi ✓ Şimdi işlemin geri kalanını (kilo/tutar vb.) tekrar söyler misiniz?`);
+      return;
+    }
+    setPending(result);
+    addAssistantMessage(`${entity.name} ${entityKind === 'farmer' ? 'çiftçi' : 'cari'} olarak eklendi ✓ Anladığım: ${pendingConfirmText(result, buildCtx())}`);
+  };
+
+  const cancelNewEntity = () => {
+    setNewEntityPrompt(null);
+    addAssistantMessage('Tamam, eklemedim.');
   };
 
   // Groq anahtarı varsa mikrofonu kendimiz kaydedip Whisper'a göndeririz;
@@ -747,6 +841,14 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
                   <button key={c.id} className="zk-btn zk-btn-secondary" style={{ fontSize: 11.5, padding: '6px 10px' }} onClick={() => resolveAmbiguity(c)}>{c.name}</button>
                 ))}
                 <button className="zk-btn zk-btn-secondary" style={{ fontSize: 11.5, padding: '6px 10px' }} onClick={() => setAmbiguity(null)}>Hiçbiri / İptal</button>
+              </div>
+            )}
+            {newEntityPrompt && (
+              <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start' }}>
+                <button className="zk-btn zk-btn-primary" style={{ fontSize: 11.5, padding: '6px 10px' }} onClick={confirmNewEntity}>
+                  Evet, {newEntityPrompt.entityKind === 'farmer' ? 'çiftçi' : 'cari'} olarak ekle
+                </button>
+                <button className="zk-btn zk-btn-secondary" style={{ fontSize: 11.5, padding: '6px 10px' }} onClick={cancelNewEntity}>Hayır</button>
               </div>
             )}
             {(pending || pendingBatch) && (
