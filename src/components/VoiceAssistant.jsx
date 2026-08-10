@@ -12,6 +12,9 @@ import { nextReceiptNo, storageSet, todayStr, uid } from '../lib/format';
 import { COLORS } from '../lib/theme';
 import {
   applyVoiceCorrection,
+  isCancelCommand,
+  isConfirmCommand,
+  isFollowUpReference,
   isUndoCommand,
   parseQueryCommand,
   parseVoiceCommandAI,
@@ -30,7 +33,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: 'Merhaba! Alım, satış, çiftçi ekleme, ödeme/avans, tahsilat, gider ve hatırlatma gibi işlemleri sesli veya yazarak yapabilirsiniz. Bakiye de sorabilirsiniz. Örnek: "Mehmet\'ten 50 kilo Tirilye 100 liradan al", "Ayşe\'ye 200 kilo 120 liradan sat", "Ahmet\'in bakiyesi ne kadar?". Tek cümlede iki işlem de yapabilirsiniz: "Ahmet\'ten 50 kilo al, 200 lira da avans ver". Bir kayıt onay beklerken "hayır 60 kilo" derseniz düzeltirim; "son işlemi iptal et" derseniz geri alırım.' },
+    { role: 'assistant', text: 'Merhaba! Alım, satış, çiftçi ekleme, ödeme/avans, tahsilat, gider ve hatırlatma gibi işlemleri sesli veya yazarak yapabilirsiniz. Bakiye de sorabilirsiniz. Örnek: "Mehmet\'ten 50 kilo Tirilye 100 liradan al", "Ayşe\'ye 200 kilo 120 liradan sat", "Ahmet\'in bakiyesi ne kadar?". Tek cümlede iki işlem de yapabilirsiniz: "Ahmet\'ten 50 kilo al, 200 lira da avans ver". Bir kayıt onay beklerken sadece "evet" ya da "hayır" diyerek de cevap verebilirsiniz; "hayır 60 kilo" derseniz düzeltirim; "son işlemi iptal et" derseniz geri alırım. "Aynısından 30 kilo daha al" gibi bir önceki işleme atıfta bulunabilirsiniz. Kantar bağlıysa ağırlık sabitlenince size kendiliğinden sorarım.' },
   ]);
   const [pending, setPending] = useState(null);
   const [pendingBatch, setPendingBatch] = useState(null);
@@ -45,6 +48,20 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   const logEndRef = useRef(null);
   const hintShownRef = useRef(false);
   const lastSavedRef = useRef(null);
+  // Takip komutları için ("aynısından 30 kilo daha al", "ona 100 lira da avans
+  // ver") en son kaydedilen işlemdeki kişi/tür/fiyatı hatırlar.
+  const lastEntityRef = useRef(null);
+  // Kantar ile proaktif öneri: ağırlık ne zaman sabitlendi, hangi değer için
+  // zaten soru sorduk, ve şu an bir öneri döngüsü ("kimden alıyorsun?" bekleniyor)
+  // aktif mi — bunları izler.
+  const scaleWatchRef = useRef({ value: null, since: 0, prompted: null });
+  const scalePromptActiveRef = useRef(false);
+  // Asistan meşgulken (onay bekliyor, dinliyor, düşünüyor...) kantar önerisinin
+  // araya girmemesi için her render'da güncellenen bir "meşgul mü" özeti.
+  const busyRef = useRef(false);
+  // promptScaleWeight her render'da en güncel closure'ı (ttsEnabled, ctx vs.)
+  // kullanabilsin diye ref üzerinden çağrılır (interval'in closure'ı bayatlamasın diye).
+  const promptScaleWeightRef = useRef(() => {});
   const dragStateRef = useRef({ dragging: false, moved: false, startX: 0, startY: 0, origX: 0, origY: 0 });
   const [bubblePos, setBubblePos] = useState(() => {
     if (typeof window !== 'undefined') return { x: window.innerWidth - 76, y: window.innerHeight - 86 };
@@ -77,10 +94,20 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   // Bileşen kapanırken/unmount olurken mikrofon açık kalmasın diye kaydı iptal et.
   useEffect(() => () => { recorder.cancel(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Kantar önerisinin (aşağıda) araya girip girmeyeceğine karar verirken
+  // kullanılan "meşgul mü" özeti — her render'da güncellenir.
+  useEffect(() => {
+    busyRef.current = !!(pending || pendingBatch || ambiguity || listening || micStage !== 'idle' || thinking);
+  }, [pending, pendingBatch, ambiguity, listening, micStage, thinking]);
+
   // ---------- Sesli geri okuma (TTS) ----------
   // Asistan cevabini sesli de okur, boylece eller kirliyken/tartida iken
   // ekrana bakmaya gerek kalmaz. Her yeni cevaptan once oncekini keser.
-  const speak = (text) => {
+  // onEnd verilirse (ör. kantar önerisi sonrası otomatik dinlemeye geçmek
+  // için) konuşma bitince/başarısız olunca çağrılır. TTS kapalıysa hiç
+  // çağrılmaz — bu, "sesle yönlendirme yoksa otomatik mikrofon açma" kuralını
+  // sağlar (sessiz modda kullanıcı hâlâ elle başlatır).
+  const speak = (text, onEnd) => {
     if (!ttsEnabled || !ttsSupported) return;
     const clean = String(text || '').replace(/[✨✓]/g, '').trim();
     if (!clean) return;
@@ -92,8 +119,9 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       const voices = window.speechSynthesis.getVoices();
       const trVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('tr'));
       if (trVoice) utter.voice = trVoice;
+      if (onEnd) { utter.onend = onEnd; utter.onerror = onEnd; }
       window.speechSynthesis.speak(utter);
-    } catch (e) { /* sessizce yut, ekran metni zaten gosteriliyor */ }
+    } catch (e) { /* sessizce yut, ekran metni zaten gosteriliyor */ if (onEnd) onEnd(); }
   };
 
   const toggleTts = () => {
@@ -105,10 +133,38 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
     });
   };
 
-  const addAssistantMessage = (text) => {
+  const addAssistantMessage = (text, onSpoken) => {
     setMessages((m) => [...m, { role: 'assistant', text }]);
-    speak(text);
+    speak(text, onSpoken);
   };
+
+  // ---------- Başlama/bitiş bip sesi ----------
+  // Kayıt başlarken/biterken kısa bir ton çalar; ekrana bakmadan (tartıda,
+  // eller kirliyken) "duyuyor mu, bitti mi" bilinsin diye. TTS ile aynı
+  // sessizlik tercihine bağlı değildir — kısa bir cihaz sesi olduğu için
+  // kullanıcı sesli okumayı kapatmış olsa bile faydalıdır.
+  const playTone = (freq, durationMs, type = 'sine') => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.2, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
+      osc.start(now);
+      osc.stop(now + durationMs / 1000 + 0.03);
+      osc.onended = () => { try { ctx.close(); } catch (e) {} };
+    } catch (e) { /* sessizce yut */ }
+  };
+  const playStartBeep = () => playTone(880, 110);
+  const playEndBeep = () => playTone(520, 130);
 
   // ---------- Kantar entegrasyonu ----------
   const scaleWeight = scale.connected && scale.lastValue != null ? scale.lastValue : null;
@@ -117,6 +173,53 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
     farmers, priceList, settings, buyers: buyers || [], purchases, payments,
     sales: sales || [], buyerPayments: buyerPayments || [], scaleKg: scaleWeight,
   });
+
+  // ---------- Kantar ile proaktif öneri ----------
+  // Ağırlık kısa bir süre sabit kalınca (kantar oturunca) asistan kendiliğinden
+  // sorar: "42 kilo okundu, kimden alıyorsun?" Kullanıcı sadece isim (ve
+  // gerekirse fiyat) söyler; kilo zaten kantardan otomatik gelir. Sesli okuma
+  // açıksa, soru bitince mikrofon da kendiliğinden açılır (tam elleri
+  // serbest bırakan akış); kapalıysa kullanıcı elle mikrofona basar.
+  // Ref üzerinden tanımlanır ki interval'in closure'ı bayatlamasın (her
+  // render'da en güncel ttsEnabled/ctx ile güncellenir).
+  promptScaleWeightRef.current = (weight) => {
+    setOpen(true);
+    addAssistantMessage(`${weight.toFixed(1)} kilo okundu. Kimden alıyorsun?`, () => {
+      if (micEngine !== 'none') startListening();
+    });
+  };
+
+  useEffect(() => {
+    if (!scale.connected) {
+      scaleWatchRef.current = { value: null, since: 0, prompted: null };
+      return;
+    }
+    const iv = setInterval(() => {
+      const v = scale.lastValue;
+      const w = scaleWatchRef.current;
+      // Boş/çok hafif tartı okumalarını (gürültü, henüz ürün konmamış) yok say.
+      if (v == null || v < 0.5) {
+        scaleWatchRef.current = { value: v, since: 0, prompted: w.prompted };
+        return;
+      }
+      const now = Date.now();
+      if (w.value == null || Math.abs(v - w.value) > 0.05) {
+        // Değer hâlâ değişiyor (ürün konuyor/tartılıyor) — sabitlenmesini bekle.
+        scaleWatchRef.current = { value: v, since: now, prompted: w.prompted };
+        return;
+      }
+      const stableFor = now - w.since;
+      if (stableFor >= 1200 && w.prompted !== v && !busyRef.current && !scalePromptActiveRef.current) {
+        scaleWatchRef.current.prompted = v;
+        scalePromptActiveRef.current = true;
+        // Kullanıcı hiç cevap vermezse öneri döngüsü sonsuza dek kilitli
+        // kalmasın diye bir süre sonra otomatik serbest bırakılır.
+        setTimeout(() => { scalePromptActiveRef.current = false; }, 30000);
+        promptScaleWeightRef.current(v);
+      }
+    }, 300);
+    return () => clearInterval(iv);
+  }, [scale.connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const parseOne = async (text, ctx) => {
     // Bakiye/gecikme gibi veri sorularını her zaman önce gerçek kayıtlarla
@@ -209,11 +312,22 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   const handleCommand = async (text) => {
     if (!text.trim()) return;
     setMessages((m) => [...m, { role: 'user', text }]);
+    // Kullanıcı herhangi bir şekilde cevap verdi; kantar tarafından açılmış
+    // bekleyen bir öneri döngüsü varsa artık kapanabilir.
+    scalePromptActiveRef.current = false;
 
     // ---------- Sesli geri alma ----------
     if (isUndoCommand(text)) {
       await undoLast();
       return;
+    }
+
+    // ---------- Sesli onay/iptal ----------
+    // "Kaydedeyim mi?" sorusuna dokunmadan sadece "evet" ya da "hayır"
+    // diyerek cevap verilebilsin — elleri tamamen serbest bırakır.
+    if (pending || pendingBatch) {
+      if (isConfirmCommand(text)) { await confirmSave(); return; }
+      if (isCancelCommand(text)) { cancelPending(); return; }
     }
 
     // ---------- Bağlamsal düzeltme ----------
@@ -229,14 +343,35 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       }
     }
 
+    // ---------- Takip komutları (bağlam hafızası) ----------
+    // "Aynısından 30 kilo daha al", "ona 100 lira da avans ver" gibi bir
+    // önceki işlemdeki kişiye/türe zamirle atıf yapan cümlelerde, o kişinin/
+    // türün adını cümlenin önüne ekleyip normal ayrıştırma akışına sokarız.
+    // Böylece isim çözümleme (fuzzy eşleştirme) ve kilo/fiyat çıkarımı gibi
+    // tüm mevcut mantık aynen çalışır; kullanıcı sadece "ona"/"aynısından"
+    // dediği için ayrı bir kod yolu yazmaya gerek kalmaz.
+    let effectiveText = text;
+    if (lastEntityRef.current && isFollowUpReference(text)) {
+      const le = lastEntityRef.current;
+      const name = (le.farmer && le.farmer.name) || (le.buyer && le.buyer.name) || '';
+      if (name) {
+        const hasOwnPrice = /\d+(?:[.,]\d+)?\s*(lira|tl|₺)/i.test(text);
+        const parts = [name];
+        if (le.varietyLabel) parts.push(le.varietyLabel);
+        parts.push(text);
+        if (!hasOwnPrice && le.price) parts.push(`${le.price} liradan`);
+        effectiveText = parts.join(' ');
+      }
+    }
+
     const ctx = buildCtx();
-    const segments = splitChainedCommands(text);
+    const segments = splitChainedCommands(effectiveText);
     if (segments.length > 1) {
       await handleChainedCommand(segments, ctx);
       return;
     }
 
-    const result = await parseOne(text, ctx);
+    const result = await parseOne(effectiveText, ctx);
     reportResult(result);
   };
 
@@ -264,12 +399,20 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   // kullanıcı konuşmayı bitirip ~1.4 sn sessiz kalınca kayıt otomatik durur
   // ve komut kendiliğinden gönderilir (elle "durdur"a basmaya gerek kalmaz).
   const startListening = async () => {
+    // ---------- Barge-in ----------
+    // Asistan cevabı seslendirirken kullanıcı mikrofona basarsa, konuşmanın
+    // bitmesini beklemeden TTS'i hemen keseriz — aksi halde asistanın kendi
+    // sesi mikrofonla çakışabilir.
+    if (ttsSupported && window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+    }
     if (micEngine === 'groq') {
       setRecLevel(0);
       try {
         await recorder.start();
         setMicStage('recording');
         setListening(true);
+        playStartBeep();
       } catch (e) {
         setListening(false);
         setMicStage('idle');
@@ -297,16 +440,18 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       const text = e.results[0][0].transcript;
       handleCommand(text);
     };
-    recognition.onerror = () => setListening(false);
-    recognition.onend = () => setListening(false);
+    recognition.onerror = () => { setListening(false); playEndBeep(); };
+    recognition.onend = () => { setListening(false); playEndBeep(); };
     recognitionRef.current = recognition;
     recognition.start();
     setListening(true);
+    playStartBeep();
   };
 
   const stopListening = async () => {
     if (recorder.recording) {
       setListening(false);
+      playEndBeep();
       const blob = await recorder.stop();
       if (!blob) { setMicStage('idle'); return; }
       setMicStage('transcribing');
@@ -389,6 +534,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       setPurchases(next);
       await storageSet('zk:purchases', next);
       lastSavedRef.current = { type: 'purchase', id: record.id };
+      lastEntityRef.current = { farmer: item.farmer, varietyLabel: item.varietyLabel, price: item.price };
       addAssistantMessage(`Kaydedildi ✓ (Makbuz #${record.makbuzNo})`);
       return;
     }
@@ -409,6 +555,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       setPayments(next);
       await storageSet('zk:payments', next);
       lastSavedRef.current = { type: 'payment', id: record.id };
+      lastEntityRef.current = { ...(lastEntityRef.current || {}), farmer: item.farmer };
       addAssistantMessage(`${item.payType === 'avans' ? 'Avans' : 'Ödeme'} kaydedildi ✓`);
       return;
     }
@@ -425,6 +572,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       setSales(next);
       await storageSet('zk:sales', next);
       lastSavedRef.current = { type: 'sale', id: record.id };
+      lastEntityRef.current = { buyer: item.buyer, varietyLabel: item.varietyLabel, price: item.price };
       addAssistantMessage(`Satış kaydedildi ✓ (Makbuz #${record.makbuzNo})`);
       return;
     }
@@ -435,6 +583,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
       setBuyerPayments(next);
       await storageSet('zk:buyerPayments', next);
       lastSavedRef.current = { type: 'collection', id: record.id };
+      lastEntityRef.current = { ...(lastEntityRef.current || {}), buyer: item.buyer };
       addAssistantMessage('Tahsilat kaydedildi ✓');
       return;
     }
@@ -460,6 +609,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   };
 
   const confirmSave = async () => {
+    scalePromptActiveRef.current = false;
     if (pendingBatch) {
       const items = pendingBatch;
       setPendingBatch(null);
@@ -475,6 +625,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   };
 
   const cancelPending = () => {
+    scalePromptActiveRef.current = false;
     setPending(null);
     setPendingBatch(null);
     addAssistantMessage('İptal edildi.');
