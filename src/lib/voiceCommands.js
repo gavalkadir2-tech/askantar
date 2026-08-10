@@ -538,9 +538,12 @@ export function interpretAiParsedResult(parsed, ctx, text) {
   if (parsed.action === 'reminder' && parsed.title) {
     return { ok: true, type: 'reminder', title: parsed.title, date: parsed.date || todayStr(), viaAi: true };
   }
-  if (parsed.action === 'query' && parsed.queryAnswer) {
-    return { ok: true, type: 'query', answer: parsed.queryAnswer, viaAi: true };
-  }
+  // "query" eylemini kasıtlı olarak burada işlemiyoruz: Groq'a çiftçi/cari
+  // isimleri dışında hiçbir gerçek alım/ödeme verisi gönderilmiyor, bu yüzden
+  // bakiye/gecikme gibi sorularda AI kendi metnini uyduruyordu (ör. "sorgulanıyor",
+  // "bilgi bulunamadı"). Bu tür sorular her zaman gerçek kayıtlara erişimi olan
+  // yerel parseQueryCommand'a bırakılır — null dönmek, çağıranın yerel motora
+  // düşmesini sağlar.
   return null;
 }
 
@@ -553,7 +556,7 @@ Satış (aliciya/cariye) için: {"action":"sale","buyerName":"...","variety":"..
 Aliciden tahsilat için: {"action":"collection","buyerName":"...","amount":123}
 Gider için: {"action":"expense","amount":123,"category":"...","note":"..."}
 Hatırlatma için: {"action":"reminder","title":"...","date":"YYYY-AA-GG"}
-Veri sorgusu (bakiye/gecikme sorma, kayit OLUŞTURMAZ) için: {"action":"query","queryAnswer":"kisa ve net cevap metni"}
+Bakiye/gecikme/tahsilat gibi bir VERİ SORUSU ise (kayıt oluşturmayan bir soruysa): {"action":"unknown"} döndür — bu tür sorular ayrı bir sistem tarafından gerçek kayıtlarla cevaplanıyor, sen tahmini bir cevap uydurma.
 Hiçbiri değilse: {"action":"unknown"}
 
 Bilinen çiftçiler: ${ctx.farmers.map((f) => f.name).join(', ') || 'yok'}
