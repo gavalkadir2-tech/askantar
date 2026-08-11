@@ -560,6 +560,45 @@ export function parseQueryCommand(text, ctx) {
     return 'Kimin bakiyesini sorduğunuzu anlayamadım. "Ahmet\'in bakiyesi ne kadar?" gibi sorun.';
   }
 
+  // "Bu ay toplam ödeme ne kadar?", "bu ay ne kadar ödeme yaptık?" gibi sorular.
+  const mentionsThisMonth = lower.includes('bu ay');
+  const asksMonthlyPayment = mentionsThisMonth && lower.includes('ödeme') || (mentionsThisMonth && lower.includes('odeme'));
+  if (asksMonthlyPayment) {
+    const now = new Date();
+    const monthPayments = payments.filter((p) => { const d = new Date(p.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+    const total = monthPayments.reduce((s, p) => s + (p.amount || 0), 0);
+    if (monthPayments.length === 0) return 'Bu ay henüz çiftçilere ödeme yapılmamış.';
+    return `Bu ay toplam ${fmtTL(total)} ödeme yaptık (${monthPayments.length} ödeme).`;
+  }
+
+  // "En çok hangi çiftçiden alım yaptık?" gibi sorular — kg bazında en yüklü çiftçi.
+  const asksTopFarmer = (lower.includes('en çok') || lower.includes('en cok')) && lower.includes('çiftçi') || (lower.includes('en çok') || lower.includes('en cok')) && lower.includes('ciftci');
+  if (asksTopFarmer) {
+    const byFarmer = {};
+    purchases.forEach((p) => { byFarmer[p.farmerId] = (byFarmer[p.farmerId] || 0) + (p.netKg || 0); });
+    const topId = Object.keys(byFarmer).sort((a, b) => byFarmer[b] - byFarmer[a])[0];
+    if (!topId) return 'Henüz hiç alım kaydı yok.';
+    const farmer = farmers.find((f) => f.id === topId);
+    return farmer ? `En çok ${farmer.name}'den alım yaptık: ${fmtKg(byFarmer[topId])}.` : 'Çiftçi bulunamadı.';
+  }
+
+  // "Depoda kaç ton Edremit var?", "depoda Gemlik ne kadar var?" gibi sorular.
+  const asksWarehouseStock = lower.includes('depoda') || lower.includes('stokta');
+  if (asksWarehouseStock) {
+    const purchasedByGrade = {};
+    purchases.forEach((p) => { (p.items || []).forEach((it) => { purchasedByGrade[it.grade] = (purchasedByGrade[it.grade] || 0) + (it.kg || 0); }); });
+    const soldByGrade = {};
+    sales.forEach((s) => { soldByGrade[s.grade || 'Etiketsiz'] = (soldByGrade[s.grade || 'Etiketsiz'] || 0) + (s.kg || 0); });
+    const grades = Object.keys(purchasedByGrade);
+    const matchedGrade = grades.find((g) => lower.includes(normalizeTr(g.split(' ')[0])) || lower.includes(normalizeTr(g)));
+    if (matchedGrade) {
+      const stock = (purchasedByGrade[matchedGrade] || 0) - (soldByGrade[matchedGrade] || 0);
+      return `Depoda ${matchedGrade}: ${fmtKg(stock)}.`;
+    }
+    const totalStock = grades.reduce((s, g) => s + ((purchasedByGrade[g] || 0) - (soldByGrade[g] || 0)), 0);
+    return `Depoda toplam ${fmtKg(totalStock)} var. Belirli bir çeşit sormak için "Depoda Edremit kaç kilo var?" gibi sorun.`;
+  }
+
   return null;
 }
 
