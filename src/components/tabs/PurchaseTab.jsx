@@ -54,11 +54,11 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const [lineGradeName, setLineGradeName] = useState('');
   const [lineKg, setLineKg] = useState('');
   const [crateWeight] = useState(settings.crateWeight ?? 2);
-  const [crateCount, setCrateCount] = useState(Math.max(0, Math.min(7, settings.defaultCrateCount ?? 5)));
+  const [crateCount, setCrateCount] = useState(Math.max(0, settings.defaultCrateCount ?? 5));
   const [linePrice, setLinePrice] = useState('');
 
   const lineDara = crateCount * crateWeight;
-  const adjustCrateCount = (delta) => setCrateCount((c) => Math.max(0, Math.min(7, c + delta)));
+  const adjustCrateCount = (delta) => setCrateCount((c) => Math.max(0, c + delta));
 
   const farmer = farmers.find((f) => f.id === farmerId);
   const selectedVariety = priceList.find((v) => v.name === lineVariety);
@@ -151,8 +151,27 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
     const priceVal = parseFloat(linePrice);
     const netVal = grossVal - daraVal;
     if (!lineVariety || !grossVal || grossVal <= 0 || netVal <= 0 || !priceVal || priceVal <= 0) return;
+
+    // Mükerrer kayıt kontrolü: aynı ağırlık + aynı kasa sayısı son 20 saniye içinde eklendiyse uyar.
+    const lastItem = items[items.length - 1];
+    if (lastItem && Math.abs(lastItem.grossKg - grossVal) < 0.05 && lastItem.crateCount === crateCount && Date.now() - (lastItem.addedAt || 0) < 20000) {
+      if (!window.confirm(`Aynı tartım (${grossVal} kg, ${crateCount} kasa) az önce eklendi. Yine de tekrar eklemek istiyor musunuz?`)) return;
+    }
+
+    // Hatalı tartım kontrolü: önceki tartımların ortalamasından çok sapan bir değer girildiyse uyar.
+    if (items.length > 0) {
+      const avgPrev = items.reduce((s, i) => s + i.grossKg, 0) / items.length;
+      if (avgPrev > 0) {
+        const pctDiff = Math.abs(grossVal - avgPrev) / avgPrev;
+        if (pctDiff > 0.35) {
+          const pct = Math.round(pctDiff * 100);
+          if (!window.confirm(`Bu tartım (${grossVal} kg) önceki tartımların ortalamasından (${avgPrev.toFixed(1)} kg) %${pct} farklı. Kantar değerini doğru girdiğinizden emin misiniz?`)) return;
+        }
+      }
+    }
+
     const label = lineGradeName ? `${lineVariety} · ${lineGradeName}` : lineVariety;
-    setItems((prev) => [...prev, { id: uid(), grade: label, grossKg: grossVal, dara: daraVal, crateCount, kg: netVal, pricePerKg: priceVal, amount: netVal * priceVal }]);
+    setItems((prev) => [...prev, { id: uid(), grade: label, grossKg: grossVal, dara: daraVal, crateCount, kg: netVal, pricePerKg: priceVal, amount: netVal * priceVal, addedAt: Date.now() }]);
     setLineKg('');
   };
 
@@ -367,10 +386,19 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
                 <label className="zk-label" style={{ textAlign: 'center' }}>Kasa</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                   <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(-1)} disabled={crateCount <= 0}>−</button>
-                  <div style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>
-                    {crateCount}
-                  </div>
-                  <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(1)} disabled={crateCount >= 7}>+</button>
+                  <input
+                    className="zk-input"
+                    type="text"
+                    inputMode="numeric"
+                    style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 15, fontWeight: 700, padding: '0 4px', minHeight: 44 }}
+                    value={crateCount}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, '');
+                      setCrateCount(v === '' ? 0 : Math.max(0, parseInt(v, 10)));
+                    }}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(1)}>+</button>
                 </div>
               </div>
               <div>

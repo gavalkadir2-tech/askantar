@@ -66,7 +66,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     defaultVatRate: parseFloat(defaultVatRate) || 0,
     defaultFuelPrice: parseFloat(defaultFuelPrice) || 0,
     crateWeight: parseFloat(crateWeight) || 0,
-    defaultCrateCount: Math.max(0, Math.min(7, parseInt(defaultCrateCount, 10) || 0)),
+    defaultCrateCount: Math.max(0, parseInt(defaultCrateCount, 10) || 0),
     defaultCommissionRate: parseFloat(defaultCommissionRate) || 0,
     defaultBagkurRate: parseFloat(defaultBagkurRate) || 0,
     defaultNoDeduction,
