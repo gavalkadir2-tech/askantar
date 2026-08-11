@@ -25,6 +25,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
   const [defaultFuelPrice, setDefaultFuelPrice] = useState(settings.defaultFuelPrice ?? '');
   const [crateWeight, setCrateWeight] = useState(settings.crateWeight ?? 2);
   const [crateTypes, setCrateTypes] = useState(settings.crateTypes ?? []);
+  const [seasonStartDate, setSeasonStartDate] = useState(settings.seasonStartDate ?? '10-01');
   const addCrateType = () => setCrateTypes((prev) => [...prev, { id: uid(), name: '', weight: crateWeight || 2 }]);
   const updateCrateType = (idx, updated) => setCrateTypes((prev) => prev.map((ct, i) => (i === idx ? updated : ct)));
   const removeCrateType = (idx) => setCrateTypes((prev) => prev.filter((_, i) => i !== idx));
@@ -72,6 +73,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     defaultFuelPrice: parseFloat(defaultFuelPrice) || 0,
     crateWeight: parseFloat(crateWeight) || 0,
     crateTypes: crateTypes.filter((ct) => ct.name.trim()).map((ct) => ({ id: ct.id, name: ct.name.trim(), weight: parseFloat(ct.weight) || 0 })),
+    seasonStartDate: /^\d{2}-\d{2}$/.test(seasonStartDate) ? seasonStartDate : '10-01',
     defaultCrateCount: Math.max(0, parseInt(defaultCrateCount, 10) || 0),
     defaultCommissionRate: parseFloat(defaultCommissionRate) || 0,
     defaultBagkurRate: parseFloat(defaultBagkurRate) || 0,
@@ -306,6 +308,13 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
                   </div>
                 ))}
                 <button className="zk-btn zk-btn-secondary" onClick={addCrateType}><Plus size={14} /> Kasa tipi ekle</button>
+              </div>
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${COLORS.border}`, maxWidth: 240 }}>
+                <label className="zk-label">Sezon başlangıç tarihi (ay-gün)</label>
+                <input className="zk-input" type="text" value={seasonStartDate} onChange={(e) => setSeasonStartDate(e.target.value)} placeholder="10-01" />
+                <div style={{ fontSize: 10.5, color: COLORS.inkSoft, marginTop: 4 }}>
+                  Raporlar'daki "Sezon toplamı" bu tarihten (varsayılan 1 Ekim, zeytin hasadı başlangıcı) bugüne kadarki verileri toplar.
+                </div>
               </div>
             </div>
 

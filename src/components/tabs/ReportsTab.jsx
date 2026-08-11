@@ -17,7 +17,7 @@ import { usePagedList } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, todayStr } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 
-export function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, vehicles, personnelAttendance, personnelPayments, payments, buyerPayments }) {
+export function ReportsTab({ farmers, purchases, sales, buyers, expenses, personnel, vehicles, personnelAttendance, personnelPayments, payments, buyerPayments, settings }) {
   const [range, setRange] = useState('month');
   const currentYear = new Date().getFullYear();
   const [fromA, setFromA] = useState(`${currentYear}-01-01`);
@@ -25,55 +25,44 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
   const [fromB, setFromB] = useState(`${currentYear - 1}-01-01`);
   const [toB, setToB] = useState(`${currentYear - 1}-12-31`);
 
-  const filtered = useMemo(() => {
+  // "Bu hafta": Pazartesi gününden bugüne. "Sezon": Ayarlar'daki sezon başlangıç
+  // tarihinden (varsayılan 1 Ekim — zeytin hasat sezonu) bugüne; eğer bugün bu
+  // yılki başlangıçtan önceyse bir önceki yılın başlangıcı esas alınır.
+  const weekStartStr = useMemo(() => {
     const now = new Date();
-    return purchases.filter((p) => {
-      const d = new Date(p.date);
-      if (range === 'today') return p.date === todayStr();
-      if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      return true;
-    });
-  }, [purchases, range]);
+    const day = now.getDay(); // 0=Pazar
+    const diffToMonday = day === 0 ? 6 : day - 1;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    return monday.toISOString().slice(0, 10);
+  }, []);
 
-  const filteredSales = useMemo(() => {
+  const seasonStartStr = useMemo(() => {
+    const md = settings?.seasonStartDate || '10-01'; // MM-DD
     const now = new Date();
-    return sales.filter((s) => {
-      const d = new Date(s.date);
-      if (range === 'today') return s.date === todayStr();
-      if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      return true;
-    });
-  }, [sales, range]);
+    const todayStrVal = todayStr();
+    const thisYearStart = `${now.getFullYear()}-${md}`;
+    if (todayStrVal >= thisYearStart) return thisYearStart;
+    return `${now.getFullYear() - 1}-${md}`;
+  }, [settings]);
 
-  const filteredExpenses = useMemo(() => {
+  const inRange = (dateStr) => {
     const now = new Date();
-    return expenses.filter((e) => {
-      const d = new Date(e.date);
-      if (range === 'today') return e.date === todayStr();
-      if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      return true;
-    });
-  }, [expenses, range]);
+    if (range === 'today') return dateStr === todayStr();
+    if (range === 'week') return dateStr >= weekStartStr;
+    if (range === 'month') {
+      const d = new Date(dateStr);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }
+    if (range === 'season') return dateStr >= seasonStartStr;
+    return true; // 'all'
+  };
 
-  const filteredPayments = useMemo(() => {
-    const now = new Date();
-    return (payments || []).filter((p) => {
-      const d = new Date(p.date);
-      if (range === 'today') return p.date === todayStr();
-      if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      return true;
-    });
-  }, [payments, range]);
-
-  const filteredBuyerPayments = useMemo(() => {
-    const now = new Date();
-    return (buyerPayments || []).filter((p) => {
-      const d = new Date(p.date);
-      if (range === 'today') return p.date === todayStr();
-      if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      return true;
-    });
-  }, [buyerPayments, range]);
+  const filtered = useMemo(() => purchases.filter((p) => inRange(p.date)), [purchases, range, weekStartStr, seasonStartStr]);
+  const filteredSales = useMemo(() => sales.filter((s) => inRange(s.date)), [sales, range, weekStartStr, seasonStartStr]);
+  const filteredExpenses = useMemo(() => expenses.filter((e) => inRange(e.date)), [expenses, range, weekStartStr, seasonStartStr]);
+  const filteredPayments = useMemo(() => (payments || []).filter((p) => inRange(p.date)), [payments, range, weekStartStr, seasonStartStr]);
+  const filteredBuyerPayments = useMemo(() => (buyerPayments || []).filter((p) => inRange(p.date)), [buyerPayments, range, weekStartStr, seasonStartStr]);
 
   const totalKg = filtered.reduce((s, p) => s + p.netKg, 0);
   const totalAmount = filtered.reduce((s, p) => s + p.amount, 0);
@@ -295,12 +284,18 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8,}}>
         <div>
           <div className="zk-h1">Raporlar</div>
-          <div className="zk-h1-sub">Toplam alım, satış ve kesinti özeti</div>
+          <div className="zk-h1-sub">
+            Toplam alım, satış ve kesinti özeti
+            {range === 'season' && ` — Sezon: ${fmtDate(seasonStartStr)} → bugün`}
+            {range === 'week' && ` — Hafta: ${fmtDate(weekStartStr)} → bugün`}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <select className="zk-select" style={{ width: 130 }} value={range} onChange={(e) => setRange(e.target.value)}>
             <option value="today">Bugün</option>
+            <option value="week">Bu hafta</option>
             <option value="month">Bu ay</option>
+            <option value="season">Sezon toplamı</option>
             <option value="all">Tümü</option>
           </select>
           <button className="zk-btn zk-btn-blue" onClick={exportExcel}><Download size={13} /> Excel</button>
