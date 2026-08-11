@@ -19,6 +19,7 @@ import {
   Package2,
   FlaskConical,
   Landmark,
+  History,
   PackageCheck,
 } from 'lucide-react';
 import { CustomerDisplayView } from './components/CustomerDisplayView';
@@ -39,6 +40,7 @@ import { ReportsTab } from './components/tabs/ReportsTab';
 import { SatisTab } from './components/tabs/SatisTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { ShipmentsTab } from './components/tabs/ShipmentsTab';
+import { ActivityLogTab } from './components/tabs/ActivityLogTab';
 import { applyAppearance, storageGet, storageSet, todayStr, uid } from './lib/format';
 import { COLORS } from './lib/theme';
 
@@ -99,6 +101,7 @@ export default function ZeytinDefteri() {
   const [bankAccounts, setBankAccounts] = useState([]);
   const [checksNotes, setChecksNotes] = useState([]);
   const [shipments, setShipments] = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
   const [selectedFarmerId, setSelectedFarmerId] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [printTarget, setPrintTarget] = useState(null);
@@ -108,7 +111,7 @@ export default function ZeytinDefteri() {
 
   useEffect(() => {
     (async () => {
-      const [f, p, pay, b, s, set, pl, per, exp, cash, veh, maint, fl, docs, ins, dmg, fns, trs, rem, crt, lab, bnk, chk, shp, pAtt, pPay, bPay] = await Promise.all([
+      const [f, p, pay, b, s, set, pl, per, exp, cash, veh, maint, fl, docs, ins, dmg, fns, trs, rem, crt, lab, bnk, chk, shp, pAtt, pPay, bPay, log] = await Promise.all([
         storageGet('zk:farmers'),
         storageGet('zk:purchases'),
         storageGet('zk:payments'),
@@ -136,6 +139,7 @@ export default function ZeytinDefteri() {
         storageGet('zk:personnelAttendance'),
         storageGet('zk:personnelPayments'),
         storageGet('zk:buyerPayments'),
+        storageGet('zk:activityLog'),
       ]);
       setFarmers(f || []); setPurchases(p || []); setPayments(pay || []);
       setBuyers(b || []); setSales(s || []); setSettings(set || {});
@@ -149,6 +153,7 @@ export default function ZeytinDefteri() {
       setShipments(shp || []);
       setPersonnelAttendance(pAtt || []); setPersonnelPayments(pPay || []);
       setBuyerPayments(bPay || []);
+      setActivityLog(log || []);
       if (pl && pl.length > 0) {
         const normalized = pl.map((v) => ('grades' in v ? v : { id: v.id, name: v.name, hasGrades: false, singlePrice: v.price || 0, grades: [] }));
         setPriceList(normalized);
@@ -328,6 +333,7 @@ export default function ZeytinDefteri() {
 
     { key: 'ai', label: 'AI Asistan', icon: Sparkles, group: 'Diğer' },
     { key: 'reports', label: 'Raporlar', icon: FileBarChart, group: 'Diğer' },
+    { key: 'log', label: 'İşlem Geçmişi', icon: History, group: 'Diğer' },
     { key: 'settings', label: 'Ayarlar', icon: SettingsIcon, group: 'Diğer' },
   ];
 
@@ -441,30 +447,31 @@ export default function ZeytinDefteri() {
           </div>
         </div>
         <div className="zk-main">
-          {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} setTab={setTab} />}
+          {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} buyers={buyers} buyerPayments={buyerPayments} setTab={setTab} />}
 
-          {tab === 'kantar' && <KantarTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} onPrintSaleReceipt={handlePrintSaleReceipt} bankAccounts={bankAccounts} />}
-          {tab === 'alis' && <AlisTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} bankAccounts={bankAccounts} />}
+          {tab === 'kantar' && <KantarTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} onPrintSaleReceipt={handlePrintSaleReceipt} />}
+          {tab === 'alis' && <AlisTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} activityLog={activityLog} setActivityLog={setActivityLog} />}
           {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
 
           {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} onPrintPayment={handlePrintPayment} />}
-          {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} />}
-          {tab === 'satis' && <SatisTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} bankAccounts={bankAccounts} />}
+          {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} onPrintSaleReceipt={handlePrintSaleReceipt} activityLog={activityLog} setActivityLog={setActivityLog} />}
+          {tab === 'satis' && <SatisTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} activityLog={activityLog} setActivityLog={setActivityLog} />}
 
           {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} setSettings={setSettings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
           {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} setSettings={setSettings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
-          {tab === 'crates' && <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} settings={settings} setSettings={setSettings} />}
+          {tab === 'crates' && <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} settings={settings} setSettings={setSettings} activityLog={activityLog} setActivityLog={setActivityLog} />}
           {tab === 'lab' && <LabTab farmers={farmers} purchases={purchases} results={labResults} setResults={setLabResults} />}
 
           {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
-          {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} personnel={personnel} vehicles={vehicles} personnelAttendance={personnelAttendance} personnelPayments={personnelPayments} />}
-          {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} autoBackups={autoBackups} onRestoreAutoBackup={restoreFromAutoBackup} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} />}
+          {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} personnel={personnel} vehicles={vehicles} personnelAttendance={personnelAttendance} personnelPayments={personnelPayments} payments={payments} buyerPayments={buyerPayments} />}
+          {tab === 'log' && <ActivityLogTab activityLog={activityLog} />}
+          {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} autoBackups={autoBackups} onRestoreAutoBackup={restoreFromAutoBackup} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} activityLog={activityLog} setActivityLog={setActivityLog} />}
         </div>
       </div>
       {printTarget?.type === 'sale' && <SalePrintArea sale={printTarget.sale} buyer={printTarget.buyer} settings={settings} />}
       {printTarget?.type === 'payment' && <PaymentPrintArea row={printTarget.row} settings={settings} />}
       {(!printTarget || (printTarget.type !== 'sale' && printTarget.type !== 'payment')) && <PrintArea purchase={printTarget?.purchase} farmer={printTarget?.farmer} settings={settings} />}
-      <VoiceAssistant farmers={farmers} setFarmers={setFarmers} priceList={priceList} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} reminders={reminders} setReminders={setReminders} settings={settings} />
+      <VoiceAssistant farmers={farmers} setFarmers={setFarmers} priceList={priceList} purchases={purchases} setPurchases={setPurchases} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} reminders={reminders} setReminders={setReminders} settings={settings} buyers={buyers} sales={sales} setSales={setSales} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} />
     </div>
   );
 }
