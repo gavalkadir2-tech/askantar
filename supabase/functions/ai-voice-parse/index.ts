@@ -57,7 +57,8 @@ Kurallar:
         'authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        // llama-3.3-70b-versatile Groq tarafından 16 Ağustos 2026'da kapatıldı; yerine openai/gpt-oss-120b önerildi.
+        model: 'openai/gpt-oss-120b',
         max_tokens: 400,
         temperature: 0.1,
         response_format: { type: 'json_object' },
