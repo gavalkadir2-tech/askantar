@@ -827,7 +827,10 @@ export async function callGroqDirect(text, ctx, apiKey) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        // NOT: llama-3.3-70b-versatile, Groq tarafından 16 Ağustos 2026'da
+        // tamamen kapatıldı (deprecated). Yerine önerilen openai/gpt-oss-120b
+        // kullanılıyor. Bkz. https://console.groq.com/docs/deprecations
+        model: 'openai/gpt-oss-120b',
         messages: [
           { role: 'system', content: GROQ_SYSTEM_PROMPT(ctx) },
           { role: 'user', content: text },
