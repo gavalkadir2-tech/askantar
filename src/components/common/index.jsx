@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Bluetooth,
   BluetoothConnected,
@@ -12,6 +12,8 @@ import {
   ChevronUp,
   ChevronDown,
   AlertTriangle,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { daysUntil } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
@@ -115,17 +117,32 @@ export function Modal({ title, onClose, children }) {
   );
 }
 
+const SCALE_DATA_TIMEOUT_MS = 6000; // Bu süre boyunca kantardan yeni satır gelmezse "veri gelmiyor" uyarısı gösterilir.
+const SCALE_STABLE_WINDOW = 4; // Kararlılık kontrolü için son kaç okuma dikkate alınsın.
+const SCALE_STABLE_TOLERANCE = 0.1; // kg — son okumalar arası fark bu değerin altındaysa "stabil" kabul edilir.
+const SCALE_RECONNECT_ATTEMPTS = 5;
+
 export function ScaleWidget({ onWeightCapture, compact }) {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState('Bağlı değil');
   const [rawLines, setRawLines] = useState([]);
   const [lastValue, setLastValue] = useState(null);
+  const [stable, setStable] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [dataStale, setDataStale] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [baud, setBaud] = useState(9600);
   const [serialSupported] = useState(() => typeof navigator !== 'undefined' && 'serial' in navigator);
   const portRef = useRef(null);
   const readerRef = useRef(null);
   const keepReadingRef = useRef(false);
   const bufferRef = useRef('');
+  const historyRef = useRef([]); // son okumalar: [{value, t}]
+  const lastReadingAtRef = useRef(0);
+  const lockedRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+
+  useEffect(() => { lockedRef.current = locked; }, [locked]);
 
   const extractNumber = (line) => {
     const m = line.match(/-?\d+[.,]?\d*/);
@@ -142,7 +159,17 @@ export function ScaleWidget({ onWeightCapture, compact }) {
       if (!line) continue;
       setRawLines((prev) => [...prev.slice(-4), line]);
       const num = extractNumber(line);
-      if (num !== null) setLastValue(num);
+      if (num !== null) {
+        lastReadingAtRef.current = Date.now();
+        setDataStale(false);
+        // Kilitliyken gösterilen değer donuk kalsın; kantarcı notunu alana kadar değişmesin.
+        if (lockedRef.current) continue;
+        historyRef.current = [...historyRef.current.slice(-(SCALE_STABLE_WINDOW - 1)), num];
+        const hist = historyRef.current;
+        const isStable = hist.length >= SCALE_STABLE_WINDOW && (Math.max(...hist) - Math.min(...hist)) <= SCALE_STABLE_TOLERANCE;
+        setStable(isStable);
+        setLastValue(num);
+      }
     }
   }, []);
 
@@ -164,16 +191,55 @@ export function ScaleWidget({ onWeightCapture, compact }) {
       await closed.catch(() => {});
       // keepReadingRef hala true ise dongu, kullanicinin "Kes" butonuyla degil,
       // cihaz/kablo tarafindan (beklenmedik) koptugu icin bitmis demektir.
-      // Bu durumda kullaniciyi acikca uyar, aksi halde ekranda "Bagli" yazip
-      // eski/gecersiz bir kilo degeri uzerinden islem yapilmasina yol acabilir.
+      // Bu durumda otomatik olarak yeniden baglanmayi dene; basarisiz olursa
+      // kullaniciyi acikca uyar, aksi halde ekranda "Bagli" yazip eski/gecersiz
+      // bir kilo degeri uzerinden islem yapilmasina yol acabilir.
       if (keepReadingRef.current) {
-        keepReadingRef.current = false;
         setConnected(false);
-        setStatus('Bağlantı koptu — kabloyu/cihazı kontrol edin ya da kiloyu elle girin');
         setLastValue(null);
+        historyRef.current = [];
+        setStable(false);
+        await attemptAutoReconnect();
       }
     }
   }, [handleIncoming]);
+
+  const attemptAutoReconnect = useCallback(async () => {
+    if (!portRef.current) {
+      keepReadingRef.current = false;
+      setStatus('Bağlantı koptu — kabloyu/cihazı kontrol edin ya da kiloyu elle girin');
+      return;
+    }
+    setReconnecting(true);
+    for (let attempt = 1; attempt <= SCALE_RECONNECT_ATTEMPTS; attempt++) {
+      reconnectAttemptRef.current = attempt;
+      setStatus(`Bağlantı koptu, yeniden bağlanılıyor... (${attempt}/${SCALE_RECONNECT_ATTEMPTS})`);
+      await new Promise((r) => setTimeout(r, Math.min(1000 * attempt, 4000)));
+      if (!keepReadingRef.current) break; // kullanici bu sirada "Kes" e bastiysa dur
+      try {
+        await portRef.current.open({ baudRate: baud });
+        setConnected(true);
+        setStatus('Bağlı (yeniden bağlanıldı)');
+        setReconnecting(false);
+        readLoop(portRef.current);
+        return;
+      } catch (e) {
+        // port hala kapanmis/erisilemez olabilir, tekrar dene
+      }
+    }
+    keepReadingRef.current = false;
+    setReconnecting(false);
+    setStatus('Bağlantı koptu — kabloyu/cihazı kontrol edin ya da kiloyu elle girin');
+  }, [baud, readLoop]);
+
+  // Kantar bağlıyken belirli bir süre yeni satır gelmezse uyar (kablo takılı ama veri akmıyor olabilir).
+  useEffect(() => {
+    if (!connected) return;
+    const t = setInterval(() => {
+      if (Date.now() - lastReadingAtRef.current > SCALE_DATA_TIMEOUT_MS) setDataStale(true);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [connected]);
 
   const connect = async () => {
     if (!('serial' in navigator)) {
@@ -187,6 +253,8 @@ export function ScaleWidget({ onWeightCapture, compact }) {
       portRef.current = port;
       setConnected(true);
       setStatus('Bağlı');
+      setDataStale(false);
+      lastReadingAtRef.current = Date.now();
       keepReadingRef.current = true;
       readLoop(port);
     } catch (e) {
@@ -200,27 +268,69 @@ export function ScaleWidget({ onWeightCapture, compact }) {
       if (readerRef.current) await readerRef.current.cancel();
       if (portRef.current) await portRef.current.close();
     } catch (e) {}
+    portRef.current = null;
     setConnected(false);
+    setReconnecting(false);
     setStatus('Bağlı değil');
     setLastValue(null);
+    setStable(false);
+    setLocked(false);
+    setDataStale(false);
+    historyRef.current = [];
   };
+
+  const toggleLock = () => setLocked((v) => !v);
+
+  const statusColor = dataStale ? '#E0B84D' : (reconnecting ? '#E0B84D' : undefined);
+  const readoutValue = lastValue !== null ? lastValue.toFixed(1) : '—';
+
+  const StabilityBadge = () => {
+    if (!connected || lastValue === null) return null;
+    return locked ? (
+      <span className="zk-badge zk-badge-blue" style={{ fontSize: 10 }}><Lock size={10} style={{ marginRight: 3, verticalAlign: -1 }} />Kilitli</span>
+    ) : (
+      <span className={`zk-badge ${stable ? 'zk-badge-olive' : 'zk-badge-gold'}`} style={{ fontSize: 10 }}>{stable ? 'Stabil' : 'Dalgalanıyor'}</span>
+    );
+  };
+
+  const DataStaleWarning = () => (!connected || !dataStale) ? null : (
+    <div style={{ fontSize: 11, color: '#E0B84D', display: 'flex', alignItems: 'center', gap: 5 }}>
+      <AlertTriangle size={13} /> Kantardan veri gelmiyor — bağlantıyı kontrol edin.
+    </div>
+  );
+
+  const LockButton = ({ small }) => (!connected || lastValue === null) ? null : (
+    <button
+      className="zk-btn zk-btn-secondary"
+      style={small ? { padding: '6px 9px' } : { flex: 1, justifyContent: 'center' }}
+      onClick={toggleLock}
+      title={locked ? 'Tartım değerini kilitten çıkar' : 'Tartım değerini kilitle (donsun)'}
+    >
+      {locked ? <Unlock size={13} /> : <Lock size={13} />} {locked ? 'Kilidi aç' : 'Kilitle'}
+    </button>
+  );
 
   if (compact) {
     return (
       <div className="zk-scalebox zk-scalebox-compact">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#B7C4B3', minWidth: 90 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: statusColor || '#B7C4B3', minWidth: 90 }}>
             {connected ? <BluetoothConnected size={15} /> : <Bluetooth size={15} />}
             {status}
           </div>
 
-          <div className="zk-scale-readout" style={{ fontSize: 26 }}>{lastValue !== null ? lastValue.toFixed(1) : '—'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="zk-scale-readout" style={{ fontSize: 26 }}>{readoutValue}</div>
+            <StabilityBadge />
+          </div>
 
           {rawLines.length > 0 && (
             <div style={{ fontSize: 10, color: '#6A7A6A', fontFamily: 'Courier New, monospace', flex: 1, minWidth: 100 }}>
               {rawLines[rawLines.length - 1]}
             </div>
           )}
+
+          <DataStaleWarning />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {!serialSupported ? (
@@ -237,10 +347,11 @@ export function ScaleWidget({ onWeightCapture, compact }) {
               </select>
             )}
             {serialSupported && (!connected ? (
-              <button className="zk-btn zk-btn-gold" onClick={connect}>Kantara bağlan</button>
+              <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting}>Kantara bağlan</button>
             ) : (
               <>
                 <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
+                <LockButton small />
                 <button className="zk-btn zk-btn-gold" disabled={lastValue === null} onClick={() => onWeightCapture(lastValue)}>
                   Bu değeri kullan
                 </button>
@@ -255,7 +366,7 @@ export function ScaleWidget({ onWeightCapture, compact }) {
   return (
     <div className="zk-scalebox">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8,}}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#B7C4B3' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: statusColor || '#B7C4B3' }}>
           {connected ? <BluetoothConnected size={15} /> : <Bluetooth size={15} />}
           {status}
         </div>
@@ -269,12 +380,16 @@ export function ScaleWidget({ onWeightCapture, compact }) {
           </select>
         )}
       </div>
-      <div className="zk-scale-readout">{lastValue !== null ? lastValue.toFixed(1) : '—'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="zk-scale-readout">{readoutValue}</div>
+        <StabilityBadge />
+      </div>
       {rawLines.length > 0 && (
         <div style={{ fontSize: 10, color: '#6A7A6A', marginTop: 6, fontFamily: 'Courier New, monospace' }}>
           {rawLines[rawLines.length - 1]}
         </div>
       )}
+      <div style={{ marginTop: 8 }}><DataStaleWarning /></div>
       {!serialSupported ? (
         <div style={{ fontSize: 11.5, color: '#E0B84D', display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
           <AlertTriangle size={14} /> Bu cihaz/tarayıcı kantar bağlantısını desteklemiyor. Kiloyu "Ölçülen (kg)" alanına elle girebilirsiniz.
@@ -282,10 +397,11 @@ export function ScaleWidget({ onWeightCapture, compact }) {
       ) : (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           {!connected ? (
-            <button className="zk-btn zk-btn-gold" onClick={connect} style={{ flex: 1, justifyContent: 'center' }}>Kantara bağlan</button>
+            <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting} style={{ flex: 1, justifyContent: 'center' }}>Kantara bağlan</button>
           ) : (
             <>
               <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ flex: 1, justifyContent: 'center', background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
+              <LockButton />
               <button
                 className="zk-btn zk-btn-gold"
                 style={{ flex: 1, justifyContent: 'center' }}
