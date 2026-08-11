@@ -10,8 +10,9 @@ import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { CRATE_MOVEMENT_TYPES } from '../../lib/constants';
 import { fmtDate, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
+import { logActivity, LOG_ACTIONS } from '../../lib/activityLog';
 
-export function CrateInventoryTab({ farmers, movements, setMovements, settings, setSettings }) {
+export function CrateInventoryTab({ farmers, movements, setMovements, settings, setSettings, activityLog, setActivityLog }) {
   const [viewFarmerId, setViewFarmerId] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [formFarmerId, setFormFarmerId] = useState('');
@@ -62,6 +63,8 @@ export function CrateInventoryTab({ farmers, movements, setMovements, settings, 
     if (!formFarmerId) { setFormError('Lütfen bir çiftçi seçin.'); return; }
     if (!q || q <= 0) { setFormError('Lütfen geçerli bir adet girin.'); return; }
     setFormError('');
+    const farmerName = farmers.find((f) => f.id === formFarmerId)?.name || '';
+    const typeLabel = CRATE_MOVEMENT_TYPES.find((t) => t.key === type)?.label || type;
     let next;
     if (editingId) {
       next = movements.map((m) => (m.id === editingId ? { ...m, farmerId: formFarmerId, date, type, quantity: q, deposit: parseFloat(deposit) || 0, note } : m));
@@ -70,15 +73,22 @@ export function CrateInventoryTab({ farmers, movements, setMovements, settings, 
     }
     setMovements(next);
     await storageSet('zk:crateMovements', next);
+    if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.CRATE_MOVEMENT_ADDED, `${farmerName} — ${typeLabel} — ${q} adet`);
     setViewFarmerId(formFarmerId);
     resetForm();
   };
 
   const remove = async (id) => {
     if (!window.confirm('Bu kasa/çuval hareketini silmek istediğinize emin misiniz?')) return;
+    const removed = movements.find((m) => m.id === id);
     const next = movements.filter((m) => m.id !== id);
     setMovements(next);
     await storageSet('zk:crateMovements', next);
+    if (setActivityLog && removed) {
+      const farmerName = farmers.find((f) => f.id === removed.farmerId)?.name || '';
+      const typeLabel = CRATE_MOVEMENT_TYPES.find((t) => t.key === removed.type)?.label || removed.type;
+      await logActivity(activityLog, setActivityLog, LOG_ACTIONS.CRATE_MOVEMENT_ADDED, `${farmerName} — ${typeLabel} — ${removed.quantity} adet SİLİNDİ`);
+    }
     if (editingId === id) resetForm();
   };
 

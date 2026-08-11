@@ -15,8 +15,9 @@ import { usePagedList, computeAging } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppBalanceReminderText, buildWhatsAppReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
+import { logActivity, LOG_ACTIONS } from '../../lib/activityLog';
 
-export function LedgerTab({ farmers, purchases, payments, setPayments, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings }) {
+export function LedgerTab({ farmers, purchases, payments, setPayments, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings, activityLog, setActivityLog }) {
   const [payAmount, setPayAmount] = useState('');
   const [payNote, setPayNote] = useState('');
   const [payType, setPayType] = useState('odeme');
@@ -49,6 +50,7 @@ export function LedgerTab({ farmers, purchases, payments, setPayments, selectedF
     try {
       setPayments(next);
       await storageSet('zk:payments', next);
+      if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.PAYMENT_ADDED, `${farmer.name} — ${fmtTL(amt)}${payNote ? ` (${payNote})` : ''}`);
       setPayAmount(''); setPayNote('');
     } catch (err) {
       Sentry.captureException(err, { tags: { operation: 'addPayment' } });
@@ -58,10 +60,12 @@ export function LedgerTab({ farmers, purchases, payments, setPayments, selectedF
 
   const removePayment = async (id) => {
     if (!window.confirm('Bu ödeme/avans kaydını silmek istediğinize emin misiniz?')) return;
+    const removed = payments.find((p) => p.id === id);
     const next = payments.filter((p) => p.id !== id);
     try {
       setPayments(next);
       await storageSet('zk:payments', next);
+      if (setActivityLog && removed) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.PAYMENT_DELETED, `${farmer ? farmer.name : ''} — ${fmtTL(removed.amount)}`);
     } catch (err) {
       Sentry.captureException(err, { tags: { operation: 'removePayment' } });
       window.alert('Silme işlemi kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');

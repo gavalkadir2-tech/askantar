@@ -16,7 +16,7 @@ import { fmtTL, storageSet, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppBalanceReminderText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
-export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, setPayments, sales, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings, buyerPayments, setBuyerPayments, onPrintSaleReceipt }) {
+export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, payments, setPayments, sales, selectedFarmerId, setSelectedFarmerId, onPrintReceipt, settings, buyerPayments, setBuyerPayments, onPrintSaleReceipt, activityLog, setActivityLog }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingFarmer, setEditingFarmer] = useState(null);
   const [editingBuyer, setEditingBuyer] = useState(null);
@@ -124,6 +124,7 @@ export function CariTab({ farmers, setFarmers, buyers, setBuyers, purchases, pay
           farmers={farmers} purchases={purchases} payments={payments} setPayments={setPayments}
           selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId}
           onPrintReceipt={onPrintReceipt} settings={settings}
+          activityLog={activityLog} setActivityLog={setActivityLog}
         />
       </div>
     );

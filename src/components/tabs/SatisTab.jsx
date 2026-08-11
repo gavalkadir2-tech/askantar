@@ -8,7 +8,7 @@ import { SalesHistoryTab } from './SalesHistoryTab';
 // tek bir "Satış" sekmesi altında birleştirir.
 export function SatisTab({
   purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, settings,
-  onPrintSaleReceipt, buyerPayments, setBuyerPayments, bankAccounts,
+  onPrintSaleReceipt, buyerPayments, setBuyerPayments, bankAccounts, activityLog, setActivityLog,
 }) {
   const [mode, setMode] = useState('yeni'); // 'yeni' | 'gecmis'
 
@@ -46,7 +46,7 @@ export function SatisTab({
           purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales}
           vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings}
           onPrintSaleReceipt={onPrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments}
-          bankAccounts={bankAccounts}
+          bankAccounts={bankAccounts} activityLog={activityLog} setActivityLog={setActivityLog}
         />
       )}
       {mode === 'gecmis' && (

@@ -18,8 +18,9 @@ import { usePagedList, useBuyerLedger } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppSaleReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
+import { logActivity, LOG_ACTIONS } from '../../lib/activityLog';
 
-export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, settings, onPrintSaleReceipt, buyerPayments, setBuyerPayments, bankAccounts }) {
+export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, settings, onPrintSaleReceipt, buyerPayments, setBuyerPayments, bankAccounts, activityLog, setActivityLog }) {
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState(null);
   const [buyerName, setBuyerName] = useState('');
@@ -73,7 +74,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
 
   const stockByGrade = useMemo(() => {
     const grades = new Set([...Object.keys(purchasedByGrade), ...Object.keys(soldByGrade)]);
-    return Array.from(grades).map((g) => ({ grade: g, stock: (purchasedByGrade[g] || 0) - (soldByGrade[g] || 0) })).sort((a, b) => b.stock - a.stock);
+    return Array.from(grades).map((g) => ({ grade: g, purchased: purchasedByGrade[g] || 0, sold: soldByGrade[g] || 0, stock: (purchasedByGrade[g] || 0) - (soldByGrade[g] || 0) })).sort((a, b) => b.stock - a.stock);
   }, [purchasedByGrade, soldByGrade]);
 
   // Her sinif icin agirlikli ortalama alis fiyati + sabit TL komisyon (satis
@@ -152,6 +153,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
   const saveSale = async () => {
     if (!canSave) return;
     const vehicle = vehicles.find((v) => v.id === vehicleId);
+    const buyer = buyers.find((b) => b.id === buyerId);
     const record = {
       id: uid(), makbuzNo: nextReceiptNo(sales, settings?.salesReceiptNext), buyerId, date, grade,
       kg: parseFloat(kg), pricePerKg: parseFloat(pricePerKg), amount, note,
@@ -163,6 +165,7 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
     const next = [...sales, record];
     setSales(next);
     await storageSet('zk:sales', next);
+    if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.SALE_ADDED, `#${record.makbuzNo} — ${grade} — ${fmtKg(record.kg)} — ${buyer ? buyer.name : ''} — ${fmtTL(amount)}`);
     setLastSaved(record);
     setKg(''); setPricePerKg(''); setNote(''); setVade('');
     setPaymentMethod('nakit'); setPaymentBankAccountId('');
@@ -172,7 +175,13 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
 
   const addCollection = async (buyerId2) => {
     const result = await addCollectionShared(buyerId2, collectionAmount, collectionNote);
-    if (result) { setCollectionAmount(''); setCollectionNote(''); }
+    if (result) {
+      if (setActivityLog) {
+        const buyer = buyers.find((b) => b.id === buyerId2);
+        await logActivity(activityLog, setActivityLog, LOG_ACTIONS.BUYER_COLLECTION_ADDED, `${buyer ? buyer.name : ''} — ${fmtTL(parseFloat(collectionAmount) || 0)}`);
+      }
+      setCollectionAmount(''); setCollectionNote('');
+    }
   };
 
   return (
@@ -185,6 +194,25 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
         <StatCard label="Toplam satılan" value={fmtKg(totalSoldKg)} icon={ShoppingCart} />
         <StatCard label="Mevcut stok" value={fmtKg(currentStock)} tone={COLORS.blue} icon={Warehouse} />
       </div>
+
+      {stockByGrade.filter((g) => Math.abs(g.stock) > 0.01 || g.purchased > 0).length > 0 && (
+        <div className="zk-card" style={{ maxWidth: 900, marginBottom: 18 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Depo stok durumu (çeşit bazında)</div>
+          <table className="zk-table">
+            <thead><tr><th>Çeşit</th><th>Alınan</th><th>Satılan</th><th>Stokta</th></tr></thead>
+            <tbody>
+              {stockByGrade.filter((g) => Math.abs(g.stock) > 0.01 || g.purchased > 0).map((g) => (
+                <tr key={g.grade}>
+                  <td style={{ fontWeight: 600 }}>{g.grade}</td>
+                  <td>{fmtKg(g.purchased)}</td>
+                  <td>{fmtKg(g.sold)}</td>
+                  <td style={{ fontWeight: 700, color: g.stock < 0 ? COLORS.red : COLORS.olive }}>{fmtKg(g.stock)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div style={{ maxWidth: 900 }}>
         <div className="zk-card">
@@ -302,7 +330,10 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
         const bal = buyerBalances[viewingBuyerId] || 0;
         const addDetailCollection = async () => {
           const result = await addCollectionShared(viewingBuyerId, detailCollectionAmount, detailCollectionNote);
-          if (result) { setDetailCollectionAmount(''); setDetailCollectionNote(''); }
+          if (result) {
+            if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.BUYER_COLLECTION_ADDED, `${buyer.name} — ${fmtTL(parseFloat(detailCollectionAmount) || 0)}`);
+            setDetailCollectionAmount(''); setDetailCollectionNote('');
+          }
         };
         return (
           <div className="zk-card" style={{ marginTop: 16 }}>

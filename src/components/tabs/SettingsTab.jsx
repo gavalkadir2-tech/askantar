@@ -10,8 +10,9 @@ import { ExcelFarmerImport, TagChipList, TaxRateList, VarietyEditor } from '../s
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../../lib/constants';
 import { applyAppearance, fmtDate, fmtTL, storageSet, todayStr, uid } from '../../lib/format';
 import { ACCENT_PRESETS, COLORS } from '../../lib/theme';
+import { logActivity, LOG_ACTIONS } from '../../lib/activityLog';
 
-export function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup, onRestore, restoreStatus, farmers, setFarmers, autoBackups, onRestoreAutoBackup, allData }) {
+export function SettingsTab({ settings, setSettings, priceList, setPriceList, onBackup, onRestore, restoreStatus, farmers, setFarmers, autoBackups, onRestoreAutoBackup, allData, activityLog, setActivityLog }) {
   const [tab, setTab] = useState('genel');
 
   const [decimalPlaces, setDecimalPlaces] = useState(settings.decimalPlaces ?? 2);
@@ -23,6 +24,10 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
   const [groqApiKey, setGroqApiKey] = useState(settings.groqApiKey || '');
   const [defaultFuelPrice, setDefaultFuelPrice] = useState(settings.defaultFuelPrice ?? '');
   const [crateWeight, setCrateWeight] = useState(settings.crateWeight ?? 2);
+  const [crateTypes, setCrateTypes] = useState(settings.crateTypes ?? []);
+  const addCrateType = () => setCrateTypes((prev) => [...prev, { id: uid(), name: '', weight: crateWeight || 2 }]);
+  const updateCrateType = (idx, updated) => setCrateTypes((prev) => prev.map((ct, i) => (i === idx ? updated : ct)));
+  const removeCrateType = (idx) => setCrateTypes((prev) => prev.filter((_, i) => i !== idx));
   const [defaultCrateCount, setDefaultCrateCount] = useState(settings.defaultCrateCount ?? 5);
   const [defaultCommissionRate, setDefaultCommissionRate] = useState(settings.defaultCommissionRate ?? 0.5);
   const [defaultBagkurRate, setDefaultBagkurRate] = useState(settings.defaultBagkurRate ?? 1);
@@ -66,6 +71,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     defaultVatRate: parseFloat(defaultVatRate) || 0,
     defaultFuelPrice: parseFloat(defaultFuelPrice) || 0,
     crateWeight: parseFloat(crateWeight) || 0,
+    crateTypes: crateTypes.filter((ct) => ct.name.trim()).map((ct) => ({ id: ct.id, name: ct.name.trim(), weight: parseFloat(ct.weight) || 0 })),
     defaultCrateCount: Math.max(0, parseInt(defaultCrateCount, 10) || 0),
     defaultCommissionRate: parseFloat(defaultCommissionRate) || 0,
     defaultBagkurRate: parseFloat(defaultBagkurRate) || 0,
@@ -116,6 +122,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     const next = priceList.map((v) => (v.id === updated.id ? updated : v));
     setPriceList(next);
     await storageSet('zk:priceList', next);
+    if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.PRICE_CHANGED, `${updated.name} fiyat listesi güncellendi`);
   };
 
   const [bulkValue, setBulkValue] = useState('');
@@ -136,6 +143,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
     const nextSettings = { ...settings, priceListUpdatedAt: Date.now() };
     setSettings(nextSettings);
     await storageSet('zk:settings', nextSettings);
+    if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.PRICE_CHANGED, `Toplu güncelleme: tüm fiyatlara kg başına ${fmtTL(v)} eklendi`);
     setBulkValue('');
   };
 
@@ -279,11 +287,25 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
                 </div>
                 <div>
                   <label className="zk-label">Varsayılan kasa sayısı (dara)</label>
-                  <input className="zk-input" type="text" inputMode="decimal" min="0" max="7" value={defaultCrateCount} onChange={(e) => setDefaultCrateCount(e.target.value.replace(',', '.'))} placeholder="5" />
+                  <input className="zk-input" type="text" inputMode="decimal" min="0" value={defaultCrateCount} onChange={(e) => setDefaultCrateCount(e.target.value.replace(',', '.'))} placeholder="5" />
                 </div>
               </div>
               <div style={{ fontSize: 11, color: COLORS.inkSoft, marginTop: 8 }}>
                 Alım ekranında her satıra otomatik gelir ({defaultCrateCount || 0} kasa × {crateWeight || 0} kg = {((parseFloat(defaultCrateCount) || 0) * (parseFloat(crateWeight) || 0)).toFixed(1)} kg dara), orada değiştirilebilir.
+              </div>
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Kasa tipleri (farklı dara profilleri)</div>
+                <div style={{ fontSize: 11, color: COLORS.inkSoft, marginBottom: 10 }}>
+                  Plastik kasa, büyük kasa, küçük kasa gibi farklı dara ağırlıkları tanımlayın; alım/satış ekranında kasa sayısının yanında tip seçilebilir. Boş bırakırsanız yukarıdaki tek "Kasa ağırlığı" kullanılır.
+                </div>
+                {crateTypes.map((ct, i) => (
+                  <div key={ct.id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                    <input className="zk-input" style={{ flex: 2 }} placeholder="Tip adı (örn. Büyük kasa)" value={ct.name} onChange={(e) => updateCrateType(i, { ...ct, name: e.target.value })} />
+                    <input className="zk-input" style={{ flex: 1, maxWidth: 110 }} type="text" inputMode="decimal" placeholder="Kg" value={ct.weight} onChange={(e) => updateCrateType(i, { ...ct, weight: e.target.value.replace(',', '.') })} />
+                    <button className="zk-btn zk-btn-secondary" style={{ padding: '8px 10px' }} onClick={() => removeCrateType(i)}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+                <button className="zk-btn zk-btn-secondary" onClick={addCrateType}><Plus size={14} /> Kasa tipi ekle</button>
               </div>
             </div>
 

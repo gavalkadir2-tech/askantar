@@ -15,8 +15,9 @@ import { usePagedList, useSortableColumns } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, storageSet } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
+import { logActivity, LOG_ACTIONS } from '../../lib/activityLog';
 
-export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, vehicles, onPrintReceipt, settings, bankAccounts }) {
+export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, vehicles, onPrintReceipt, settings, bankAccounts, activityLog, setActivityLog }) {
   const [query, setQuery] = useState('');
   const [farmerFilter, setFarmerFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -59,15 +60,19 @@ export function AllPurchasesTab({ farmers, purchases, setPurchases, personnel, v
 
   const removePurchase = async (p) => {
     if (!window.confirm(`#${p.makbuzNo} numaralı alım kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve çiftçinin cari hesabını etkiler.`)) return;
+    const farmerName = farmers.find((x) => x.id === p.farmerId)?.name || '';
     const next = purchases.filter((x) => x.id !== p.id);
     setPurchases(next);
     await storageSet('zk:purchases', next);
+    if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.PURCHASE_DELETED, `#${p.makbuzNo} — ${farmerName} — ${fmtKg(p.netKg)} — ${fmtTL(p.netPayment)}`);
   };
 
   const saveEditedPurchase = async (updated) => {
     const next = purchases.map((x) => (x.id === updated.id ? updated : x));
     setPurchases(next);
     await storageSet('zk:purchases', next);
+    const farmerName = farmers.find((x) => x.id === updated.farmerId)?.name || '';
+    if (setActivityLog) await logActivity(activityLog, setActivityLog, LOG_ACTIONS.PURCHASE_EDITED, `#${updated.makbuzNo} — ${farmerName} — ${fmtKg(updated.netKg)} — ${fmtTL(updated.netPayment)}`);
     setEditingPurchase(null);
   };
 

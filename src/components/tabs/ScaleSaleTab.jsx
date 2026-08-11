@@ -27,14 +27,18 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
   const [lineGrade, setLineGrade] = useState('');
   const [lineKg, setLineKg] = useState('');
   const [linePrice, setLinePrice] = useState('');
+  const crateTypes = settings.crateTypes && settings.crateTypes.length > 0 ? settings.crateTypes : null;
   const [crateWeight] = useState(settings.crateWeight ?? 2);
+  const [crateTypeId, setCrateTypeId] = useState(crateTypes ? crateTypes[0].id : '');
   const [crateCount, setCrateCount] = useState(Math.max(0, settings.defaultCrateCount ?? 5));
   const [lastSavedBatch, setLastSavedBatch] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('nakit');
   const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [vadeTarihi, setVadeTarihi] = useState('');
 
-  const lineDara = crateCount * crateWeight;
+  const activeCrateType = crateTypes ? crateTypes.find((ct) => ct.id === crateTypeId) : null;
+  const effectiveCrateWeight = activeCrateType ? activeCrateType.weight : crateWeight;
+  const lineDara = crateCount * effectiveCrateWeight;
   const adjustCrateCount = (delta) => setCrateCount((c) => Math.max(0, c + delta));
 
   const buyer = buyers.find((b) => b.id === buyerId);
@@ -161,7 +165,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
       }
     }
 
-    setItems((prev) => [...prev, { id: uid(), grade: lineGrade, grossKg: grossVal, dara: daraVal, crateCount, kg: netVal, pricePerKg: price, amount: netVal * price, addedAt: Date.now() }]);
+    setItems((prev) => [...prev, { id: uid(), grade: lineGrade, grossKg: grossVal, dara: daraVal, crateCount, crateTypeName: activeCrateType ? activeCrateType.name : null, kg: netVal, pricePerKg: price, amount: netVal * price, addedAt: Date.now() }]);
     setLineKg('');
   };
   const removeLine = (id) => setItems((prev) => prev.filter((x) => x.id !== id));
@@ -295,6 +299,13 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
                 />
                 <button className="zk-btn zk-btn-secondary" style={{ padding: '0 10px', minWidth: 34, minHeight: 44, flexShrink: 0 }} onClick={() => adjustCrateCount(1)}>+</button>
               </div>
+              {crateTypes ? (
+                <select className="zk-select" style={{ marginTop: 4, fontSize: 11.5, padding: '4px 6px' }} value={crateTypeId} onChange={(e) => setCrateTypeId(e.target.value)}>
+                  {crateTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name} ({ct.weight} kg)</option>)}
+                </select>
+              ) : (
+                <div style={{ fontSize: 10, color: '#6A7A6A', textAlign: 'center', marginTop: 4 }}>{crateWeight} kg/kasa</div>
+              )}
             </div>
             <div>
               <label className="zk-label">Fiyat/kg</label>
