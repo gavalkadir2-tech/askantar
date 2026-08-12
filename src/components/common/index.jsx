@@ -178,13 +178,16 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
         const isStable = hist.length >= SCALE_STABLE_WINDOW && (Math.max(...hist) - Math.min(...hist)) <= SCALE_STABLE_TOLERANCE;
         setStable(isStable);
         setLastValue(num);
-        // Canli senkronizasyon: formdaki "Olculen (kg)" alani, "Bu degeri
-        // kullan" butonuna basmaya gerek kalmadan otomatik guncellensin diye
-        // ust bilesene bildirilir. SADECE kararli (stabil) oldugunda tetiklenir
-        // - kantar dalgalanirken (henuz oturmamisken) alan titremesin diye.
-        // Kilitliyken (yukarida "continue" ile) buraya hic girilmedigi icin
-        // kilitli deger sabit kalir.
-        if (onLiveValue && isStable) onLiveValue(num);
+        // Canli senkronizasyon: formdaki "Olculen (kg)" alani VE Musteri
+        // Ekrani'na giden canli yayin, "Bu degeri kullan" butonuna basmaya
+        // gerek kalmadan HER yeni okumada otomatik guncellensin diye ust
+        // bilesene bildirilir (sadece stabil oldugunda degil - bazi
+        // kantarlarda "stabil" hic tetiklenmeyebiliyor, ayrica musteri
+        // ekraninda tartimin canli yukselmesi goze daha guvenilir gorunur).
+        // "Stabil" rozeti yine de kullaniciya ne zaman guvenle eklemesi
+        // gerektigini gorsel olarak gosterir. Kilitliyken (yukarida
+        // "continue" ile) buraya hic girilmedigi icin kilitli deger sabit kalir.
+        if (onLiveValue) onLiveValue(num);
       }
     }
   }, []);
