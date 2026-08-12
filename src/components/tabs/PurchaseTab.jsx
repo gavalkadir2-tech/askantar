@@ -58,6 +58,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const [crateTypeId, setCrateTypeId] = useState(crateTypes ? crateTypes[0].id : '');
   const [crateCount, setCrateCount] = useState(Math.max(0, settings.defaultCrateCount ?? 5));
   const [linePrice, setLinePrice] = useState('');
+  const [addLineError, setAddLineError] = useState('');
 
   const activeCrateType = crateTypes ? crateTypes.find((ct) => ct.id === crateTypeId) : null;
   const effectiveCrateWeight = activeCrateType ? activeCrateType.weight : crateWeight;
@@ -154,7 +155,12 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
     const daraVal = lineDara;
     const priceVal = parseFloat(linePrice);
     const netVal = grossVal - daraVal;
-    if (!lineVariety || !grossVal || grossVal <= 0 || netVal <= 0 || !priceVal || priceVal <= 0) return;
+
+    if (!lineVariety) { setAddLineError('Lütfen önce sınıf/tür seçin.'); return; }
+    if (!grossVal || grossVal <= 0) { setAddLineError('Kantardan geçerli bir ölçüm gelmedi — "Ölçülen (kg)" alanı boş veya 0.'); return; }
+    if (netVal <= 0) { setAddLineError(`Net kg 0 veya altında çıktı (Ölçülen ${grossVal} kg − Kasa/Dara ${daraVal} kg = ${netVal.toFixed(1)} kg). Kasa sayısını/ağırlığını kontrol edin.`); return; }
+    if (!priceVal || priceVal <= 0) { setAddLineError('Lütfen kg fiyatı girin.'); return; }
+    setAddLineError('');
 
     // Mükerrer kayıt kontrolü: aynı ağırlık + aynı kasa sayısı son 20 saniye içinde eklendiyse uyar.
     const lastItem = items[items.length - 1];
@@ -424,6 +430,11 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
             {lineKg && (
               <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginTop: 8 }}>
                 Net: {fmtKg(Math.max((parseFloat(lineKg) || 0) - lineDara, 0))}
+              </div>
+            )}
+            {addLineError && (
+              <div style={{ fontSize: 12, color: COLORS.red, marginTop: 8, fontWeight: 600 }}>
+                ⚠ {addLineError}
               </div>
             )}
           </div>

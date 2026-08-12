@@ -27,6 +27,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
   const [lineGrade, setLineGrade] = useState('');
   const [lineKg, setLineKg] = useState('');
   const [linePrice, setLinePrice] = useState('');
+  const [addLineError, setAddLineError] = useState('');
   const crateTypes = settings.crateTypes && settings.crateTypes.length > 0 ? settings.crateTypes : null;
   const [crateWeight] = useState(settings.crateWeight ?? 2);
   const [crateTypeId, setCrateTypeId] = useState(crateTypes ? crateTypes[0].id : '');
@@ -145,7 +146,13 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
     const daraVal = lineDara;
     const price = parseFloat(linePrice);
     const netVal = grossVal - daraVal;
-    if (!lineGrade || !grossVal || grossVal <= 0 || netVal <= 0 || !price || price <= 0 || netVal > availableForLine + 0.001) return;
+
+    if (!lineGrade) { setAddLineError('Lütfen önce sınıf seçin.'); return; }
+    if (!grossVal || grossVal <= 0) { setAddLineError('Kantardan geçerli bir ölçüm gelmedi — "Ölçülen (kg)" alanı boş veya 0.'); return; }
+    if (netVal <= 0) { setAddLineError(`Net kg 0 veya altında çıktı (Ölçülen ${grossVal} kg − Kasa/Dara ${daraVal} kg = ${netVal.toFixed(1)} kg). Kasa sayısını/ağırlığını kontrol edin.`); return; }
+    if (!price || price <= 0) { setAddLineError('Lütfen kg fiyatı girin.'); return; }
+    if (netVal > availableForLine + 0.001) { setAddLineError(`Bu sınıfta stokta sadece ${fmtKg(availableForLine)} var, ${fmtKg(netVal)} satamazsınız.`); return; }
+    setAddLineError('');
 
     // Mükerrer kayıt kontrolü: aynı ağırlık + aynı kasa sayısı son 20 saniye içinde eklendiyse uyar.
     const lastItem = items[items.length - 1];
@@ -328,6 +335,11 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
           )}
           {lineGrade && Math.max((parseFloat(lineKg) || 0) - lineDara, 0) > availableForLine && lineKg && (
             <div style={{ fontSize: 11.5, color: COLORS.red, marginBottom: 8 }}>Bu sınıfta stoktan fazla miktar girdiniz (stokta {fmtKg(availableForLine)}).</div>
+          )}
+          {addLineError && (
+            <div style={{ fontSize: 12, color: COLORS.red, marginBottom: 8, fontWeight: 600 }}>
+              ⚠ {addLineError}
+            </div>
           )}
 
           {items.length > 0 && (
