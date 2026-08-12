@@ -133,6 +133,15 @@ export function ScaleWidget({ onWeightCapture, compact }) {
   const [reconnecting, setReconnecting] = useState(false);
   const [baud, setBaud] = useState(9600);
   const [serialSupported] = useState(() => typeof navigator !== 'undefined' && 'serial' in navigator);
+  // Baglanti modu: 'serial' (USB/Bluetooth-SPP kablosu, Web Serial API) veya
+  // 'wifi' (ESP32 uzerinden WebSocket ile kablosuz). Ikisi de ayni satir
+  // ayristirma/kararlilik mantigini (handleIncoming) paylasir.
+  const [mode, setMode] = useState(serialSupported ? 'serial' : 'wifi');
+  const [wifiHost, setWifiHost] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('zk:scaleWifiHost')) || '192.168.4.1');
+  const [wifiPort, setWifiPort] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('zk:scaleWifiPort')) || '81');
+  const wsRef = useRef(null);
+  const wifiKeepRef = useRef(false);
+  const wifiReconnectAttemptRef = useRef(0);
   const portRef = useRef(null);
   const readerRef = useRef(null);
   const keepReadingRef = useRef(false);
@@ -279,6 +288,91 @@ export function ScaleWidget({ onWeightCapture, compact }) {
     historyRef.current = [];
   };
 
+  // ---- WiFi (ESP32 uzerinden WebSocket) baglantisi ----
+  // ESP32, kantarin seri cikisini okuyup ayni satirlari WebSocket uzerinden
+  // yayinlayan bir kopru gorevi gorur (bkz. asagidaki firmware). Tarayici
+  // burada dogrudan navigator.serial yerine standart WebSocket API'sini
+  // kullanir - bu sayede mobil/tablet tarayicilarda da calisir.
+  // Aktif baglantinin host/port'u bir ref'te tutulur; boylece yeniden
+  // baglanma mantigi (attemptWifiAutoReconnect) her zaman GUNCEL degeri
+  // kullanir, React state closure'inin eskimesi (stale closure) riski olmaz.
+  const activeWifiTargetRef = useRef({ host: '', port: '' });
+
+  const openWifiSocket = useCallback(() => {
+    const { host, port } = activeWifiTargetRef.current;
+    let ws;
+    try {
+      ws = new WebSocket(`ws://${host}:${port}/`);
+    } catch (e) {
+      setStatus('Bağlanamadı — IP/port adresini kontrol edin');
+      setReconnecting(false);
+      return;
+    }
+    wsRef.current = ws;
+    ws.onopen = () => {
+      wifiReconnectAttemptRef.current = 0;
+      setConnected(true);
+      setReconnecting(false);
+      setStatus('Bağlı (WiFi)');
+      setDataStale(false);
+      lastReadingAtRef.current = Date.now();
+    };
+    ws.onmessage = (event) => { handleIncoming(String(event.data)); };
+    ws.onerror = () => {};
+    ws.onclose = () => {
+      wsRef.current = null;
+      if (wifiKeepRef.current) {
+        setConnected(false);
+        setLastValue(null);
+        historyRef.current = [];
+        setStable(false);
+        attemptWifiAutoReconnect();
+      }
+    };
+  }, [handleIncoming]);
+
+  const attemptWifiAutoReconnect = useCallback(() => {
+    if (!wifiKeepRef.current) return;
+    setReconnecting(true);
+    wifiReconnectAttemptRef.current += 1;
+    const attempt = wifiReconnectAttemptRef.current;
+    if (attempt > SCALE_RECONNECT_ATTEMPTS) {
+      wifiKeepRef.current = false;
+      setReconnecting(false);
+      setStatus('Bağlantı koptu — ESP32/WiFi\'ı kontrol edin ya da kiloyu elle girin');
+      return;
+    }
+    setStatus(`Bağlantı koptu, yeniden bağlanılıyor... (${attempt}/${SCALE_RECONNECT_ATTEMPTS})`);
+    setTimeout(() => { if (wifiKeepRef.current) openWifiSocket(); }, Math.min(1000 * attempt, 4000));
+  }, [openWifiSocket]);
+
+  const connectWifi = () => {
+    if (!wifiHost.trim()) return;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('zk:scaleWifiHost', wifiHost.trim());
+      localStorage.setItem('zk:scaleWifiPort', String(wifiPort));
+    }
+    activeWifiTargetRef.current = { host: wifiHost.trim(), port: wifiPort };
+    setStatus('Bağlanıyor...');
+    wifiKeepRef.current = true;
+    wifiReconnectAttemptRef.current = 0;
+    openWifiSocket();
+  };
+
+  const disconnectWifi = () => {
+    wifiKeepRef.current = false;
+    if (wsRef.current) { try { wsRef.current.close(); } catch (e) {} }
+    wsRef.current = null;
+    setConnected(false);
+    setReconnecting(false);
+    setStatus('Bağlı değil');
+    setLastValue(null);
+    setStable(false);
+    setLocked(false);
+    setDataStale(false);
+    historyRef.current = [];
+  };
+
   const toggleLock = () => setLocked((v) => !v);
 
   const statusColor = dataStale ? '#E0B84D' : (reconnecting ? '#E0B84D' : undefined);
@@ -310,6 +404,60 @@ export function ScaleWidget({ onWeightCapture, compact }) {
     </button>
   );
 
+  // Baglanti kurulmamisken mod secici (Seri/WiFi) + ilgili giris alanlari;
+  // baglanmisken Kes/Kilitle/"Bu degeri kullan" butonlari. Compact ve tam
+  // gorunumde aynen kullanilir.
+  const ConnectionControls = ({ small }) => {
+    if (connected) {
+      return (
+        <>
+          <button className="zk-btn zk-btn-secondary" onClick={mode === 'serial' ? disconnect : disconnectWifi} style={small ? { background: '#2A3128', color: '#DCE2CC', border: 'none' } : { flex: 1, justifyContent: 'center', background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
+          <LockButton small={small} />
+          <button
+            className="zk-btn zk-btn-gold"
+            style={small ? undefined : { flex: 1, justifyContent: 'center' }}
+            disabled={lastValue === null}
+            onClick={() => onWeightCapture(lastValue)}
+          >
+            Bu değeri kullan
+          </button>
+        </>
+      );
+    }
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {serialSupported && (
+            <button className={`zk-btn ${mode === 'serial' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ padding: '5px 9px', fontSize: 11 }} onClick={() => setMode('serial')}>Kablo</button>
+          )}
+          <button className={`zk-btn ${mode === 'wifi' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ padding: '5px 9px', fontSize: 11 }} onClick={() => setMode('wifi')}>WiFi</button>
+        </div>
+        {mode === 'serial' && serialSupported && (
+          <select value={baud} onChange={(e) => setBaud(Number(e.target.value))} style={{ background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: '6px 6px' }}>
+            <option value={9600}>9600</option>
+            <option value={4800}>4800</option>
+            <option value={2400}>2400</option>
+            <option value={1200}>1200</option>
+            <option value={19200}>19200</option>
+          </select>
+        )}
+        {mode === 'wifi' && (
+          <>
+            <input value={wifiHost} onChange={(e) => setWifiHost(e.target.value)} placeholder="192.168.4.1" style={{ width: 108, background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: '5px 6px' }} />
+            <input value={wifiPort} onChange={(e) => setWifiPort(e.target.value)} placeholder="81" style={{ width: 44, background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: '5px 6px' }} />
+          </>
+        )}
+        {mode === 'serial' && !serialSupported ? (
+          <div style={{ fontSize: 11, color: '#E0B84D', display: 'flex', alignItems: 'center', gap: 5, maxWidth: 260 }}>
+            <AlertTriangle size={13} /> Bu tarayıcı kablo bağlantısını desteklemiyor — WiFi'ı deneyin.
+          </div>
+        ) : (
+          <button className="zk-btn zk-btn-gold" onClick={mode === 'serial' ? connect : connectWifi} disabled={reconnecting}>Kantara bağlan</button>
+        )}
+      </div>
+    );
+  };
+
   if (compact) {
     return (
       <div className="zk-scalebox zk-scalebox-compact">
@@ -332,32 +480,7 @@ export function ScaleWidget({ onWeightCapture, compact }) {
 
           <DataStaleWarning />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {!serialSupported ? (
-              <div style={{ fontSize: 11, color: '#E0B84D', display: 'flex', alignItems: 'center', gap: 5, maxWidth: 260 }}>
-                <AlertTriangle size={13} /> Bu cihaz/tarayıcı kantar bağlantısını desteklemiyor. Kiloyu "Ölçülen (kg)" alanına elle girebilirsiniz.
-              </div>
-            ) : !connected && (
-              <select value={baud} onChange={(e) => setBaud(Number(e.target.value))} style={{ background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: '6px 6px' }}>
-                <option value={9600}>9600</option>
-                <option value={4800}>4800</option>
-                <option value={2400}>2400</option>
-                <option value={1200}>1200</option>
-                <option value={19200}>19200</option>
-              </select>
-            )}
-            {serialSupported && (!connected ? (
-              <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting}>Kantara bağlan</button>
-            ) : (
-              <>
-                <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
-                <LockButton small />
-                <button className="zk-btn zk-btn-gold" disabled={lastValue === null} onClick={() => onWeightCapture(lastValue)}>
-                  Bu değeri kullan
-                </button>
-              </>
-            ))}
-          </div>
+          <ConnectionControls small />
         </div>
       </div>
     );
@@ -370,15 +493,6 @@ export function ScaleWidget({ onWeightCapture, compact }) {
           {connected ? <BluetoothConnected size={15} /> : <Bluetooth size={15} />}
           {status}
         </div>
-        {!connected && (
-          <select value={baud} onChange={(e) => setBaud(Number(e.target.value))} style={{ background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: '4px 6px' }}>
-            <option value={9600}>9600</option>
-            <option value={4800}>4800</option>
-            <option value={2400}>2400</option>
-            <option value={1200}>1200</option>
-            <option value={19200}>19200</option>
-          </select>
-        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div className="zk-scale-readout">{readoutValue}</div>
@@ -390,30 +504,9 @@ export function ScaleWidget({ onWeightCapture, compact }) {
         </div>
       )}
       <div style={{ marginTop: 8 }}><DataStaleWarning /></div>
-      {!serialSupported ? (
-        <div style={{ fontSize: 11.5, color: '#E0B84D', display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
-          <AlertTriangle size={14} /> Bu cihaz/tarayıcı kantar bağlantısını desteklemiyor. Kiloyu "Ölçülen (kg)" alanına elle girebilirsiniz.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          {!connected ? (
-            <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting} style={{ flex: 1, justifyContent: 'center' }}>Kantara bağlan</button>
-          ) : (
-            <>
-              <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ flex: 1, justifyContent: 'center', background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
-              <LockButton />
-              <button
-                className="zk-btn zk-btn-gold"
-                style={{ flex: 1, justifyContent: 'center' }}
-                disabled={lastValue === null}
-                onClick={() => onWeightCapture(lastValue)}
-              >
-                Bu değeri kullan
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <ConnectionControls />
+      </div>
     </div>
   );
 }
