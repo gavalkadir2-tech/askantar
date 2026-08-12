@@ -179,10 +179,12 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
         setStable(isStable);
         setLastValue(num);
         // Canli senkronizasyon: formdaki "Olculen (kg)" alani, "Bu degeri
-        // kullan" butonuna basmaya gerek kalmadan her yeni okumada otomatik
-        // guncellensin diye ust bilesene bildirilir. Kilitliyken (yukarida
-        // "continue" ile) buraya hic girilmedigi icin kilitli deger sabit kalir.
-        if (onLiveValue) onLiveValue(num);
+        // kullan" butonuna basmaya gerek kalmadan otomatik guncellensin diye
+        // ust bilesene bildirilir. SADECE kararli (stabil) oldugunda tetiklenir
+        // - kantar dalgalanirken (henuz oturmamisken) alan titremesin diye.
+        // Kilitliyken (yukarida "continue" ile) buraya hic girilmedigi icin
+        // kilitli deger sabit kalir.
+        if (onLiveValue && isStable) onLiveValue(num);
       }
     }
   }, []);
