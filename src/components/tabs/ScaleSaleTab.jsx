@@ -221,7 +221,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
       </div>
 
       <div style={{ maxWidth: 900 }}>
-        <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} compact />
+        <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} onLiveValue={(v) => setLineKg(v.toFixed(1))} compact />
 
         <div className="zk-card" style={{ marginTop: 14 }}>
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>

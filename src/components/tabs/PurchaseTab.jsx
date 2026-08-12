@@ -310,7 +310,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
         {openCustomerDisplay && <CustomerDisplayButtons openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} />}
       </div>
 
-      <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} compact />
+      <ScaleWidget onWeightCapture={(v) => setLineKg(v.toFixed(1))} onLiveValue={(v) => setLineKg(v.toFixed(1))} compact />
 
       <div style={{ maxWidth: 900, marginTop: 16 }}>
         <div className="zk-card">
