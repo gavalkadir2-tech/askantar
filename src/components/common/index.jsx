@@ -122,7 +122,7 @@ const SCALE_STABLE_WINDOW = 4; // Kararlılık kontrolü için son kaç okuma di
 const SCALE_STABLE_TOLERANCE = 0.1; // kg — son okumalar arası fark bu değerin altındaysa "stabil" kabul edilir.
 const SCALE_RECONNECT_ATTEMPTS = 5;
 
-export function ScaleWidget({ onWeightCapture, compact }) {
+export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState('Bağlı değil');
   const [rawLines, setRawLines] = useState([]);
@@ -178,6 +178,11 @@ export function ScaleWidget({ onWeightCapture, compact }) {
         const isStable = hist.length >= SCALE_STABLE_WINDOW && (Math.max(...hist) - Math.min(...hist)) <= SCALE_STABLE_TOLERANCE;
         setStable(isStable);
         setLastValue(num);
+        // Canli senkronizasyon: formdaki "Olculen (kg)" alani, "Bu degeri
+        // kullan" butonuna basmaya gerek kalmadan her yeni okumada otomatik
+        // guncellensin diye ust bilesene bildirilir. Kilitliyken (yukarida
+        // "continue" ile) buraya hic girilmedigi icin kilitli deger sabit kalir.
+        if (onLiveValue) onLiveValue(num);
       }
     }
   }, []);
