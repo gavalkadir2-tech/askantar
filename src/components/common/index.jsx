@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   Bluetooth,
   BluetoothConnected,
@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Lock,
   Unlock,
+  Plus,
 } from 'lucide-react';
 import { daysUntil } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
@@ -115,6 +116,101 @@ export function Modal({ title, onClose, children }) {
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+// Yazarak aranabilir, her zaman alfabetik sıralı, dilerse listenin en altına
+// "+ Yeni ekle" satırı eklenebilen ortak seçim kutusu. Çiftçi/cari/personel/araç
+// gibi uzayabilen listelerde native <select> yerine kullanılır.
+export function SearchableSelect({
+  value, onChange, options, placeholder = 'Seçin...',
+  onAddNew, addNewLabel = '+ Yeni ekle', emptyLabel = 'Sonuç bulunamadı',
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const selected = options.find((o) => o.id === value);
+
+  const sorted = useMemo(
+    () => [...options].sort((a, b) => a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' })),
+    [options]
+  );
+  const filtered = query.trim()
+    ? sorted.filter((o) => o.label.toLocaleLowerCase('tr').includes(query.trim().toLocaleLowerCase('tr')))
+    : sorted;
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const openDropdown = () => {
+    setQuery('');
+    setOpen(true);
+    setTimeout(() => { inputRef.current?.select(); }, 0);
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <input
+        ref={inputRef}
+        className="zk-input"
+        value={open ? query : (selected ? selected.label : '')}
+        onFocus={openDropdown}
+        onClick={openDropdown}
+        onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {open && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 30,
+            background: '#fff', border: `1px solid ${COLORS.border}`, borderRadius: 8,
+            maxHeight: 230, overflowY: 'auto', boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
+          }}
+        >
+          {filtered.length === 0 && (
+            <div style={{ padding: '9px 11px', fontSize: 12.5, color: COLORS.inkSoft }}>{emptyLabel}</div>
+          )}
+          {filtered.map((o) => (
+            <div
+              key={o.id}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(o.id); setOpen(false); setQuery(''); }}
+              style={{
+                padding: '9px 11px', fontSize: 13, cursor: 'pointer',
+                background: o.id === value ? COLORS.oliveSoft : 'transparent',
+                fontWeight: o.id === value ? 700 : 400,
+              }}
+            >
+              {o.label}
+            </div>
+          ))}
+          {onAddNew && (
+            <div
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onAddNew(); setOpen(false); setQuery(''); }}
+              style={{
+                padding: '9px 11px', fontSize: 13, fontWeight: 700, color: COLORS.olive,
+                cursor: 'pointer', borderTop: `1px solid ${COLORS.border}`,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Plus size={13} /> {addNewLabel}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
