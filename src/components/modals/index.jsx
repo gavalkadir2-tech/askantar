@@ -92,7 +92,9 @@ export function AddVehicleModal({ onClose, onSave, personnel, initialData }) {
   );
 }
 
-export function AddFarmerModal({ onClose, onSave, initialData }) {
+const normalizeName = (s) => (s || '').trim().toLocaleLowerCase('tr');
+
+export function AddFarmerModal({ onClose, onSave, initialData, farmers = [] }) {
   const [name, setName] = useState(initialData?.name || '');
   const [phone, setPhone] = useState(initialData?.phone || '');
   const [tcNo, setTcNo] = useState(initialData?.tcNo || '');
@@ -100,9 +102,13 @@ export function AddFarmerModal({ onClose, onSave, initialData }) {
   const [bagkurStatus, setBagkurStatus] = useState(initialData?.bagkurStatus || false);
   const [bankName, setBankName] = useState(initialData?.bankName || '');
   const [iban, setIban] = useState(initialData?.iban || '');
+  const [error, setError] = useState('');
 
   const submit = () => {
     if (!name.trim()) return;
+    const dup = farmers.some((f) => f.id !== initialData?.id && normalizeName(f.name) === normalizeName(name));
+    if (dup) { setError('Bu isimde kayıtlı bir çiftçi zaten var.'); return; }
+    setError('');
     onSave({ name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus, bankName: bankName.trim(), iban: iban.trim() });
   };
 
@@ -110,7 +116,8 @@ export function AddFarmerModal({ onClose, onSave, initialData }) {
     <Modal title={initialData ? 'Çiftçiyi düzenle' : 'Yeni çiftçi ekle'} onClose={onClose}>
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">Ad soyad</label>
-        <input className="zk-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="örn. Mehmet Yılmaz" autoFocus />
+        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} placeholder="örn. Mehmet Yılmaz" autoFocus />
+        {error && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 5 }}>{error}</div>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <div>
@@ -147,7 +154,7 @@ export function AddFarmerModal({ onClose, onSave, initialData }) {
   );
 }
 
-export function AddCariModal({ onClose, onSave, initialData, lockType }) {
+export function AddCariModal({ onClose, onSave, initialData, lockType, farmers = [], buyers = [] }) {
   const [type, setType] = useState(initialData?.type || lockType || 'tedarikci');
   const [name, setName] = useState(initialData?.name || '');
   const [phone, setPhone] = useState(initialData?.phone || '');
@@ -156,9 +163,17 @@ export function AddCariModal({ onClose, onSave, initialData, lockType }) {
   const [bagkurStatus, setBagkurStatus] = useState(initialData?.bagkurStatus || false);
   const [bankName, setBankName] = useState(initialData?.bankName || '');
   const [iban, setIban] = useState(initialData?.iban || '');
+  const [error, setError] = useState('');
 
   const submit = () => {
     if (!name.trim()) return;
+    const list = type === 'tedarikci' ? farmers : buyers;
+    const dup = list.some((x) => x.id !== initialData?.id && normalizeName(x.name) === normalizeName(name));
+    if (dup) {
+      setError(type === 'tedarikci' ? 'Bu isimde kayıtlı bir tedarikçi zaten var.' : 'Bu isimde kayıtlı bir cari zaten var.');
+      return;
+    }
+    setError('');
     onSave({ type, name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus, bankName: bankName.trim(), iban: iban.trim() });
   };
 
@@ -166,17 +181,18 @@ export function AddCariModal({ onClose, onSave, initialData, lockType }) {
     <Modal title={initialData ? 'Cariyi düzenle' : 'Cari ekle'} onClose={onClose}>
       {!lockType && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button className={`zk-btn ${type === 'tedarikci' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => setType('tedarikci')}>
+          <button className={`zk-btn ${type === 'tedarikci' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setType('tedarikci'); setError(''); }}>
             Tedarikçi (çiftçi)
           </button>
-          <button className={`zk-btn ${type === 'cari' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => setType('cari')}>
+          <button className={`zk-btn ${type === 'cari' ? 'zk-btn-primary' : 'zk-btn-secondary'}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setType('cari'); setError(''); }}>
             Cari (alıcı/müşteri)
           </button>
         </div>
       )}
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">{type === 'tedarikci' ? 'Ad soyad' : 'Ad / firma adı'}</label>
-        <input className="zk-input" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder={type === 'tedarikci' ? 'örn. Mehmet Yılmaz' : 'örn. Ege Zeytinyağı A.Ş.'} />
+        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} autoFocus placeholder={type === 'tedarikci' ? 'örn. Mehmet Yılmaz' : 'örn. Ege Zeytinyağı A.Ş.'} />
+        {error && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 5 }}>{error}</div>}
       </div>
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">Telefon</label>
