@@ -21,7 +21,9 @@ import {
   Landmark,
   History,
   PackageCheck,
+  Users,
 } from 'lucide-react';
+import AdminPanel from './AdminPanel.jsx';
 import { CustomerDisplayView } from './components/CustomerDisplayView';
 import { NotificationCenter } from './components/NotificationCenter';
 import { VoiceAssistant } from './components/VoiceAssistant';
@@ -337,8 +339,12 @@ export default function ZeytinDefteri() {
     { key: 'settings', label: 'Ayarlar', icon: SettingsIcon, group: 'Diğer' },
   ];
 
+  if (currentUser.role === 'owner' || currentUser.role === 'superadmin') {
+    navItems.push({ key: 'users', label: 'Kullanıcı Yönetimi', icon: Users, group: 'Yönetim' });
+  }
+
   const ROLE_TAB_ACCESS = {
-    admin: null, user: null, // null = tum sekmelere erisim
+    admin: null, owner: null, superadmin: null, user: null, // null = tum sekmelere erisim
     muhasebe: ['dashboard', 'accounting', 'cari', 'reports', 'alis', 'settings'],
     kantar: ['dashboard', 'kantar', 'alis', 'cari'],
     depo: ['dashboard', 'kantar', 'satis', 'crates', 'lab'],
@@ -465,6 +471,7 @@ export default function ZeytinDefteri() {
           {tab === 'ai' && <AiAssistantTab farmers={farmers} purchases={purchases} sales={sales} expenses={expenses} payments={payments} buyers={buyers} vehicles={vehicles} maintenance={maintenance} fuel={fuel} documents={documents} insurance={insurance} damages={damages} fines={fines} />}
           {tab === 'reports' && <ReportsTab farmers={farmers} purchases={purchases} sales={sales} buyers={buyers} expenses={expenses} personnel={personnel} vehicles={vehicles} personnelAttendance={personnelAttendance} personnelPayments={personnelPayments} payments={payments} buyerPayments={buyerPayments} settings={settings} />}
           {tab === 'log' && <ActivityLogTab activityLog={activityLog} />}
+          {tab === 'users' && <AdminPanel />}
           {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} autoBackups={autoBackups} onRestoreAutoBackup={restoreFromAutoBackup} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} activityLog={activityLog} setActivityLog={setActivityLog} />}
         </div>
       </div>
