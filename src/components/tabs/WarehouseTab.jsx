@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   Warehouse,
-  Plus,
   Printer,
   ChevronRight,
   Package,
@@ -12,8 +11,8 @@ import {
   Wallet,
   Banknote,
 } from 'lucide-react';
-import { ListFooterControls, Modal, PaymentMethodPicker, StatCard } from '../common/index';
-import { AddVehicleModal } from '../modals/index';
+import { ListFooterControls, Modal, PaymentMethodPicker, StatCard, SearchableSelect } from '../common/index';
+import { AddVehicleModal, AddCariModal, BuyerQuickForm } from '../modals/index';
 import { usePagedList, useBuyerLedger } from '../../hooks/index';
 import { fmtDate, fmtKg, fmtTL, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
@@ -23,8 +22,6 @@ import { logActivity, LOG_ACTIONS } from '../../lib/activityLog';
 export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, vehicles, setVehicles, personnel, settings, onPrintSaleReceipt, buyerPayments, setBuyerPayments, bankAccounts, activityLog, setActivityLog }) {
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState(null);
-  const [buyerName, setBuyerName] = useState('');
-  const [buyerPhone, setBuyerPhone] = useState('');
 
   const [buyerId, setBuyerId] = useState('');
   const [date, setDate] = useState(todayStr());
@@ -114,14 +111,21 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
   const amount = (parseFloat(kg) || 0) * (parseFloat(pricePerKg) || 0);
   const canSave = buyerId && grade && parseFloat(kg) > 0 && parseFloat(pricePerKg) > 0 && parseFloat(kg) <= availableForGrade + 0.001 && (paymentMethod !== 'banka' || paymentBankAccountId);
 
-  const addBuyer = async () => {
-    if (!buyerName.trim()) return;
-    const b = { id: uid(), name: buyerName.trim(), phone: buyerPhone.trim(), createdAt: Date.now() };
+  const saveNewBuyer = async (data) => {
+    if (!data.name || !data.name.trim()) return;
+    const b = { id: uid(), name: data.name.trim(), phone: data.phone || '', address: data.address || '', bankName: data.bankName || '', iban: data.iban || '', createdAt: Date.now() };
     const next = [...buyers, b];
     setBuyers(next);
     await storageSet('zk:buyers', next);
-    setBuyerName(''); setBuyerPhone(''); setShowAddBuyer(false);
+    setShowAddBuyer(false);
     setBuyerId(b.id);
+  };
+
+  const saveBuyerEdit = async (data) => {
+    const next = buyers.map((x) => (x.id === editingBuyer.id ? { ...x, name: data.name, phone: data.phone, address: data.address || '', bankName: data.bankName || '', iban: data.iban || '' } : x));
+    setBuyers(next);
+    await storageSet('zk:buyers', next);
+    setEditingBuyer(null);
   };
 
   const removeBuyer = async (b) => {
@@ -133,11 +137,6 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
     const next = buyers.filter((x) => x.id !== b.id);
     setBuyers(next);
     await storageSet('zk:buyers', next);
-  };
-
-  const handleVehicleSelect = (value) => {
-    if (value === '__add_new__') { setShowAddVehicle(true); return; }
-    setVehicleId(value);
   };
 
   const saveNewVehicle = async (data) => {
@@ -220,13 +219,15 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
               <label className="zk-label">Alıcı</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <select className="zk-select" value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
-                  <option value="">Seçin...</option>
-                  {buyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-                <button className="zk-btn zk-btn-secondary" onClick={() => setShowAddBuyer(true)}><Plus size={13} /></button>
-              </div>
+              <SearchableSelect
+                value={buyerId}
+                onChange={setBuyerId}
+                options={buyers.map((b) => ({ id: b.id, label: b.name }))}
+                placeholder="Alıcı ara veya seçin..."
+                onAddNew={() => setShowAddBuyer(true)}
+                addNewLabel="+ Yeni alıcı ekle"
+                recentKey="buyers"
+              />
             </div>
             <div>
               <label className="zk-label">Tarih</label>
@@ -257,11 +258,15 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
           </div>
           <div style={{ marginBottom: 10 }}>
             <label className="zk-label">Teslimatı yapan araç (opsiyonel)</label>
-            <select className="zk-select" value={vehicleId} onChange={(e) => handleVehicleSelect(e.target.value)}>
-              <option value="">Seçin...</option>
-              {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
-              <option value="__add_new__">+ Yeni araç ekle</option>
-            </select>
+            <SearchableSelect
+              value={vehicleId}
+              onChange={setVehicleId}
+              options={vehicles.map((v) => ({ id: v.id, label: v.plaka }))}
+              placeholder="Araç ara veya seçin..."
+              onAddNew={() => setShowAddVehicle(true)}
+              addNewLabel="+ Yeni araç ekle"
+              recentKey="vehicles"
+            />
           </div>
           <div style={{ marginBottom: 12 }}>
             <label className="zk-label">Not</label>
@@ -408,41 +413,18 @@ export function WarehouseTab({ purchases, buyers, setBuyers, sales, setSales, ve
 
       {showAddBuyer && (
         <Modal title="Yeni alıcı ekle" onClose={() => setShowAddBuyer(false)}>
-          <div style={{ marginBottom: 12 }}>
-            <label className="zk-label">Alıcı / firma adı</label>
-            <input className="zk-input" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="örn. Ege Zeytinyağı A.Ş." autoFocus />
-          </div>
-          <div style={{ marginBottom: 18 }}>
-            <label className="zk-label">Telefon (opsiyonel)</label>
-            <input className="zk-input" value={buyerPhone} onChange={(e) => setBuyerPhone(e.target.value)} />
-          </div>
-          <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={addBuyer}>Kaydet</button>
+          <BuyerQuickForm onSave={saveNewBuyer} buyers={buyers} />
         </Modal>
       )}
-      {showAddVehicle && <AddVehicleModal onClose={() => setShowAddVehicle(false)} onSave={saveNewVehicle} personnel={personnel} />}
+      {showAddVehicle && <AddVehicleModal onClose={() => setShowAddVehicle(false)} onSave={saveNewVehicle} personnel={personnel} vehicles={vehicles} />}
       {editingBuyer && (
-        <Modal title="Alıcıyı düzenle" onClose={() => setEditingBuyer(null)}>
-          <div style={{ marginBottom: 12 }}>
-            <label className="zk-label">Alıcı / firma adı</label>
-            <input className="zk-input" value={editingBuyer.name} onChange={(e) => setEditingBuyer({ ...editingBuyer, name: e.target.value })} autoFocus />
-          </div>
-          <div style={{ marginBottom: 18 }}>
-            <label className="zk-label">Telefon (opsiyonel)</label>
-            <input className="zk-input" value={editingBuyer.phone || ''} onChange={(e) => setEditingBuyer({ ...editingBuyer, phone: e.target.value })} />
-          </div>
-          <button
-            className="zk-btn zk-btn-primary"
-            style={{ width: '100%', justifyContent: 'center' }}
-            onClick={async () => {
-              const next = buyers.map((x) => (x.id === editingBuyer.id ? editingBuyer : x));
-              setBuyers(next);
-              await storageSet('zk:buyers', next);
-              setEditingBuyer(null);
-            }}
-          >
-            Kaydet
-          </button>
-        </Modal>
+        <AddCariModal
+          lockType="cari"
+          buyers={buyers}
+          initialData={{ ...editingBuyer, type: 'cari' }}
+          onClose={() => setEditingBuyer(null)}
+          onSave={saveBuyerEdit}
+        />
       )}
     </div>
   );

@@ -324,6 +324,7 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
               placeholder="Çiftçi ara veya seçin..."
               onAddNew={() => setShowAddFarmer(true)}
               addNewLabel="+ Yeni çiftçi ekle"
+              recentKey="farmers"
             />
           </div>
 

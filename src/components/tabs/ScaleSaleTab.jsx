@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Pencil,
 } from 'lucide-react';
-import { CustomerDisplayButtons, Modal, PaymentMethodPicker, ScaleWidget } from '../common/index';
+import { CustomerDisplayButtons, Modal, PaymentMethodPicker, ScaleWidget, SearchableSelect } from '../common/index';
 import { BuyerQuickForm } from '../modals/index';
 import { fmtDate, fmtKg, fmtTL, localDateStr, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
@@ -183,7 +183,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
 
   const saveNewBuyer = async (data) => {
     if (!data.name || !data.name.trim()) return;
-    const b = { id: uid(), name: data.name.trim(), phone: data.phone || '', createdAt: Date.now() };
+    const b = { id: uid(), name: data.name.trim(), phone: data.phone || '', address: data.address || '', bankName: data.bankName || '', iban: data.iban || '', createdAt: Date.now() };
     const next = [...buyers, b];
     setBuyers(next);
     await storageSet('zk:buyers', next);
@@ -234,29 +234,37 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
             <div>
               <label className="zk-label">Alıcı</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <select className="zk-select" value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
-                  <option value="">Seçin...</option>
-                  {buyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-                <button className="zk-btn zk-btn-secondary" onClick={() => setShowAddBuyer(true)}><Plus size={13} /></button>
-              </div>
+              <SearchableSelect
+                value={buyerId}
+                onChange={setBuyerId}
+                options={buyers.map((b) => ({ id: b.id, label: b.name }))}
+                placeholder="Alıcı ara veya seçin..."
+                onAddNew={() => setShowAddBuyer(true)}
+                addNewLabel="+ Yeni alıcı ekle"
+                recentKey="buyers"
+              />
             </div>
             <div>
               <label className="zk-label">Personel (opsiyonel)</label>
-              <select className="zk-select" value={personnelId} onChange={(e) => setPersonnelId(e.target.value)}>
-                <option value="">Seçin...</option>
-                {personnel.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <SearchableSelect
+                value={personnelId}
+                onChange={setPersonnelId}
+                options={personnel.map((p) => ({ id: p.id, label: p.name }))}
+                placeholder="Personel ara veya seçin..."
+                recentKey="personnel"
+              />
             </div>
           </div>
           <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 14 }}>
             <div>
               <label className="zk-label">Araç (opsiyonel)</label>
-              <select className="zk-select" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-                <option value="">Seçin...</option>
-                {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
-              </select>
+              <SearchableSelect
+                value={vehicleId}
+                onChange={setVehicleId}
+                options={vehicles.map((v) => ({ id: v.id, label: v.plaka }))}
+                placeholder="Araç ara veya seçin..."
+                recentKey="vehicles"
+              />
             </div>
             <div>
               <label className="zk-label">Tarih / Saat</label>
@@ -421,7 +429,7 @@ export function ScaleSaleTab({ buyers, setBuyers, sales, setSales, purchases, pr
 
       {showAddBuyer && (
         <Modal title="Yeni alıcı ekle" onClose={() => setShowAddBuyer(false)}>
-          <BuyerQuickForm onSave={saveNewBuyer} />
+          <BuyerQuickForm onSave={saveNewBuyer} buyers={buyers} />
         </Modal>
       )}
     </div>

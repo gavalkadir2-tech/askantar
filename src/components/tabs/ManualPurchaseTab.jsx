@@ -27,7 +27,7 @@ export function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases
 
   const saveNewFarmer = async (data) => {
     if (!data.name || !data.name.trim()) return;
-    const f = { id: uid(), name: data.name.trim(), phone: data.phone || '', tcNo: data.tcNo || '', address: data.address || '', bagkurStatus: !!data.bagkurStatus, createdAt: Date.now() };
+    const f = { id: uid(), name: data.name.trim(), phone: data.phone || '', tcNo: data.tcNo || '', address: data.address || '', bagkurStatus: !!data.bagkurStatus, bankName: data.bankName || '', iban: data.iban || '', createdAt: Date.now() };
     const next = [...farmers, f];
     setFarmers(next);
     await storageSet('zk:farmers', next);
@@ -99,6 +99,7 @@ export function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases
                 placeholder="Çiftçi ara veya seçin..."
                 onAddNew={() => setShowAddFarmer(true)}
                 addNewLabel="+ Yeni çiftçi ekle"
+                recentKey="farmers"
               />
             </div>
             <div>
