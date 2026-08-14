@@ -278,7 +278,7 @@ const SCALE_STABLE_WINDOW = 4; // Kararlılık kontrolü için son kaç okuma di
 const SCALE_STABLE_TOLERANCE = 0.1; // kg — son okumalar arası fark bu değerin altındaysa "stabil" kabul edilir.
 const SCALE_RECONNECT_ATTEMPTS = 5;
 
-export function ScaleWidget({ onWeightCapture, compact }) {
+export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState('Bağlı değil');
   const [rawLines, setRawLines] = useState([]);
@@ -301,6 +301,14 @@ export function ScaleWidget({ onWeightCapture, compact }) {
   const lastReadingAtRef = useRef(0);
   const lockedRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
+  // Otomatik yazilan son deger. Ayni deger tekrar tekrar yazilmasin diye
+  // tutulur; boylece kullanici alani elle duzenlemek isterse ustune yazilmaz.
+  const lastAutoFilledRef = useRef(null);
+  // onLiveValue'yu ref'te tutuyoruz: handleIncoming useCallback([]) ile
+  // olusturuldugu icin prop dogrudan kullanilsa eski deger yakalanirdi.
+  const onLiveValueRef = useRef(onLiveValue);
+
+  useEffect(() => { onLiveValueRef.current = onLiveValue; }, [onLiveValue]);
 
   useEffect(() => { localStorage.setItem('zk_kantar_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('zk_kantar_wifi_host', wifiHost); }, [wifiHost]);
@@ -311,6 +319,19 @@ export function ScaleWidget({ onWeightCapture, compact }) {
     const m = line.match(/-?\d+[.,]?\d*/);
     if (!m) return null;
     return parseFloat(m[0].replace(',', '.'));
+  };
+
+  // Bircok dijital kantar satirin basinda kararlilik bayragi gonderir:
+  //   "ST" = Stable (tarti oturdu)   "US" = Unstable (henuz oynuyor)
+  // Ornek gelen veri: "ST,NT,   2.1 kg"
+  // Bayrak varsa ona guveniriz (kantarin kendi olcumu, bizim tahminimizden
+  // daha dogrudur). Bayrak gondermeyen modellerde asagidaki pencere/tolerans
+  // yontemine geri duseriz.
+  const readStabilityFlag = (line) => {
+    const u = line.toUpperCase();
+    if (/(^|[^A-Z])ST([^A-Z]|$)/.test(u)) return true;
+    if (/(^|[^A-Z])US([^A-Z]|$)/.test(u)) return false;
+    return null; // bayrak yok
   };
 
   const handleIncoming = useCallback((chunk) => {
@@ -327,11 +348,28 @@ export function ScaleWidget({ onWeightCapture, compact }) {
         setDataStale(false);
         // Kilitliyken gösterilen değer donuk kalsın; kantarcı notunu alana kadar değişmesin.
         if (lockedRef.current) continue;
+
+        const flag = readStabilityFlag(line);
         historyRef.current = [...historyRef.current.slice(-(SCALE_STABLE_WINDOW - 1)), num];
         const hist = historyRef.current;
-        const isStable = hist.length >= SCALE_STABLE_WINDOW && (Math.max(...hist) - Math.min(...hist)) <= SCALE_STABLE_TOLERANCE;
+        const isStable = flag !== null
+          ? flag
+          : (hist.length >= SCALE_STABLE_WINDOW && (Math.max(...hist) - Math.min(...hist)) <= SCALE_STABLE_TOLERANCE);
         setStable(isStable);
         setLastValue(num);
+
+        // Tarti oturdugunda degeri "Olculen (kg)" alanina OTOMATIK yaz.
+        // Kullanici her seferinde "Bu degeri kullan" demek zorunda kalmasin.
+        // - Ayni deger tekrar yazilmaz (kullanici alani elle duzenleyebilsin).
+        // - SIFIR okumalar yazilmaz: kasa tartidan kaldirilinca kantar 0'a
+        //   oturur ve bu da "kararli" bir okumadir; yazilsaydi kullanici
+        //   "Ekle"ye basmadan alandaki deger silinirdi. Boylece tartilan
+        //   deger bir sonraki gercek olcume kadar alanda kalir.
+        if (isStable && num > 0 && onLiveValueRef.current && lastAutoFilledRef.current !== num) {
+          lastAutoFilledRef.current = num;
+          onLiveValueRef.current(num);
+        }
+        if (!isStable) lastAutoFilledRef.current = null; // tarti oynadi, sonraki oturusa hazirlan
       }
     }
   }, []);
