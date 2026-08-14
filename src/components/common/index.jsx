@@ -444,22 +444,66 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
 
   // --- WiFi (WebSocket) baglantisi: ESP32 koprusu kantarin her satirini
   // ws://<host>:81/ uzerinden yayinliyor; ayristirma serial ile aynı handleIncoming'i kullanir.
-  const openWs = useCallback((host) => {
-    const ws = new WebSocket(`ws://${host}:81/`);
-    wsRef.current = ws;
+
+  // OTOMATIK KESIF: ESP32 isyeri agina baglandiginda modem ona her acilista
+  // farkli bir IP verebilir. Kullanicinin her seferinde IP yazmasi yerine
+  // asagidaki adaylari sirayla deniyoruz:
+  //   1) En son basariyla baglanilan adres (varsa)
+  //   2) kantar.local  -> ESP32'nin mDNS adi; IP degisse bile calisir
+  //   3) 192.168.4.1   -> ESP32'nin kendi yayinladigi agin sabit adresi
+  // Ilk cevap veren adres kaydedilir ve sonraki aciliste ilk sirada denenir.
+  const buildCandidates = useCallback(() => {
+    const saved = (localStorage.getItem('zk_kantar_wifi_host') || '').trim();
+    const list = [];
+    if (saved) list.push(saved);
+    if (!list.includes('kantar.local')) list.push('kantar.local');
+    if (!list.includes('192.168.4.1')) list.push('192.168.4.1');
+    return list;
+  }, []);
+
+  // Tek bir adresi kisa sureli dener; baglanabilirse acik soketi dondurur.
+  const probeHost = useCallback((host, timeoutMs = 3500) => new Promise((resolve) => {
+    let done = false;
+    let ws;
+    try { ws = new WebSocket(`ws://${host}:81/`); } catch (e) { resolve(null); return; }
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      try { ws.close(); } catch (e) {}
+      resolve(null);
+    }, timeoutMs);
     ws.onopen = () => {
-      reconnectAttemptRef.current = 0;
-      setConnected(true);
-      setReconnecting(false);
-      setStatus('Bağlı (WiFi)');
-      setDataStale(false);
-      lastReadingAtRef.current = Date.now();
+      if (done) { try { ws.close(); } catch (e) {} return; }
+      done = true; clearTimeout(timer); resolve(ws);
     };
+    ws.onerror = () => {
+      if (done) return;
+      done = true; clearTimeout(timer);
+      try { ws.close(); } catch (e) {}
+      resolve(null);
+    };
+    ws.onclose = () => {
+      if (done) return;
+      done = true; clearTimeout(timer); resolve(null);
+    };
+  }), []);
+
+  // Acik bir soketi (probe ile bulunmus) canli baglantiya donusturur.
+  const adoptSocket = useCallback((ws, host) => {
+    wsRef.current = ws;
+    setWifiHost(host);
+    localStorage.setItem('zk_kantar_wifi_host', host);
+    reconnectAttemptRef.current = 0;
+    setConnected(true);
+    setReconnecting(false);
+    setStatus(`Bağlı (WiFi · ${host})`);
+    setDataStale(false);
+    lastReadingAtRef.current = Date.now();
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') handleIncoming(ev.data + '\n');
     };
     ws.onclose = () => {
-      if (wsRef.current !== ws) return; // eski/kapatilmis soketin gec gelen olayi
+      if (wsRef.current !== ws) return;
       wsRef.current = null;
       if (keepReadingRef.current) {
         setConnected(false);
@@ -472,29 +516,68 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
     ws.onerror = () => { try { ws.close(); } catch (e) {} };
   }, [handleIncoming]);
 
+  // Adaylari sirayla deneyip ilk cevap vereni kullanir.
+  const discoverAndConnect = useCallback(async () => {
+    const candidates = buildCandidates();
+    for (const host of candidates) {
+      if (!keepReadingRef.current) return false;
+      setStatus(`Kantar aranıyor... (${host})`);
+      // eslint-disable-next-line no-await-in-loop
+      const ws = await probeHost(host);
+      if (ws) { adoptSocket(ws, host); return true; }
+    }
+    return false;
+  }, [buildCandidates, probeHost, adoptSocket]);
+
+  // OTOMATIK BAGLANMA: Kantar sayfasi acildiginda WiFi modundaysak kullanici
+  // hicbir sey yapmadan baglanmayi dener. Basarisiz olursa sessizce vazgecer
+  // (uyari kutusu cikarmaz) - kullanici isterse elle "Kantara baglan" der ya da
+  // kiloyu elle girer.
+  const autoConnectedRef = useRef(false);
+  useEffect(() => {
+    if (mode !== 'wifi' || autoConnectedRef.current) return;
+    autoConnectedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      keepReadingRef.current = true;
+      const ok = await discoverAndConnect();
+      if (cancelled) return;
+      if (!ok) {
+        keepReadingRef.current = false;
+        setStatus('Bağlı değil');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, discoverAndConnect]);
+
   const attemptWsReconnect = useCallback(async () => {
     setReconnecting(true);
     for (let attempt = 1; attempt <= SCALE_RECONNECT_ATTEMPTS; attempt++) {
       reconnectAttemptRef.current = attempt;
       setStatus(`Bağlantı koptu, yeniden bağlanılıyor... (${attempt}/${SCALE_RECONNECT_ATTEMPTS})`);
+      // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, Math.min(1000 * attempt, 4000)));
       if (!keepReadingRef.current) return; // kullanici bu sirada "Kes" e bastiysa dur
-      openWs(wifiHost);
-      // baglanti acilip acilmadigini kisa bir sure bekleyip kontrol et
-      await new Promise((r) => setTimeout(r, 800));
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+      // Modem yeniden baslamis ve ESP32 farkli bir IP almis olabilir; bu yuzden
+      // sadece eski adresi degil, tum adaylari yeniden tariyoruz.
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await discoverAndConnect();
+      if (ok) return;
     }
     keepReadingRef.current = false;
     setReconnecting(false);
-    setStatus('Bağlantı koptu — ESP32 IP/ağını kontrol edin ya da kiloyu elle girin');
-  }, [openWs, wifiHost]);
+    setStatus('Kantar bulunamadı — ESP32 açık mı kontrol edin ya da kiloyu elle girin');
+  }, [discoverAndConnect]);
 
   const connect = async () => {
     if (mode === 'wifi') {
-      if (!wifiHost) { alert('Önce ESP32\'nin IP adresini girin (örn. 192.168.4.1).'); return; }
-      setStatus('Bağlanıyor...');
+      setStatus('Kantar aranıyor...');
       keepReadingRef.current = true;
-      openWs(wifiHost);
+      const ok = await discoverAndConnect();
+      if (!ok) {
+        keepReadingRef.current = false;
+        setStatus('Kantar bulunamadı — ESP32 açık mı kontrol edin');
+      }
       return;
     }
     if (!('serial' in navigator)) {
