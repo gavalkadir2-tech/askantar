@@ -3,22 +3,34 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { Modal, PaymentMethodPicker } from '../common/index';
+import { Modal, PaymentMethodPicker, SearchableSelect } from '../common/index';
 import { fmtKg, fmtTL, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 
-export function AddPersonnelModal({ onClose, onSave, initialData }) {
+export function AddPersonnelModal({ onClose, onSave, initialData, personnel = [] }) {
   const [name, setName] = useState(initialData?.name || '');
   const [phone, setPhone] = useState(initialData?.phone || '');
   const [role, setRole] = useState(initialData?.role || '');
   const [payType, setPayType] = useState(initialData?.payType || 'yevmiye');
   const [dailyWage, setDailyWage] = useState(initialData?.dailyWage != null ? String(initialData.dailyWage) : '');
   const [monthlySalary, setMonthlySalary] = useState(initialData?.monthlySalary != null ? String(initialData.monthlySalary) : '');
+  const [error, setError] = useState('');
+
+  const submit = () => {
+    if (!name.trim()) return;
+    const dup = personnel.some((p) => p.id !== initialData?.id && normalizeName(p.name) === normalizeName(name));
+    if (dup) { setError('Bu isimde kayıtlı bir personel zaten var.'); return; }
+    if (!isValidTRPhone(phone)) { setError('Telefon numarası geçersiz görünüyor (örn. 0532 xxx xx xx).'); return; }
+    setError('');
+    onSave({ name: name.trim(), phone, role, payType, dailyWage: parseFloat(dailyWage) || 0, monthlySalary: parseFloat(monthlySalary) || 0 });
+  };
+
   return (
     <Modal title={initialData ? 'Personeli düzenle' : 'Yeni personel ekle'} onClose={onClose}>
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">Ad soyad</label>
-        <input className="zk-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="örn. Ali Demir" autoFocus />
+        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} placeholder="örn. Ali Demir" autoFocus />
+        {error && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 5 }}>{error}</div>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <div>
@@ -51,7 +63,7 @@ export function AddPersonnelModal({ onClose, onSave, initialData }) {
       <button
         className="zk-btn zk-btn-primary"
         style={{ width: '100%', justifyContent: 'center' }}
-        onClick={() => onSave({ name, phone, role, payType, dailyWage: parseFloat(dailyWage) || 0, monthlySalary: parseFloat(monthlySalary) || 0 })}
+        onClick={submit}
       >
         Kaydet
       </button>
@@ -59,16 +71,29 @@ export function AddPersonnelModal({ onClose, onSave, initialData }) {
   );
 }
 
-export function AddVehicleModal({ onClose, onSave, personnel, initialData }) {
+export function AddVehicleModal({ onClose, onSave, personnel, initialData, vehicles = [] }) {
   const [plaka, setPlaka] = useState(initialData?.plaka || '');
   const [marka, setMarka] = useState(initialData?.marka || '');
   const [kapasite, setKapasite] = useState(initialData?.kapasite || '');
   const [defaultPersonnelId, setDefaultPersonnelId] = useState(initialData?.defaultPersonnelId || '');
+  const [error, setError] = useState('');
+
+  const normalizePlaka = (s) => (s || '').replace(/\s+/g, '').toLocaleUpperCase('tr');
+
+  const submit = () => {
+    if (!plaka.trim()) return;
+    const dup = vehicles.some((v) => v.id !== initialData?.id && normalizePlaka(v.plaka) === normalizePlaka(plaka));
+    if (dup) { setError('Bu plaka zaten kayıtlı.'); return; }
+    setError('');
+    onSave({ plaka: plaka.trim(), marka, kapasite: parseFloat(kapasite) || 0, defaultPersonnelId });
+  };
+
   return (
     <Modal title={initialData ? 'Aracı düzenle' : 'Yeni araç ekle'} onClose={onClose}>
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">Plaka</label>
-        <input className="zk-input" value={plaka} onChange={(e) => setPlaka(e.target.value.toUpperCase())} placeholder="örn. 35 ABC 123" autoFocus />
+        <input className="zk-input" value={plaka} onChange={(e) => { setPlaka(e.target.value.toUpperCase()); if (error) setError(''); }} placeholder="örn. 35 ABC 123" autoFocus />
+        {error && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 5 }}>{error}</div>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <div>
@@ -87,12 +112,30 @@ export function AddVehicleModal({ onClose, onSave, personnel, initialData }) {
           {personnel.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
-      <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => onSave({ plaka, marka, kapasite: parseFloat(kapasite) || 0, defaultPersonnelId })}>Kaydet</button>
+      <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={submit}>Kaydet</button>
     </Modal>
   );
 }
 
 const normalizeName = (s) => (s || '').trim().toLocaleLowerCase('tr');
+
+// Telefon opsiyonel; doluysa gevşek bir TR cep telefonu biçimi bekleniyor:
+// 5xxxxxxxxx (10), 05xxxxxxxxx (11) ya da 905xxxxxxxxx (12 hane, +90 ile).
+function isValidTRPhone(raw) {
+  if (!raw || !raw.trim()) return true;
+  const digits = raw.replace(/[^\d]/g, '');
+  if (digits.length === 10 && digits[0] === '5') return true;
+  if (digits.length === 11 && digits.startsWith('05')) return true;
+  if (digits.length === 12 && digits.startsWith('905')) return true;
+  return false;
+}
+
+// IBAN opsiyonel; doluysa TR + 24 hane (boşluklar temizlenerek) bekleniyor.
+function isValidIBAN(raw) {
+  if (!raw || !raw.trim()) return true;
+  const clean = raw.replace(/\s+/g, '').toUpperCase();
+  return /^TR\d{24}$/.test(clean);
+}
 
 export function AddFarmerModal({ onClose, onSave, initialData, farmers = [] }) {
   const [name, setName] = useState(initialData?.name || '');
@@ -108,6 +151,8 @@ export function AddFarmerModal({ onClose, onSave, initialData, farmers = [] }) {
     if (!name.trim()) return;
     const dup = farmers.some((f) => f.id !== initialData?.id && normalizeName(f.name) === normalizeName(name));
     if (dup) { setError('Bu isimde kayıtlı bir çiftçi zaten var.'); return; }
+    if (!isValidTRPhone(phone)) { setError('Telefon numarası geçersiz görünüyor (örn. 0532 xxx xx xx).'); return; }
+    if (!isValidIBAN(iban)) { setError('IBAN geçersiz görünüyor (TR ile başlayıp 24 hane olmalı).'); return; }
     setError('');
     onSave({ name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus, bankName: bankName.trim(), iban: iban.trim() });
   };
@@ -173,6 +218,8 @@ export function AddCariModal({ onClose, onSave, initialData, lockType, farmers =
       setError(type === 'tedarikci' ? 'Bu isimde kayıtlı bir tedarikçi zaten var.' : 'Bu isimde kayıtlı bir cari zaten var.');
       return;
     }
+    if (!isValidTRPhone(phone)) { setError('Telefon numarası geçersiz görünüyor (örn. 0532 xxx xx xx).'); return; }
+    if (!isValidIBAN(iban)) { setError('IBAN geçersiz görünüyor (TR ile başlayıp 24 hane olmalı).'); return; }
     setError('');
     onSave({ type, name: name.trim(), phone: phone.trim(), tcNo: tcNo.trim(), address: address.trim(), bagkurStatus, bankName: bankName.trim(), iban: iban.trim() });
   };
@@ -260,9 +307,13 @@ export function EditSaleModal({ sale, buyers, vehicles, bankAccounts, onClose, o
       <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
         <div>
           <label className="zk-label">Alıcı</label>
-          <select className="zk-select" value={buyerId} onChange={(e) => setBuyerId(e.target.value)}>
-            {buyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          <SearchableSelect
+            value={buyerId}
+            onChange={setBuyerId}
+            options={buyers.map((b) => ({ id: b.id, label: b.name }))}
+            placeholder="Alıcı ara veya seçin..."
+            recentKey="buyers"
+          />
         </div>
         <div>
           <label className="zk-label">Tarih</label>
@@ -285,10 +336,13 @@ export function EditSaleModal({ sale, buyers, vehicles, bankAccounts, onClose, o
       </div>
       <div style={{ marginBottom: 10 }}>
         <label className="zk-label">Araç</label>
-        <select className="zk-select" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-          <option value="">Seçin...</option>
-          {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
-        </select>
+        <SearchableSelect
+          value={vehicleId}
+          onChange={setVehicleId}
+          options={vehicles.map((v) => ({ id: v.id, label: v.plaka }))}
+          placeholder="Araç ara veya seçin..."
+          recentKey="vehicles"
+        />
       </div>
       <div style={{ marginBottom: 10 }}>
         <label className="zk-label">Ödeme yöntemi</label>
@@ -332,10 +386,13 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, bank
 
   const netKg = items.reduce((s, it) => s + (parseFloat(it.kg) || 0), 0);
   const amount = items.reduce((s, it) => s + (parseFloat(it.kg) || 0) * (parseFloat(it.pricePerKg) || 0), 0);
+  const firePercent = purchase.firePercent || 0;
+  const fireTutari = amount * (firePercent / 100);
+  const amountAfterFire = amount - fireTutari;
   const commissionAmount = purchase.noDeduction ? 0 : netKg * (parseFloat(commissionRate) || 0);
-  const stopajTutari = purchase.noDeduction ? 0 : (amount - commissionAmount) * (parseFloat(stopajOrani) || 0) / 100;
-  const bagkurTutari = purchase.applyBagkur && !purchase.noDeduction ? amount * (purchase.bagkurRate || 0) / 100 : (purchase.bagkurTutari || 0);
-  const netPayment = amount - commissionAmount - stopajTutari - bagkurTutari - (parseFloat(hammaliyeTutari) || 0) - (parseFloat(nakliyeTutari) || 0) - (parseFloat(cuvalKesintisi) || 0) - (purchase.fireTutari || 0);
+  const stopajTutari = purchase.noDeduction ? 0 : amountAfterFire * (parseFloat(stopajOrani) || 0) / 100;
+  const bagkurTutari = (purchase.applyBagkur && !purchase.noDeduction) ? amountAfterFire * ((purchase.bagkurRate || 0) / 100) : 0;
+  const netPayment = amountAfterFire - commissionAmount - stopajTutari - bagkurTutari - (parseFloat(hammaliyeTutari) || 0) - (parseFloat(nakliyeTutari) || 0) - (parseFloat(cuvalKesintisi) || 0);
 
   const submit = () => {
     const person = personnel.find((p) => p.id === personnelId);
@@ -348,6 +405,7 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, bank
       netKg, amount,
       commissionRate: parseFloat(commissionRate) || 0, commissionAmount,
       stopajOrani: parseFloat(stopajOrani) || 0, stopajTutari,
+      firePercent, fireTutari,
       bagkurTutari,
       hammaliyeTutari: parseFloat(hammaliyeTutari) || 0,
       nakliyeTutari: parseFloat(nakliyeTutari) || 0,
@@ -363,9 +421,13 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, bank
         <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
           <div>
             <label className="zk-label">Çiftçi</label>
-            <select className="zk-select" value={farmerId} onChange={(e) => setFarmerId(e.target.value)}>
-              {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={farmerId}
+              onChange={setFarmerId}
+              options={farmers.map((f) => ({ id: f.id, label: f.name }))}
+              placeholder="Çiftçi ara veya seçin..."
+              recentKey="farmers"
+            />
           </div>
           <div>
             <label className="zk-label">Tarih / Saat</label>
@@ -378,17 +440,23 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, bank
         <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 14 }}>
           <div>
             <label className="zk-label">Personel</label>
-            <select className="zk-select" value={personnelId} onChange={(e) => setPersonnelId(e.target.value)}>
-              <option value="">Seçin...</option>
-              {personnel.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={personnelId}
+              onChange={setPersonnelId}
+              options={personnel.map((p) => ({ id: p.id, label: p.name }))}
+              placeholder="Personel ara veya seçin..."
+              recentKey="personnel"
+            />
           </div>
           <div>
             <label className="zk-label">Araç</label>
-            <select className="zk-select" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-              <option value="">Seçin...</option>
-              {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plaka}</option>)}
-            </select>
+            <SearchableSelect
+              value={vehicleId}
+              onChange={setVehicleId}
+              options={vehicles.map((v) => ({ id: v.id, label: v.plaka }))}
+              placeholder="Araç ara veya seçin..."
+              recentKey="vehicles"
+            />
           </div>
         </div>
 
@@ -443,6 +511,9 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, bank
         <div style={{ background: COLORS.paper, borderRadius: 8, padding: 10, marginBottom: 14, fontSize: 12.5 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,}}><span>Toplam kg</span><span>{fmtKg(netKg)}</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,}}><span>Brüt tutar</span><span>{fmtTL(amount)}</span></div>
+          {firePercent > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,}}><span>Fire (%{firePercent})</span><span>-{fmtTL(fireTutari)}</span></div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginTop: 4, flexWrap: 'wrap', gap: 8,}}><span>Net ödeme</span><span>{fmtTL(netPayment)}</span></div>
         </div>
 
@@ -452,20 +523,50 @@ export function EditPurchaseModal({ purchase, farmers, personnel, vehicles, bank
   );
 }
 
-export function BuyerQuickForm({ onSave }) {
+export function BuyerQuickForm({ onSave, buyers = [] }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [iban, setIban] = useState('');
+  const [error, setError] = useState('');
+
+  const submit = () => {
+    if (!name.trim()) return;
+    const dup = buyers.some((b) => normalizeName(b.name) === normalizeName(name));
+    if (dup) { setError('Bu isimde kayıtlı bir cari zaten var.'); return; }
+    if (!isValidTRPhone(phone)) { setError('Telefon numarası geçersiz görünüyor (örn. 0532 xxx xx xx).'); return; }
+    if (!isValidIBAN(iban)) { setError('IBAN geçersiz görünüyor (TR ile başlayıp 24 hane olmalı).'); return; }
+    setError('');
+    onSave({ name: name.trim(), phone: phone.trim(), address: address.trim(), bankName: bankName.trim(), iban: iban.trim() });
+  };
+
   return (
     <>
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">Alıcı / firma adı</label>
-        <input className="zk-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="örn. Ege Zeytinyağı A.Ş." autoFocus />
+        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} placeholder="örn. Ege Zeytinyağı A.Ş." autoFocus />
+        {error && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 5 }}>{error}</div>}
       </div>
-      <div style={{ marginBottom: 18 }}>
+      <div style={{ marginBottom: 12 }}>
         <label className="zk-label">Telefon (opsiyonel)</label>
         <input className="zk-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
       </div>
-      <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => onSave({ name, phone })}>Kaydet</button>
+      <div style={{ marginBottom: 12 }}>
+        <label className="zk-label">Adres (opsiyonel)</label>
+        <input className="zk-input" value={address} onChange={(e) => setAddress(e.target.value)} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
+        <div>
+          <label className="zk-label">Banka (opsiyonel)</label>
+          <input className="zk-input" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="örn. Ziraat Bankası" />
+        </div>
+        <div>
+          <label className="zk-label">IBAN (opsiyonel)</label>
+          <input className="zk-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="TR.." />
+        </div>
+      </div>
+      <button className="zk-btn zk-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={submit}>Kaydet</button>
     </>
   );
 }
