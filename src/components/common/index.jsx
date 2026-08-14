@@ -120,15 +120,35 @@ export function Modal({ title, onClose, children }) {
   );
 }
 
+const RECENT_LIMIT = 5;
+function readRecentIds(key) {
+  if (!key) return [];
+  try {
+    const raw = window.localStorage.getItem(`zk:recent:${key}`);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function pushRecentId(key, id) {
+  if (!key || !id) return readRecentIds(key);
+  const next = [id, ...readRecentIds(key).filter((x) => x !== id)].slice(0, RECENT_LIMIT);
+  try { window.localStorage.setItem(`zk:recent:${key}`, JSON.stringify(next)); } catch {}
+  return next;
+}
+
 // Yazarak aranabilir, her zaman alfabetik sıralı, dilerse listenin en altına
 // "+ Yeni ekle" satırı eklenebilen ortak seçim kutusu. Çiftçi/cari/personel/araç
-// gibi uzayabilen listelerde native <select> yerine kullanılır.
+// gibi uzayabilen listelerde native <select> yerine kullanılır. `recentKey`
+// verilirse, bu cihazda o alan için en son seçilenler listenin en üstünde
+// "Son kullanılanlar" başlığıyla gösterilir (aramaya girmeden önce).
 export function SearchableSelect({
   value, onChange, options, placeholder = 'Seçin...',
   onAddNew, addNewLabel = '+ Yeni ekle', emptyLabel = 'Sonuç bulunamadı',
+  recentKey,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [recentIds, setRecentIds] = useState(() => readRecentIds(recentKey));
   const wrapRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -138,9 +158,18 @@ export function SearchableSelect({
     () => [...options].sort((a, b) => a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' })),
     [options]
   );
+
+  const recentOptions = useMemo(() => {
+    if (!recentKey || recentIds.length === 0) return [];
+    return recentIds.map((id) => options.find((o) => o.id === id)).filter(Boolean);
+  }, [recentKey, recentIds, options]);
+
+  const showRecents = recentOptions.length > 0 && !query.trim();
+  const recentIdSet = useMemo(() => new Set(recentOptions.map((o) => o.id)), [recentOptions]);
+
   const filtered = query.trim()
     ? sorted.filter((o) => o.label.toLocaleLowerCase('tr').includes(query.trim().toLocaleLowerCase('tr')))
-    : sorted;
+    : sorted.filter((o) => !recentIdSet.has(o.id));
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -157,6 +186,13 @@ export function SearchableSelect({
     setQuery('');
     setOpen(true);
     setTimeout(() => { inputRef.current?.select(); }, 0);
+  };
+
+  const pick = (id) => {
+    onChange(id);
+    if (recentKey) setRecentIds(pushRecentId(recentKey, id));
+    setOpen(false);
+    setQuery('');
   };
 
   return (
@@ -179,14 +215,49 @@ export function SearchableSelect({
             maxHeight: 230, overflowY: 'auto', boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
           }}
         >
-          {filtered.length === 0 && (
+          {onAddNew && (
+            <div
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onAddNew(); setOpen(false); setQuery(''); }}
+              style={{
+                padding: '9px 11px', fontSize: 13, fontWeight: 700, color: COLORS.olive,
+                cursor: 'pointer', borderBottom: `1px solid ${COLORS.border}`,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Plus size={13} /> {addNewLabel}
+            </div>
+          )}
+          {showRecents && (
+            <>
+              <div style={{ padding: '6px 11px 4px', fontSize: 10.5, fontWeight: 700, color: COLORS.inkSoft, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                Son kullanılanlar
+              </div>
+              {recentOptions.map((o) => (
+                <div
+                  key={`recent-${o.id}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(o.id)}
+                  style={{
+                    padding: '9px 11px', fontSize: 13, cursor: 'pointer',
+                    background: o.id === value ? COLORS.oliveSoft : 'transparent',
+                    fontWeight: o.id === value ? 700 : 400,
+                  }}
+                >
+                  {o.label}
+                </div>
+              ))}
+              <div style={{ borderTop: `1px solid ${COLORS.border}`, margin: '2px 0' }} />
+            </>
+          )}
+          {filtered.length === 0 && recentOptions.length === 0 && (
             <div style={{ padding: '9px 11px', fontSize: 12.5, color: COLORS.inkSoft }}>{emptyLabel}</div>
           )}
           {filtered.map((o) => (
             <div
               key={o.id}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onChange(o.id); setOpen(false); setQuery(''); }}
+              onClick={() => pick(o.id)}
               style={{
                 padding: '9px 11px', fontSize: 13, cursor: 'pointer',
                 background: o.id === value ? COLORS.oliveSoft : 'transparent',
@@ -196,19 +267,6 @@ export function SearchableSelect({
               {o.label}
             </div>
           ))}
-          {onAddNew && (
-            <div
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onAddNew(); setOpen(false); setQuery(''); }}
-              style={{
-                padding: '9px 11px', fontSize: 13, fontWeight: 700, color: COLORS.olive,
-                cursor: 'pointer', borderTop: `1px solid ${COLORS.border}`,
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}
-            >
-              <Plus size={13} /> {addNewLabel}
-            </div>
-          )}
         </div>
       )}
     </div>
