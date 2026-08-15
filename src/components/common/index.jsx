@@ -288,10 +288,15 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
   const [dataStale, setDataStale] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [baud, setBaud] = useState(9600);
-  const [serialSupported] = useState(() => typeof navigator !== 'undefined' && 'serial' in navigator);
-  // Telefon/tablette Web Serial API hiç yok — bu durumda tek seçenek WiFi.
-  const [mode, setMode] = useState(() => (serialSupported ? (localStorage.getItem('zk_kantar_mode') || 'serial') : 'wifi'));
+  // Kablo (Web Serial) modu arayüzden kaldırıldı — kantar her zaman WiFi/ESP32 köprüsü üzerinden bağlanır.
+  const mode = 'wifi';
   const [wifiHost, setWifiHost] = useState(() => localStorage.getItem('zk_kantar_wifi_host') || '192.168.4.1');
+  // Otomatik bağlanma: açıksa sayfa açılır açılmaz WiFi üzerinden bağlanmayı dener,
+  // kapalıysa kullanıcı "Bağlan" butonuna basana kadar bağlanmaz.
+  const [autoConnect, setAutoConnect] = useState(() => {
+    const saved = localStorage.getItem('zk_kantar_autoconnect');
+    return saved === null ? true : saved === 'true';
+  });
   const portRef = useRef(null);
   const readerRef = useRef(null);
   const wsRef = useRef(null);
@@ -310,8 +315,8 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
 
   useEffect(() => { onLiveValueRef.current = onLiveValue; }, [onLiveValue]);
 
-  useEffect(() => { localStorage.setItem('zk_kantar_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('zk_kantar_wifi_host', wifiHost); }, [wifiHost]);
+  useEffect(() => { localStorage.setItem('zk_kantar_autoconnect', String(autoConnect)); }, [autoConnect]);
 
   useEffect(() => { lockedRef.current = locked; }, [locked]);
 
@@ -529,13 +534,13 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
     return false;
   }, [buildCandidates, probeHost, adoptSocket]);
 
-  // OTOMATIK BAGLANMA: Kantar sayfasi acildiginda WiFi modundaysak kullanici
-  // hicbir sey yapmadan baglanmayi dener. Basarisiz olursa sessizce vazgecer
-  // (uyari kutusu cikarmaz) - kullanici isterse elle "Kantara baglan" der ya da
-  // kiloyu elle girer.
+  // OTOMATIK BAGLANMA: "Otomatik bağlan" ayarı açıksa kantar sayfasi acildiginda
+  // kullanici hicbir sey yapmadan baglanmayi dener. Basarisiz olursa sessizce
+  // vazgecer (uyari kutusu cikarmaz) - kullanici isterse "Bağlan" butonuna basar
+  // ya da kiloyu elle girer. Ayar kapaliysa otomatik baglanma hic denenmez.
   const autoConnectedRef = useRef(false);
   useEffect(() => {
-    if (mode !== 'wifi' || autoConnectedRef.current) return;
+    if (mode !== 'wifi' || !autoConnect || autoConnectedRef.current) return;
     autoConnectedRef.current = true;
     let cancelled = false;
     (async () => {
@@ -548,7 +553,7 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [mode, discoverAndConnect]);
+  }, [mode, autoConnect, discoverAndConnect]);
 
   const attemptWsReconnect = useCallback(async () => {
     setReconnecting(true);
@@ -653,19 +658,17 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
     ? (connected ? <Wifi size={15} /> : <WifiOff size={15} />)
     : (connected ? <BluetoothConnected size={15} /> : <Bluetooth size={15} />);
 
-  // Kablo (Web Serial) + WiFi (ESP32/WebSocket köprü) arasında seçim.
-  // Web Serial desteklenmeyen cihazlarda (telefon/tablet) sadece WiFi var, toggle gizlenir.
-  const ModeToggle = () => !serialSupported || connected ? null : (
-    <div style={{ display: 'flex', gap: 4 }}>
-      <button type="button" onClick={() => setMode('serial')} className="zk-btn zk-btn-secondary"
-        style={{ padding: '4px 8px', fontSize: 10, minHeight: 'auto', background: mode === 'serial' ? '#3A4235' : '#2A3128', color: '#DCE2CC', border: 'none' }}>
-        Kablo
-      </button>
-      <button type="button" onClick={() => setMode('wifi')} className="zk-btn zk-btn-secondary"
-        style={{ padding: '4px 8px', fontSize: 10, minHeight: 'auto', background: mode === 'wifi' ? '#3A4235' : '#2A3128', color: '#DCE2CC', border: 'none' }}>
-        WiFi
-      </button>
-    </div>
+  // Otomatik bağlan onay kutusu. Sadece bağlı değilken gösterilir.
+  const AutoConnectToggle = () => connected ? null : (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#B7C4B3', cursor: 'pointer', userSelect: 'none' }}>
+      <input
+        type="checkbox"
+        checked={autoConnect}
+        onChange={(e) => setAutoConnect(e.target.checked)}
+        style={{ width: 14, height: 14, accentColor: COLORS.gold }}
+      />
+      Otomatik bağlan
+    </label>
   );
 
   const ModeSettings = ({ small }) => {
@@ -715,19 +718,21 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
           <DataStaleWarning />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <ModeToggle />
             <ModeSettings small />
-            {(!connected ? (
-              <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting}>Kantara bağlan</button>
+            <AutoConnectToggle />
+            {!connected ? (
+              !autoConnect && (
+                <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting}>Bağlan</button>
+              )
             ) : (
               <>
-                <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
+                <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Bağlantıyı kes</button>
                 <LockButton small />
                 <button className="zk-btn zk-btn-gold" disabled={lastValue === null} onClick={() => onWeightCapture(lastValue)}>
                   Bu değeri kullan
                 </button>
               </>
-            ))}
+            )}
           </div>
         </div>
       </div>
@@ -742,8 +747,8 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
           {status}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ModeToggle />
           <ModeSettings />
+          <AutoConnectToggle />
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -758,10 +763,12 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
       <div style={{ marginTop: 8 }}><DataStaleWarning /></div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         {!connected ? (
-          <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting} style={{ flex: 1, justifyContent: 'center' }}>Kantara bağlan</button>
+          !autoConnect && (
+            <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting} style={{ flex: 1, justifyContent: 'center' }}>Bağlan</button>
+          )
         ) : (
           <>
-            <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ flex: 1, justifyContent: 'center', background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
+            <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ flex: 1, justifyContent: 'center', background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Bağlantıyı kes</button>
             <LockButton />
             <button
               className="zk-btn zk-btn-gold"
