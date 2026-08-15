@@ -21,6 +21,7 @@ import {
 import { daysUntil } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { PAYMENT_METHODS } from '../../lib/constants';
+import { supabase } from '../../supabaseClient';
 
 // Odeme/tahsilat/gider/alim/satim formlarinda ortak kullanilan "Nakit / Banka"
 // secici. Banka secilince ilgili banka hesabini secmeyi de zorunlu kilar.
@@ -288,15 +289,10 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
   const [dataStale, setDataStale] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [baud, setBaud] = useState(9600);
-  // Kablo (Web Serial) modu arayüzden kaldırıldı — kantar her zaman WiFi/ESP32 köprüsü üzerinden bağlanır.
-  const mode = 'wifi';
+  const [serialSupported] = useState(() => typeof navigator !== 'undefined' && 'serial' in navigator);
+  // Telefon/tablette Web Serial API hiç yok — bu durumda tek seçenek WiFi.
+  const [mode, setMode] = useState(() => (serialSupported ? (localStorage.getItem('zk_kantar_mode') || 'serial') : 'wifi'));
   const [wifiHost, setWifiHost] = useState(() => localStorage.getItem('zk_kantar_wifi_host') || '192.168.4.1');
-  // Otomatik bağlanma: açıksa sayfa açılır açılmaz WiFi üzerinden bağlanmayı dener,
-  // kapalıysa kullanıcı "Bağlan" butonuna basana kadar bağlanmaz.
-  const [autoConnect, setAutoConnect] = useState(() => {
-    const saved = localStorage.getItem('zk_kantar_autoconnect');
-    return saved === null ? true : saved === 'true';
-  });
   const portRef = useRef(null);
   const readerRef = useRef(null);
   const wsRef = useRef(null);
@@ -315,8 +311,8 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
 
   useEffect(() => { onLiveValueRef.current = onLiveValue; }, [onLiveValue]);
 
+  useEffect(() => { localStorage.setItem('zk_kantar_mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('zk_kantar_wifi_host', wifiHost); }, [wifiHost]);
-  useEffect(() => { localStorage.setItem('zk_kantar_autoconnect', String(autoConnect)); }, [autoConnect]);
 
   useEffect(() => { lockedRef.current = locked; }, [locked]);
 
@@ -521,7 +517,59 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
     ws.onerror = () => { try { ws.close(); } catch (e) {} };
   }, [handleIncoming]);
 
+  // ---- BULUT KÖPRÜSÜ (yerel bağlantı kurulamazsa devreye girer) ----
+  // iOS/Safari, https sayfasindan sifresiz yerel baglantiya (ws://) izin
+  // vermiyor. Bu durumda ESP32'nin Supabase'e yazdigi son olcumu canli
+  // olarak buradan okuyoruz. Android/PC'de yerel yol once denendigi icin
+  // bu yol sadece gerektiginde kullanilir (internet gerektirir).
+  const cloudChannelRef = useRef(null);
+
+  const stopCloudBridge = useCallback(() => {
+    if (cloudChannelRef.current) {
+      try { supabase.removeChannel(cloudChannelRef.current); } catch (e) {}
+      cloudChannelRef.current = null;
+    }
+  }, []);
+
+  const startCloudBridge = useCallback(async () => {
+    const key = (localStorage.getItem('zk_kantar_device_key') || '').trim();
+    if (!key) return false; // cihaz anahtari tanimli degilse bulut yolu kullanilamaz
+
+    stopCloudBridge();
+    setStatus('Buluttan bağlanılıyor...');
+
+    // Once son bilinen degeri cek (abonelik sadece YENI degisiklikleri getirir,
+    // boylece kullanici ilk okumayi beklemek zorunda kalmaz).
+    try {
+      const { data } = await supabase
+        .from('scale_live').select('line, updated_at').eq('device_key', key).maybeSingle();
+      if (data?.line) handleIncoming(data.line + '\n');
+    } catch (e) { /* ilk deger alinamadi, canli akis yine de calisir */ }
+
+    const ch = supabase
+      .channel(`scale_live_${key}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'scale_live', filter: `device_key=eq.${key}` },
+        (payload) => {
+          const line = payload?.new?.line;
+          if (typeof line === 'string' && line) handleIncoming(line + '\n');
+        })
+      .subscribe((st) => {
+        if (st === 'SUBSCRIBED') {
+          setConnected(true);
+          setReconnecting(false);
+          setStatus('Bağlı (bulut)');
+          setDataStale(false);
+          lastReadingAtRef.current = Date.now();
+        }
+      });
+
+    cloudChannelRef.current = ch;
+    return true;
+  }, [handleIncoming, stopCloudBridge]);
+
   // Adaylari sirayla deneyip ilk cevap vereni kullanir.
+  // Yerel adreslerin hicbiri cevap vermezse bulut koprusune duser.
   const discoverAndConnect = useCallback(async () => {
     const candidates = buildCandidates();
     for (const host of candidates) {
@@ -531,16 +579,18 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
       const ws = await probeHost(host);
       if (ws) { adoptSocket(ws, host); return true; }
     }
-    return false;
-  }, [buildCandidates, probeHost, adoptSocket]);
+    // Yerel yol kapali (ornegin iOS) -> bulut yolunu dene
+    if (!keepReadingRef.current) return false;
+    return await startCloudBridge();
+  }, [buildCandidates, probeHost, adoptSocket, startCloudBridge]);
 
-  // OTOMATIK BAGLANMA: "Otomatik bağlan" ayarı açıksa kantar sayfasi acildiginda
-  // kullanici hicbir sey yapmadan baglanmayi dener. Basarisiz olursa sessizce
-  // vazgecer (uyari kutusu cikarmaz) - kullanici isterse "Bağlan" butonuna basar
-  // ya da kiloyu elle girer. Ayar kapaliysa otomatik baglanma hic denenmez.
+  // OTOMATIK BAGLANMA: Kantar sayfasi acildiginda WiFi modundaysak kullanici
+  // hicbir sey yapmadan baglanmayi dener. Basarisiz olursa sessizce vazgecer
+  // (uyari kutusu cikarmaz) - kullanici isterse elle "Kantara baglan" der ya da
+  // kiloyu elle girer.
   const autoConnectedRef = useRef(false);
   useEffect(() => {
-    if (mode !== 'wifi' || !autoConnect || autoConnectedRef.current) return;
+    if (mode !== 'wifi' || autoConnectedRef.current) return;
     autoConnectedRef.current = true;
     let cancelled = false;
     (async () => {
@@ -553,7 +603,7 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [mode, autoConnect, discoverAndConnect]);
+  }, [mode, discoverAndConnect]);
 
   const attemptWsReconnect = useCallback(async () => {
     setReconnecting(true);
@@ -612,6 +662,7 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
       if (portRef.current) await portRef.current.close();
     } catch (e) {}
     if (wsRef.current) { try { wsRef.current.close(); } catch (e) {} wsRef.current = null; }
+    stopCloudBridge();
     portRef.current = null;
     setConnected(false);
     setReconnecting(false);
@@ -658,30 +709,48 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
     ? (connected ? <Wifi size={15} /> : <WifiOff size={15} />)
     : (connected ? <BluetoothConnected size={15} /> : <Bluetooth size={15} />);
 
-  // Otomatik bağlan onay kutusu. Sadece bağlı değilken gösterilir.
-  const AutoConnectToggle = () => connected ? null : (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#B7C4B3', cursor: 'pointer', userSelect: 'none' }}>
-      <input
-        type="checkbox"
-        checked={autoConnect}
-        onChange={(e) => setAutoConnect(e.target.checked)}
-        style={{ width: 14, height: 14, accentColor: COLORS.gold }}
-      />
-      Otomatik bağlan
-    </label>
+  // Kablo (Web Serial) + WiFi (ESP32/WebSocket köprü) arasında seçim.
+  // Web Serial desteklenmeyen cihazlarda (telefon/tablet) sadece WiFi var, toggle gizlenir.
+  const ModeToggle = () => !serialSupported || connected ? null : (
+    <div style={{ display: 'flex', gap: 4 }}>
+      <button type="button" onClick={() => setMode('serial')} className="zk-btn zk-btn-secondary"
+        style={{ padding: '4px 8px', fontSize: 10, minHeight: 'auto', background: mode === 'serial' ? '#3A4235' : '#2A3128', color: '#DCE2CC', border: 'none' }}>
+        Kablo
+      </button>
+      <button type="button" onClick={() => setMode('wifi')} className="zk-btn zk-btn-secondary"
+        style={{ padding: '4px 8px', fontSize: 10, minHeight: 'auto', background: mode === 'wifi' ? '#3A4235' : '#2A3128', color: '#DCE2CC', border: 'none' }}>
+        WiFi
+      </button>
+    </div>
   );
+
+  const [deviceKey, setDeviceKey] = useState(() => localStorage.getItem('zk_kantar_device_key') || '');
+  useEffect(() => { localStorage.setItem('zk_kantar_device_key', deviceKey); }, [deviceKey]);
 
   const ModeSettings = ({ small }) => {
     if (connected) return null;
     if (mode === 'wifi') {
       return (
-        <input
-          type="text"
-          value={wifiHost}
-          onChange={(e) => setWifiHost(e.target.value)}
-          placeholder="ESP32 IP (ör. 192.168.4.1)"
-          style={{ background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: small ? '6px 6px' : '4px 6px', width: 148 }}
-        />
+        <>
+          <input
+            type="text"
+            value={wifiHost}
+            onChange={(e) => setWifiHost(e.target.value)}
+            placeholder="ESP32 IP (ör. 192.168.4.1)"
+            style={{ background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: small ? '6px 6px' : '4px 6px', width: 148 }}
+          />
+          {/* Cihaz anahtari: iPhone/iPad'de yerel baglanti kurulamadiginda
+              bulut koprusu bu anahtarla calisir. ESP32'deki DEVICE_KEY ile
+              birebir ayni olmalidir. Bos birakilirsa sadece yerel yol denenir. */}
+          <input
+            type="text"
+            value={deviceKey}
+            onChange={(e) => setDeviceKey(e.target.value.trim())}
+            placeholder="Cihaz anahtarı (iOS için)"
+            title="iPhone/iPad'de bağlanabilmek için ESP32'ye tanımladığınız cihaz anahtarını girin"
+            style={{ background: '#2A3128', color: '#DCE2CC', border: '1px solid #3A4235', borderRadius: 6, fontSize: 11, padding: small ? '6px 6px' : '4px 6px', width: 148 }}
+          />
+        </>
       );
     }
     return (
@@ -718,21 +787,19 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
           <DataStaleWarning />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <ModeToggle />
             <ModeSettings small />
-            <AutoConnectToggle />
-            {!connected ? (
-              !autoConnect && (
-                <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting}>Bağlan</button>
-              )
+            {(!connected ? (
+              <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting}>Kantara bağlan</button>
             ) : (
               <>
-                <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Bağlantıyı kes</button>
+                <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
                 <LockButton small />
                 <button className="zk-btn zk-btn-gold" disabled={lastValue === null} onClick={() => onWeightCapture(lastValue)}>
                   Bu değeri kullan
                 </button>
               </>
-            )}
+            ))}
           </div>
         </div>
       </div>
@@ -747,8 +814,8 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
           {status}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ModeToggle />
           <ModeSettings />
-          <AutoConnectToggle />
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -763,12 +830,10 @@ export function ScaleWidget({ onWeightCapture, onLiveValue, compact }) {
       <div style={{ marginTop: 8 }}><DataStaleWarning /></div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         {!connected ? (
-          !autoConnect && (
-            <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting} style={{ flex: 1, justifyContent: 'center' }}>Bağlan</button>
-          )
+          <button className="zk-btn zk-btn-gold" onClick={connect} disabled={reconnecting} style={{ flex: 1, justifyContent: 'center' }}>Kantara bağlan</button>
         ) : (
           <>
-            <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ flex: 1, justifyContent: 'center', background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Bağlantıyı kes</button>
+            <button className="zk-btn zk-btn-secondary" onClick={disconnect} style={{ flex: 1, justifyContent: 'center', background: '#2A3128', color: '#DCE2CC', border: 'none' }}>Kes</button>
             <LockButton />
             <button
               className="zk-btn zk-btn-gold"
