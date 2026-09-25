@@ -161,27 +161,9 @@ export default function KantarDefteri() {
       setPersonnelAttendance(pAtt || []); setPersonnelPayments(pPay || []);
       setBuyerPayments(bPay || []);
       setActivityLog(log || []);
-      if (pl && pl.length > 0) {
-        const normalized = pl.map((v) => ('grades' in v ? v : { id: v.id, name: v.name, hasGrades: false, singlePrice: v.price || 0, grades: [] }));
-        setPriceList(normalized);
-      } else {
-        const defaults = [
-          { id: uid(), name: 'Tirilye', hasGrades: true, singlePrice: 0, grades: [
-            { id: uid(), name: '1 Numara', price: 100 },
-            { id: uid(), name: '2 Numara', price: 90 },
-            { id: uid(), name: '3 Numara', price: 80 },
-            { id: uid(), name: '4 Numara', price: 70 },
-          ] },
-          { id: uid(), name: 'Edremit', hasGrades: true, singlePrice: 0, grades: [] },
-          { id: uid(), name: 'Domat', hasGrades: true, singlePrice: 0, grades: [] },
-          { id: uid(), name: 'Uslu', hasGrades: true, singlePrice: 0, grades: [] },
-          { id: uid(), name: 'Aydın', hasGrades: true, singlePrice: 0, grades: [] },
-          { id: uid(), name: 'Manzelin', hasGrades: true, singlePrice: 0, grades: [] },
-          { id: uid(), name: 'Yağlık', hasGrades: false, singlePrice: 60, grades: [] },
-        ];
-        setPriceList(defaults);
-        await storageSet('zk:priceList', defaults);
-      }
+      // Fiyat listesi boş başlar; ürün türleri Ayarlar'dan eklenir.
+      const normalized = (pl || []).map((v) => ('grades' in v ? v : { id: v.id, name: v.name, hasGrades: false, singlePrice: v.price || 0, grades: [] }));
+      setPriceList(normalized);
       setLoaded(true);
     })();
   }, []);
