@@ -439,7 +439,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
             ))}
             {priceList.length === 0 && <div className="zk-empty">Henüz tür eklenmedi.</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              <input className="zk-input" value={newVarietyName} onChange={(e) => setNewVarietyName(e.target.value)} placeholder="örn. Edremit" />
+              <input className="zk-input" value={newVarietyName} onChange={(e) => setNewVarietyName(e.target.value)} placeholder="örn. Buğday" />
               <button className="zk-btn zk-btn-gold" onClick={addVariety}><Plus size={13} /> Tür ekle</button>
             </div>
           </div>

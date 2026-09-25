@@ -5,7 +5,7 @@ import { computeAging } from '../hooks/index';
 
 // ---------- Turkce normalizasyon, bulanik (fuzzy) eslestirme, sayi cozumleme ----------
 // Ses tanima motoru isimleri/kelimeleri her zaman birebir dogru yazamaz
-// (or. "Mehmet" -> "Muhammed", "Tirilye" -> "Tirilya"). Bu yuzden sadece tam
+// (or. "Mehmet" -> "Muhammed", "Buğday" -> "Buday"). Bu yuzden sadece tam
 // string.includes() yerine, dusuk maliyetli bir benzerlik skoruna (Levenshtein)
 // gore en yakin adayi da deniyoruz.
 
@@ -276,7 +276,7 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
         message: `"${candidateName}" adında bir çiftçi bulamadım. Yeni çiftçi olarak eklememi ister misiniz?`,
       };
     }
-    return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Mehmet\'ten 50 kilo Tirilye 1 numara 100 liradan al".' };
+    return { ok: false, message: 'Çiftçi adını anlayamadım. Örnek: "Mehmet\'ten 50 kilo buğday 1. sınıf 100 liradan al".' };
   }
 
   // Birden fazla alan aynı anda belirsizse tek tek genel "anlayamadım" yerine
@@ -288,11 +288,11 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
   if (missing.length > 1) {
     return {
       ok: false, missingFields: missing,
-      message: `${farmer.name} anladım ama ${missing.join(' mı, ')} mı net değildi? Örnek: "50 kilo Tirilye 100 liradan" gibi tamamlar mısınız?`,
+      message: `${farmer.name} anladım ama ${missing.join(' mı, ')} mı net değildi? Örnek: "50 kilo buğday 100 liradan" gibi tamamlar mısınız?`,
     };
   }
   if (!kg) return { ok: false, missingFields: ['kilo'], message: `${farmer.name} anladım ama kilo miktarını anlayamadım. "50 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
-  if (!varietyLabel) return { ok: false, missingFields: ['tür/sınıf'], message: 'Ürün türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
+  if (!varietyLabel) return { ok: false, missingFields: ['tür/sınıf'], message: 'Ürün türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. buğday) söyleyin.' };
   if (!price) return { ok: false, missingFields: ['fiyat'], message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
 
   return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel, vadeTarihi, kgFromScale, farmerLowConfidence };
@@ -582,7 +582,7 @@ export function parseQueryCommand(text, ctx) {
     return farmer ? `En çok ${farmer.name}'den alım yaptık: ${fmtKg(byFarmer[topId])}.` : 'Çiftçi bulunamadı.';
   }
 
-  // "Depoda kaç ton Edremit var?", "depoda Gemlik ne kadar var?" gibi sorular.
+  // "Depoda kaç ton buğday var?", "depoda arpa ne kadar var?" gibi sorular.
   const asksWarehouseStock = lower.includes('depoda') || lower.includes('stokta');
   if (asksWarehouseStock) {
     const purchasedByGrade = {};
@@ -596,7 +596,7 @@ export function parseQueryCommand(text, ctx) {
       return `Depoda ${matchedGrade}: ${fmtKg(stock)}.`;
     }
     const totalStock = grades.reduce((s, g) => s + ((purchasedByGrade[g] || 0) - (soldByGrade[g] || 0)), 0);
-    return `Depoda toplam ${fmtKg(totalStock)} var. Belirli bir çeşit sormak için "Depoda Edremit kaç kilo var?" gibi sorun.`;
+    return `Depoda toplam ${fmtKg(totalStock)} var. Belirli bir çeşit sormak için "Depoda buğday kaç kilo var?" gibi sorun.`;
   }
 
   return null;
