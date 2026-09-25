@@ -11,7 +11,6 @@ import {
   Package,
   ShoppingCart,
   ListChecks,
-  Truck,
   Contact as IdCard,
   Menu,
   Sparkles,
@@ -45,14 +44,14 @@ const KantarTab = lazyTab(() => import('./components/tabs/KantarTab'), 'KantarTa
 const ReportsTab = lazyTab(() => import('./components/tabs/ReportsTab'), 'ReportsTab');
 const SatisTab = lazyTab(() => import('./components/tabs/SatisTab'), 'SatisTab');
 const SettingsTab = lazyTab(() => import('./components/tabs/SettingsTab'), 'SettingsTab');
-const ShipmentsTab = lazyTab(() => import('./components/tabs/ShipmentsTab'), 'ShipmentsTab');
+const SevkiyatTab = lazyTab(() => import('./components/tabs/SevkiyatTab'), 'SevkiyatTab');
 const ActivityLogTab = lazyTab(() => import('./components/tabs/ActivityLogTab'), 'ActivityLogTab');
 const AdminPanel = lazy(() => import('./AdminPanel.jsx'));
 
 // jsPDF ve fontlar yalnızca makbuz yazdırılırken yüklenir.
 const loadPdfHelper = () => import('./pdfHelper.js');
 
-export default function ZeytinDefteri() {
+export default function KantarDefteri() {
   const [tab, setTab] = useState('dashboard');
   const [userEmail, setUserEmail] = useState(currentUser.email || '');
   const [userBusinessName, setUserBusinessName] = useState(currentUser.businessName || '');
@@ -288,7 +287,7 @@ export default function ZeytinDefteri() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `zeytin-defteri-yedek-${todayStr()}.json`;
+    a.download = `kantar-defteri-yedek-${todayStr()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -327,18 +326,16 @@ export default function ZeytinDefteri() {
     { key: 'dashboard', label: 'Pano', icon: LayoutDashboard, group: null },
 
     { key: 'kantar', label: 'Kantar', icon: ScaleIcon, group: 'İşlemler' },
+    { key: 'alis', label: 'Alış', icon: Package, group: 'İşlemler' },
+    { key: 'satis', label: 'Satış', icon: ShoppingCart, group: 'İşlemler' },
     { key: 'shipments', label: 'Sevkiyat', icon: PackageCheck, group: 'İşlemler' },
 
     { key: 'accounting', label: 'Muhasebe', icon: Landmark, group: 'Finans' },
     { key: 'cari', label: 'Cariler', icon: Wallet, group: 'Finans' },
-    { key: 'alis', label: 'Alış', icon: Package, group: 'Finans' },
-    { key: 'satis', label: 'Satış', icon: ShoppingCart, group: 'Finans' },
+    { key: 'personnel', label: 'Personel', icon: IdCard, group: 'Finans' },
 
-    { key: 'vehicles', label: 'Araçlar', icon: Truck, group: 'Filo & Personel' },
-    { key: 'personnel', label: 'Personel', icon: IdCard, group: 'Filo & Personel' },
-    { key: 'crates', label: 'Kasa & Çuval', icon: Package2, group: 'Filo & Personel' },
-    { key: 'lab', label: 'Laboratuvar', icon: FlaskConical, group: 'Filo & Personel' },
-
+    { key: 'crates', label: 'Kasa & Çuval', icon: Package2, group: 'Diğer' },
+    { key: 'lab', label: 'Laboratuvar', icon: FlaskConical, group: 'Diğer' },
     { key: 'ai', label: 'AI Asistan', icon: Sparkles, group: 'Diğer' },
     { key: 'reports', label: 'Raporlar', icon: FileBarChart, group: 'Diğer' },
     { key: 'log', label: 'İşlem Geçmişi', icon: History, group: 'Diğer' },
@@ -354,7 +351,7 @@ export default function ZeytinDefteri() {
     muhasebe: ['dashboard', 'accounting', 'cari', 'reports', 'alis', 'settings'],
     kantar: ['dashboard', 'kantar', 'alis', 'cari'],
     depo: ['dashboard', 'kantar', 'satis', 'crates', 'lab'],
-    sevkiyat: ['dashboard', 'shipments', 'vehicles'],
+    sevkiyat: ['dashboard', 'shipments'], // Araçlar, Sevkiyat sekmesinin içinde
   };
   const allowedTabs = ROLE_TAB_ACCESS[currentUser.role];
   const visibleNavItems = allowedTabs ? navItems.filter((item) => allowedTabs.includes(item.key)) : navItems;
@@ -394,6 +391,14 @@ export default function ZeytinDefteri() {
     window.open(customerDisplayUrl, 'zk-customer-display-window', 'noopener');
   };
 
+  // Araçlar (Sevkiyat içinde) ve Personel sekmelerinin ortak FleetTab verileri
+  const fleetProps = {
+    vehicles, setVehicles, personnel, setPersonnel, purchases, sales, farmers, buyers,
+    maintenance, setMaintenance, fuel, setFuel, documents, setDocuments, insurance, setInsurance,
+    damages, setDamages, fines, setFines, tires, setTires, settings, setSettings,
+    crateMovements, setCrateMovements, personnelAttendance, setPersonnelAttendance, personnelPayments, setPersonnelPayments,
+  };
+
   const fontZoom = { small: 0.92, normal: 1, large: 1.08 }[settings.fontSize] || 1;
 
   return (
@@ -401,7 +406,7 @@ export default function ZeytinDefteri() {
       <GlobalStyle />
       <div className="zk-topbar">
         <button className="zk-topbar-btn" onClick={() => setSidebarOpen(true)} aria-label="Menüyü aç"><Menu size={20} /></button>
-        <div className="zk-topbar-brand">Zeytin Defteri</div>
+        <div className="zk-topbar-brand">Kantar Defteri</div>
       </div>
       <div className={`zk-sidebar-overlay ${sidebarOpen ? 'zk-sidebar-open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <div className="zk-shell">
@@ -410,13 +415,9 @@ export default function ZeytinDefteri() {
             {settings.logo ? (
               <img src={settings.logo} alt="Logo" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover' }} />
             ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M4 20c6-1 9-4 11-9 1.5-3.7 1-6.5-1-8.5-3 2-5 5-6 8-1.5 4-3 7-4 9.5Z" stroke="#D9C77E" strokeWidth="1.4" strokeLinejoin="round"/>
-              <ellipse cx="9.3" cy="12.5" rx="1.5" ry="2.1" transform="rotate(-35 9.3 12.5)" fill="#D9C77E"/>
-              <ellipse cx="12.6" cy="8.4" rx="1.3" ry="1.8" transform="rotate(-35 12.6 8.4)" fill="#D9C77E" opacity="0.85"/>
-            </svg>
+            <ScaleIcon size={20} color="#D9C77E" strokeWidth={1.6} />
             )}
-            <div className="zk-brand">Zeytin Defteri</div>
+            <div className="zk-brand">Kantar Defteri</div>
           </div>
           <div className="zk-brand-sub">Komisyon Yönetimi</div>
           <NotificationCenter
@@ -464,14 +465,13 @@ export default function ZeytinDefteri() {
 
           {tab === 'kantar' && <KantarTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} onPrintSaleReceipt={handlePrintSaleReceipt} />}
           {tab === 'alis' && <AlisTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} priceList={priceList} personnel={personnel} vehicles={vehicles} settings={settings} onPrintReceipt={handlePrintReceipt} activityLog={activityLog} setActivityLog={setActivityLog} />}
-          {tab === 'shipments' && <ShipmentsTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} />}
+          {tab === 'shipments' && <SevkiyatTab vehicles={vehicles} personnel={personnel} buyers={buyers} shipments={shipments} setShipments={setShipments} fleetProps={fleetProps} />}
 
           {tab === 'accounting' && <AccountingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} checksNotes={checksNotes} setChecksNotes={setChecksNotes} settings={settings} setSettings={setSettings} payments={payments} setPayments={setPayments} expenses={expenses} setExpenses={setExpenses} cashEntries={cashEntries} setCashEntries={setCashEntries} farmers={farmers} purchases={purchases} buyers={buyers} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} sales={sales} onPrintPayment={handlePrintPayment} />}
           {tab === 'cari' && <CariTab farmers={farmers} setFarmers={setFarmers} buyers={buyers} setBuyers={setBuyers} purchases={purchases} payments={payments} setPayments={setPayments} sales={sales} selectedFarmerId={selectedFarmerId} setSelectedFarmerId={setSelectedFarmerId} onPrintReceipt={handlePrintReceipt} settings={settings} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} onPrintSaleReceipt={handlePrintSaleReceipt} activityLog={activityLog} setActivityLog={setActivityLog} />}
           {tab === 'satis' && <SatisTab purchases={purchases} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} settings={settings} onPrintSaleReceipt={handlePrintSaleReceipt} buyerPayments={buyerPayments} setBuyerPayments={setBuyerPayments} activityLog={activityLog} setActivityLog={setActivityLog} />}
 
-          {tab === 'vehicles' && <FleetTab lockedView="vehicles" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} setSettings={setSettings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
-          {tab === 'personnel' && <FleetTab lockedView="personnel" vehicles={vehicles} setVehicles={setVehicles} personnel={personnel} setPersonnel={setPersonnel} purchases={purchases} sales={sales} farmers={farmers} buyers={buyers} maintenance={maintenance} setMaintenance={setMaintenance} fuel={fuel} setFuel={setFuel} documents={documents} setDocuments={setDocuments} insurance={insurance} setInsurance={setInsurance} damages={damages} setDamages={setDamages} fines={fines} setFines={setFines} tires={tires} setTires={setTires} settings={settings} setSettings={setSettings} crateMovements={crateMovements} setCrateMovements={setCrateMovements} personnelAttendance={personnelAttendance} setPersonnelAttendance={setPersonnelAttendance} personnelPayments={personnelPayments} setPersonnelPayments={setPersonnelPayments} />}
+          {tab === 'personnel' && <FleetTab lockedView="personnel" {...fleetProps} />}
           {tab === 'crates' && <CrateInventoryTab farmers={farmers} movements={crateMovements} setMovements={setCrateMovements} settings={settings} setSettings={setSettings} activityLog={activityLog} setActivityLog={setActivityLog} />}
           {tab === 'lab' && <LabTab farmers={farmers} purchases={purchases} results={labResults} setResults={setLabResults} />}
 

@@ -21,7 +21,7 @@ export function PrintArea({ purchase, farmer, settings }) {
   const [qrUrl, setQrUrl] = useState(null);
   useEffect(() => {
     if (!purchase) return;
-    const verifyText = `ZeytinDefteri|Makbuz:${purchase.makbuzNo}|Tarih:${purchase.date}|Tutar:${purchase.netPayment}`;
+    const verifyText = `KantarDefteri|Makbuz:${purchase.makbuzNo}|Tarih:${purchase.date}|Tutar:${purchase.netPayment}`;
     getQrDataUrl(verifyText).then(setQrUrl);
   }, [purchase && purchase.id]);
   if (!purchase || !farmer) return <div id="zk-print-area" />;
@@ -34,7 +34,7 @@ export function PrintArea({ purchase, farmer, settings }) {
       }}>
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           {settings.logo && <img src={settings.logo} alt="Logo" style={{ maxWidth: 60, maxHeight: 60, marginBottom: 4 }} />}
-          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Zeytin Komisyonculuğu'}</div>
+          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Kantar Defteri'}</div>
           {settings.address && <div style={{ fontSize: 10 }}>{settings.address}</div>}
           {settings.phone && <div style={{ fontSize: 10 }}>Tel: {settings.phone}</div>}
           {settings.taxNo && <div style={{ fontSize: 10 }}>VKN: {settings.taxNo}{settings.taxOffice ? ` · ${settings.taxOffice}` : ''}</div>}
@@ -48,7 +48,7 @@ export function PrintArea({ purchase, farmer, settings }) {
         {farmer.tcNo && <div>TC No: {farmer.tcNo}</div>}
         {farmer.address && <div>Adres: {farmer.address}</div>}
         <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>Ürün: Zeytin</div>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Ürünler</div>
         {purchase.items && purchase.items.map((it) => (
           <div key={it.id} style={{ marginBottom: 4 }}>
             <div>{it.grade}</div>
@@ -125,7 +125,7 @@ export function SalePrintArea({ sale, buyer, settings }) {
       }}>
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           {settings.logo && <img src={settings.logo} alt="Logo" style={{ maxWidth: 60, maxHeight: 60, marginBottom: 4 }} />}
-          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Zeytin Komisyonculuğu'}</div>
+          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Kantar Defteri'}</div>
           {settings.address && <div style={{ fontSize: 10 }}>{settings.address}</div>}
           {settings.phone && <div style={{ fontSize: 10 }}>Tel: {settings.phone}</div>}
           {settings.taxNo && <div style={{ fontSize: 10 }}>VKN: {settings.taxNo}{settings.taxOffice ? ` · ${settings.taxOffice}` : ''}</div>}
@@ -163,7 +163,7 @@ export function PaymentPrintArea({ row, settings }) {
       }}>
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           {settings.logo && <img src={settings.logo} alt="Logo" style={{ maxWidth: 60, maxHeight: 60, marginBottom: 4 }} />}
-          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Zeytin Komisyonculuğu'}</div>
+          <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14, fontWeight: 600 }}>{settings.businessName || 'Kantar Defteri'}</div>
           {settings.address && <div style={{ fontSize: 10 }}>{settings.address}</div>}
           {settings.phone && <div style={{ fontSize: 10 }}>Tel: {settings.phone}</div>}
         </div>

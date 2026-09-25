@@ -1,4 +1,4 @@
--- Zeytin Defteri - Çoklu işletme (multi-tenant) göçü
+-- Kantar Defteri - Çoklu işletme (multi-tenant) göçü
 -- Bunu SQL Editor'e yapıştırıp "Run" deyin.
 -- Bu betik: her Google hesabının kendi izole verisine sahip olmasını,
 -- ve iki admin hesabın yeni kullanıcı ekleyip çıkarabilmesini sağlar.

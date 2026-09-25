@@ -83,7 +83,7 @@ export function ExecutiveSummarySection({ farmers, purchases, sales, expenses, p
       </div>
       <div className="zk-card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 14, lineHeight: 1.8, color: COLORS.ink }}>
-          Bu ay <strong>{fmtKg(totalKg)}</strong> zeytin alındı, çiftçilere toplam <strong>{fmtTL(totalPaid)}</strong> ödendi
+          Bu ay <strong>{fmtKg(totalKg)}</strong> ürün alındı, çiftçilere toplam <strong>{fmtTL(totalPaid)}</strong> ödendi
           {topFarmer && <> — en çok çalışılan çiftçi <strong>{topFarmer.name}</strong> oldu</>}.
           Satışlardan <strong>{fmtTL(totalSalesAmount)}</strong> gelir elde edildi, giderler <strong>{fmtTL(totalExpenseAmount)}</strong> olarak gerçekleşti.
           Tahmini net kâr <strong style={{ color: estProfit >= 0 ? COLORS.olive : COLORS.red }}>{fmtTL(estProfit)}</strong>.{' '}

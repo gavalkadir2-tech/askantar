@@ -292,7 +292,7 @@ export function parsePurchaseCommand(text, farmers, priceList, scaleKg) {
     };
   }
   if (!kg) return { ok: false, missingFields: ['kilo'], message: `${farmer.name} anladım ama kilo miktarını anlayamadım. "50 kilo" gibi net söyleyin ya da kantarı bağlayın.` };
-  if (!varietyLabel) return { ok: false, missingFields: ['tür/sınıf'], message: 'Zeytin türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
+  if (!varietyLabel) return { ok: false, missingFields: ['tür/sınıf'], message: 'Ürün türünü/sınıfını anlayamadım. Fiyat listenizdeki bir tür adını (örn. Tirilye) söyleyin.' };
   if (!price) return { ok: false, missingFields: ['fiyat'], message: 'Fiyatı anlayamadım. "100 liradan" gibi belirtin.' };
 
   return { ok: true, type: 'purchase', farmer, kg, price, varietyLabel, vadeTarihi, kgFromScale, farmerLowConfidence };
@@ -379,7 +379,7 @@ export function parseSaleCommand(text, buyers, priceList, scaleKg) {
         message: `"${candidateName}" adında bir cari bulamadım. Yeni cari olarak eklememi ister misiniz?`,
       };
     }
-    return { ok: false, message: 'Hangi cariye satış yapıldığını anlayamadım. Örnek: "Ege Zeytinyağı\'na 200 kilo 120 liradan sat".' };
+    return { ok: false, message: 'Hangi cariye satış yapıldığını anlayamadım. Örnek: "Ege Gıda\'ya 200 kilo 120 liradan sat".' };
   }
 
   const missing = [];
@@ -800,7 +800,7 @@ export function interpretAiParsedResult(parsed, ctx, text) {
   return null;
 }
 
-export const GROQ_SYSTEM_PROMPT = (ctx) => `Sen bir zeytin komisyonculuğu uygulamasında sesli komutları ayrıştıran bir asistansın. Kullanıcının söylediği Türkçe cümleyi analiz et ve SADECE aşağıdaki JSON formatlarından birini döndür, başka hiçbir açıklama veya metin ekleme:
+export const GROQ_SYSTEM_PROMPT = (ctx) => `Sen bir tarım ürünü komisyonculuğu (kantar) uygulamasında sesli komutları ayrıştıran bir asistansın. Kullanıcının söylediği Türkçe cümleyi analiz et ve SADECE aşağıdaki JSON formatlarından birini döndür, başka hiçbir açıklama veya metin ekleme:
 
 Alım (çiftçiden) için: {"action":"purchase","farmerName":"...","variety":"...","grade":"...","kg":123,"price":45.5,"vadeTarihi":"YYYY-AA-GG veya null"}
 Yeni çiftçi için: {"action":"add_farmer","name":"...","phone":"..."}
@@ -814,7 +814,7 @@ Hiçbiri değilse: {"action":"unknown"}
 
 Bilinen çiftçiler: ${ctx.farmers.map((f) => f.name).join(', ') || 'yok'}
 Bilinen cariler (alıcılar): ${(ctx.buyers || []).map((b) => b.name).join(', ') || 'yok'}
-Bilinen zeytin türleri: ${ctx.priceList.map((v) => v.name).join(', ') || 'yok'}
+Bilinen ürün türleri: ${ctx.priceList.map((v) => v.name).join(', ') || 'yok'}
 Bugünün tarihi: ${todayStr()}${ctx.scaleKg != null ? `\nKantar bağlı ve şu an ${ctx.scaleKg} kg okuyor — kullanıcı alım/satış cümlesinde kilo söylemediyse "kg" alanını boş bırak, otomatik doldurulacak.` : ''}`;
 
 // Tarayıcıdan doğrudan Groq API'sine istek atar — kullanıcı Ayarlar'dan kendi

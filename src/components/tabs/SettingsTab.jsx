@@ -313,7 +313,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
                 <label className="zk-label">Sezon başlangıç tarihi (ay-gün)</label>
                 <input className="zk-input" type="text" value={seasonStartDate} onChange={(e) => setSeasonStartDate(e.target.value)} placeholder="10-01" />
                 <div style={{ fontSize: 10.5, color: COLORS.inkSoft, marginTop: 4 }}>
-                  Raporlar'daki "Sezon toplamı" bu tarihten (varsayılan 1 Ekim, zeytin hasadı başlangıcı) bugüne kadarki verileri toplar.
+                  Raporlar'daki "Sezon toplamı" bu tarihten (varsayılan 1 Ekim, hasat sezonu başlangıcı) bugüne kadarki verileri toplar.
                 </div>
               </div>
             </div>
@@ -389,7 +389,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 14 }}>
               <div>
                 <label className="zk-label">Firma / komisyoncu adı</label>
-                <input className="zk-input" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="örn. Ahmet Yılmaz Zeytin Komisyonculuğu" />
+                <input className="zk-input" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="örn. Ahmet Yılmaz Komisyonculuk" />
               </div>
               <div>
                 <label className="zk-label">Telefon</label>
@@ -413,7 +413,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
 
         {tab === 'fiyat' && (
           <div className="zk-card">
-            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Zeytin türleri ve fiyat listesi (bu hafta)</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Ürün türleri ve fiyat listesi (bu hafta)</div>
             <div style={{ fontSize: 11.5, color: COLORS.inkSoft, marginBottom: 12 }}>
               Her tür için numaraya ayrılıp ayrılmadığını seçin. Yeni alım ekranında otomatik gelir.
               {settings.priceListUpdatedAt && ` Son toplu güncelleme: ${new Date(settings.priceListUpdatedAt).toLocaleString('tr-TR')}.`}
@@ -602,7 +602,7 @@ export function SettingsTab({ settings, setSettings, priceList, setPriceList, on
                   addSheet(allData.bankAccounts.map((b) => ({ 'Banka': b.bankName, 'Hesap': b.accountName || '', 'IBAN': b.iban || '', 'Bakiye': b.balance })), 'Banka Hesaplari');
                   addSheet(allData.checksNotes.map((c) => ({ 'Tur': c.type, 'Yon': c.direction, 'Kimden-Kime': c.party, 'Tutar': c.amount, 'Vade': c.dueDate, 'Durum': c.status })), 'Cek-Senet');
                   addSheet(allData.shipments.map((s) => ({ 'Tarih': s.date, 'Irsaliye No': s.waybillNo, 'Plaka': s.vehiclePlaka, 'Sofor': s.driverName, 'Alici': s.buyerName, 'Kg': s.kg, 'Durum': s.status })), 'Sevkiyat');
-                  XLSX.writeFile(wb, `zeytin-defteri-tum-veri-${todayStr()}.xlsx`);
+                  XLSX.writeFile(wb, `kantar-defteri-tum-veri-${todayStr()}.xlsx`);
                 }}
               >
                 <Download size={14} /> Tümünü Excel'e aktar

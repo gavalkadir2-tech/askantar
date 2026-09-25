@@ -12,12 +12,12 @@ export function formatPhoneForWhatsApp(phone) {
 
 export function buildWhatsAppReceiptText(purchase, farmer, settings) {
   const lines = [];
-  lines.push(`*${settings.businessName || 'Zeytin Komisyonculuğu'}*`);
+  lines.push(`*${settings.businessName || 'Kantar Defteri'}*`);
   lines.push(`Müstahsil Makbuzu No: ${purchase.makbuzNo}`);
   lines.push(`Tarih: ${fmtDate(purchase.date)}${purchase.time ? ' · ' + purchase.time : ''}`);
   lines.push(`Sayın ${farmer.name},`);
   lines.push('');
-  lines.push('Zeytin teslimatınızın dökümü:');
+  lines.push('Teslimatınızın dökümü:');
   (purchase.items || []).forEach((it) => {
     lines.push(`• ${it.grade}: ${fmtKg(it.kg)} × ${fmtTL(it.pricePerKg)}/kg = ${fmtTL(it.amount)}`);
   });
@@ -38,7 +38,7 @@ export function buildWhatsAppReceiptText(purchase, farmer, settings) {
 
 export function buildWhatsAppPaymentText(row, settings) {
   const lines = [];
-  lines.push(`*${settings?.businessName || 'Zeytin Komisyonculuğu'}*`);
+  lines.push(`*${settings?.businessName || 'Kantar Defteri'}*`);
   lines.push(row.kind === 'odeme' ? (row.payType === 'avans' ? 'Avans Makbuzu' : 'Ödeme Makbuzu') : 'Tahsilat Makbuzu');
   lines.push('');
   lines.push(`Sayın ${row.partyName},`);
@@ -52,7 +52,7 @@ export function buildWhatsAppPaymentText(row, settings) {
 
 export function buildWhatsAppSaleReceiptText(sale, buyer, settings) {
   const lines = [];
-  lines.push(`*${settings?.businessName || 'Zeytin Komisyonculuğu'}*`);
+  lines.push(`*${settings?.businessName || 'Kantar Defteri'}*`);
   lines.push(`Satış Makbuzu No: ${sale.makbuzNo}`);
   lines.push(`Tarih: ${fmtDate(sale.date)}`);
   lines.push(`Sayın ${buyer ? buyer.name : ''},`);
@@ -67,7 +67,7 @@ export function buildWhatsAppSaleReceiptText(sale, buyer, settings) {
 
 export function buildWhatsAppBalanceReminderText(farmer, balance, unpaidPurchases, settings) {
   const lines = [];
-  lines.push(`*${settings.businessName || 'Zeytin Komisyonculuğu'}*`);
+  lines.push(`*${settings.businessName || 'Kantar Defteri'}*`);
   lines.push(`Sayın ${farmer.name},`);
   lines.push('');
   if (balance > 0) {

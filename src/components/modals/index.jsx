@@ -238,7 +238,7 @@ export function AddCariModal({ onClose, onSave, initialData, lockType, farmers =
       )}
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">{type === 'tedarikci' ? 'Ad soyad' : 'Ad / firma adı'}</label>
-        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} autoFocus placeholder={type === 'tedarikci' ? 'örn. Mehmet Yılmaz' : 'örn. Ege Zeytinyağı A.Ş.'} />
+        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} autoFocus placeholder={type === 'tedarikci' ? 'örn. Mehmet Yılmaz' : 'örn. Ege Gıda A.Ş.'} />
         {error && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 5 }}>{error}</div>}
       </div>
       <div style={{ marginBottom: 12 }}>
@@ -545,7 +545,7 @@ export function BuyerQuickForm({ onSave, buyers = [] }) {
     <>
       <div style={{ marginBottom: 12 }}>
         <label className="zk-label">Alıcı / firma adı</label>
-        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} placeholder="örn. Ege Zeytinyağı A.Ş." autoFocus />
+        <input className="zk-input" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(''); }} placeholder="örn. Ege Gıda A.Ş." autoFocus />
         {error && <div style={{ color: '#c0392b', fontSize: 12, marginTop: 5 }}>{error}</div>}
       </div>
       <div style={{ marginBottom: 12 }}>
