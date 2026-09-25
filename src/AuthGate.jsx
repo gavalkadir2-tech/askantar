@@ -130,7 +130,7 @@ export default function AuthGate({ children }) {
     return (
       <CenterScreen>
         <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 24, fontWeight: 600, color: COLORS.ink, marginBottom: 6 }}>
-          Zeytin Defteri
+          Kantar Defteri
         </div>
         {loginMode === 'google' ? (
           <>

@@ -1,4 +1,4 @@
-# Zeytin Defteri — src/App.jsx bölünmüş hali
+# Kantar Defteri — src/App.jsx bölünmüş hali
 
 `src/App.jsx` (9437 satır, 516 KB, 70+ bileşen/fonksiyon tek dosyada) 37 dosyaya
 bölündü. Hiçbir mantık değiştirilmedi — sadece kod, ilgili olduğu yere taşındı ve
@@ -12,7 +12,7 @@ buluyor.
 
 ```
 src/
-  App.jsx                        <- artık sadece ana ZeytinDefteri bileşeni (479 satır)
+  App.jsx                        <- artık sadece ana KantarDefteri bileşeni (479 satır)
   lib/
     format.js                    <- tarih/sayı formatlama, storage, matematik yardımcıları
     whatsapp.js                  <- WhatsApp mesaj şablonları

@@ -92,7 +92,7 @@ export function CustomerDisplayView({ businessName, logo, channelId }) {
     <div style={headerStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.2vw' }}>
         {logo && <img src={logo} alt="Logo" style={{ maxHeight: '5vh' }} />}
-        <div style={{ fontSize: '2.4vw', fontWeight: 600 }}>{businessName || 'Zeytin Komisyonculuğu'}</div>
+        <div style={{ fontSize: '2.4vw', fontWeight: 600 }}>{businessName || 'Kantar Defteri'}</div>
       </div>
       <div style={{ fontSize: '2.2vw', color: '#D8D2C0', fontVariantNumeric: 'tabular-nums' }}>
         {clock.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {clock.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}

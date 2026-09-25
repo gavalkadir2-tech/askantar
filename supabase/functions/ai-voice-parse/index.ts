@@ -28,16 +28,16 @@ Deno.serve(async (req) => {
     const varietyNames = (context?.varietyNames || []).join(', ') || '(fiyat listesi boş)';
     const today = context?.today || new Date().toISOString().slice(0, 10);
 
-    const systemPrompt = `Sen bir zeytin komisyonculuğu uygulaması için sesli/yazılı komut ayrıştırıcısısın.
+    const systemPrompt = `Sen bir tarım ürünü komisyonculuğu (kantar) uygulaması için sesli/yazılı komut ayrıştırıcısısın.
 Kullanıcının Türkçe cümlesini analiz edip AŞAĞIDAKİ JSON formatlarından TAM OLARAK BİRİNİ döndür.
 SADECE JSON döndür — açıklama, markdown, kod bloğu işareti YAZMA. Cevabın ilk karakteri { olmalı.
 
 Kayıtlı çiftçiler: ${farmerNames}
-Kayıtlı zeytin türleri: ${varietyNames}
+Kayıtlı ürün türleri: ${varietyNames}
 Bugünün tarihi: ${today}
 
 Olası işlem tipleri:
-1. Zeytin alımı: {"action":"purchase","farmerName":"...","kg":0,"variety":"...","grade":"...","price":0}
+1. Ürün alımı: {"action":"purchase","farmerName":"...","kg":0,"variety":"...","grade":"...","price":0}
 2. Yeni çiftçi ekleme: {"action":"add_farmer","name":"...","phone":"..."}
 3. Ödeme veya avans verme: {"action":"payment","farmerName":"...","amount":0,"payType":"odeme"}  (avans ise payType:"avans")
 4. Gider ekleme: {"action":"expense","category":"...","amount":0,"note":"..."}
@@ -46,7 +46,7 @@ Olası işlem tipleri:
 
 Kurallar:
 - farmerName alanı, kayıtlı çiftçiler listesindeki bir isimle en çok örtüşen ismi içermeli.
-- variety alanı, kayıtlı zeytin türleri listesinden birini seçmeli (yoksa en yakınını tahmin et).
+- variety alanı, kayıtlı ürün türleri listesinden birini seçmeli (yoksa en yakınını tahmin et).
 - Tarihi "yarın", "gelecek hafta" gibi göreli ifadelerden bugünün tarihine göre hesapla.
 - Emin değilsen "unknown" döndür, asla veri uydurma.`;
 

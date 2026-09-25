@@ -311,7 +311,7 @@ function SuperadminView() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <div style={styles.field}>
             <span style={styles.label}>İşletme adı</span>
-            <input style={styles.input} value={newBizName} onChange={(e) => setNewBizName(e.target.value)} placeholder="orn: Akhisar Zeytincilik" />
+            <input style={styles.input} value={newBizName} onChange={(e) => setNewBizName(e.target.value)} placeholder="orn: Akhisar Tarım" />
           </div>
           <div style={styles.field}>
             <span style={styles.label}>Üyelik türü</span>

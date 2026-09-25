@@ -26,7 +26,7 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
   const [toB, setToB] = useState(`${currentYear - 1}-12-31`);
 
   // "Bu hafta": Pazartesi gününden bugüne. "Sezon": Ayarlar'daki sezon başlangıç
-  // tarihinden (varsayılan 1 Ekim — zeytin hasat sezonu) bugüne; eğer bugün bu
+  // tarihinden (varsayılan 1 Ekim — hasat sezonu) bugüne; eğer bugün bu
   // yılki başlangıçtan önceyse bir önceki yılın başlangıcı esas alınır.
   const weekStartStr = useMemo(() => {
     const now = new Date();
@@ -276,7 +276,7 @@ export function ReportsTab({ farmers, purchases, sales, buyers, expenses, person
     const wsCollections = XLSX.utils.json_to_sheet(collectionRows);
     XLSX.utils.book_append_sheet(wb, wsCollections, 'Tahsilatlar (Aliciden)');
 
-    XLSX.writeFile(wb, `zeytin-rapor-${todayStr()}.xlsx`);
+    XLSX.writeFile(wb, `kantar-rapor-${todayStr()}.xlsx`);
   };
 
   return (

@@ -758,7 +758,7 @@ export function CostAnalysisSection({ vehicleId, maintenance, fuel, fines, insur
       <div className="zk-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', marginBottom: 16 }}>
         <StatCard label="Toplam maliyet" value={fmtTL(totalCost)} tone={COLORS.red} icon={TrendingUp} />
         <StatCard label="Km başına maliyet" value={costPerKm ? fmtTL(costPerKm) : '—'} tone={COLORS.blue} icon={Gauge} />
-        <StatCard label="Taşınan zeytin" value={fmtKg(totalPickupKg)} tone={COLORS.olive} icon={Package} />
+        <StatCard label="Taşınan ürün" value={fmtKg(totalPickupKg)} tone={COLORS.olive} icon={Package} />
       </div>
 
       <div className="zk-card" style={{ marginBottom: 16 }}>

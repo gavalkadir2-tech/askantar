@@ -52,7 +52,7 @@ async function buildPurchaseReceiptDoc(purchase, farmer, settings) {
 
   doc.setFont('Roboto', 'bold');
   doc.setFontSize(11);
-  doc.text((settings && settings.businessName) || 'Zeytin Komisyonculuğu', cx, y, { align: 'center' });
+  doc.text((settings && settings.businessName) || 'Kantar Defteri', cx, y, { align: 'center' });
   y += 5;
   doc.setFont('Roboto', 'normal');
   doc.setFontSize(7.5);
@@ -84,7 +84,7 @@ async function buildPurchaseReceiptDoc(purchase, farmer, settings) {
   doc.line(4, y, 76, y);
   y += 4;
   doc.setFont('Roboto', 'bold');
-  line('Ürün: Zeytin');
+  line('Ürünler');
   doc.setFont('Roboto', 'normal');
   (purchase.items || []).forEach((it) => {
     doc.setFontSize(7.5);
@@ -184,7 +184,7 @@ async function buildSaleReceiptDoc(sale, buyer, settings) {
 
   doc.setFont('Roboto', 'bold');
   doc.setFontSize(11);
-  doc.text((settings && settings.businessName) || 'Zeytin Komisyonculuğu', cx, y, { align: 'center' });
+  doc.text((settings && settings.businessName) || 'Kantar Defteri', cx, y, { align: 'center' });
   y += 5;
   doc.setFont('Roboto', 'normal');
   doc.setFontSize(7.5);
@@ -262,7 +262,7 @@ async function buildPaymentReceiptDoc(row, settings) {
 
   doc.setFont('Roboto', 'bold');
   doc.setFontSize(11);
-  doc.text((settings && settings.businessName) || 'Zeytin Komisyonculuğu', cx, y, { align: 'center' });
+  doc.text((settings && settings.businessName) || 'Kantar Defteri', cx, y, { align: 'center' });
   y += 6;
   doc.setLineDashPattern([1, 1], 0);
   doc.line(4, y, 76, y);
