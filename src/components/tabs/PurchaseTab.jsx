@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { CustomerDisplayButtons, PaymentMethodPicker, ScaleWidget, SearchableSelect } from '../common/index';
 import { AddFarmerModal, AddPersonnelModal, AddVehicleModal } from '../modals/index';
-import { fmtDate, fmtKg, fmtTL, localDateStr, nextReceiptNo, stopajOraniHesapla, storageSet, todayStr, uid } from '../../lib/format';
+import { fmtDate, fmtKg, fmtTL, localDateStr, nextReceiptNo, storageSet, todayStr, uid } from '../../lib/format';
 import { COLORS } from '../../lib/theme';
 import { buildWhatsAppReceiptText, formatPhoneForWhatsApp } from '../../lib/whatsapp';
 
@@ -28,15 +28,10 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const [manualDateTime, setManualDateTime] = useState(false);
   const [manualDate, setManualDate] = useState(todayStr());
   const [manualTime, setManualTime] = useState('');
-  const [commissionRate, setCommissionRate] = useState((settings.defaultCommissionRate ?? 0.5).toString());
-  const [borsaTescilli, setBorsaTescilli] = useState(false);
-  const [noDeduction, setNoDeduction] = useState(settings.defaultNoDeduction ?? true);
   const [paymentMethod, setPaymentMethod] = useState('nakit');
   const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [note, setNote] = useState('');
   const [vadeTarihi, setVadeTarihi] = useState('');
-  const [applyBagkur, setApplyBagkur] = useState(false);
-  const [bagkurRate, setBagkurRate] = useState((settings.defaultBagkurRate ?? 1).toString());
   const [lastSaved, setLastSaved] = useState(null);
 
   const [randiman, setRandiman] = useState('');
@@ -81,10 +76,6 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
     const t = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(t);
   }, []);
-
-  useEffect(() => {
-    setApplyBagkur(farmer ? !!farmer.bagkurStatus : false);
-  }, [farmerId]);
 
   useEffect(() => {
     if (!selectedVariety) return;
@@ -186,14 +177,11 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
   const amount = items.reduce((s, i) => s + i.amount, 0);
   const fireTutari = amount * ((parseFloat(firePercent) || 0) / 100);
   const amountAfterFire = amount - fireTutari;
-  const commissionAmount = noDeduction ? 0 : netKg * (parseFloat(commissionRate) || 0);
-  const stopajOrani = stopajOraniHesapla(borsaTescilli);
-  const stopajTutari = noDeduction ? 0 : amountAfterFire * (stopajOrani / 100);
-  const bagkurTutari = (!noDeduction && applyBagkur) ? amountAfterFire * ((parseFloat(bagkurRate) || 0) / 100) : 0;
   const hammaliyeVal = parseFloat(hammaliyeTutari) || 0;
   const nakliyeVal = parseFloat(nakliyeTutari) || 0;
   const cuvalVal = parseFloat(cuvalKesintisi) || 0;
-  const netPayment = amountAfterFire - commissionAmount - stopajTutari - bagkurTutari - hammaliyeVal - nakliyeVal - cuvalVal;
+  // Kantarlı alışta komisyon / stopaj / BAĞ-KUR kesilmez; yalnızca fire ve masraflar düşülür.
+  const netPayment = amountAfterFire - hammaliyeVal - nakliyeVal - cuvalVal;
 
   const canSave = farmerId && items.length > 0 && (paymentMethod !== 'banka' || paymentBankAccountId);
 
@@ -214,14 +202,11 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
       currentLine: { grade: lineLabel, kg: lineNetKg, pricePerKg: linePriceVal, crateCount },
       netKg: netKg + lineNetKg,
       grossAmount: amount + lineNetKg * linePriceVal,
-      deductions: noDeduction ? null : {
-        komisyon: commissionAmount, stopaj: stopajTutari, bagkur: bagkurTutari,
-        hammaliye: hammaliyeVal, nakliye: nakliyeVal, cuval: cuvalVal, fire: fireTutari,
-      },
+      deductions: { hammaliye: hammaliyeVal, nakliye: nakliyeVal, cuval: cuvalVal, fire: fireTutari },
       netAmount: netPayment,
       randiman: parseFloat(randiman) || null, asit: parseFloat(asit) || null, nem: parseFloat(nem) || null,
     });
-  }, [farmer, items, lineVariety, lineGradeName, lineKg, linePrice, lineDara, dateTimeLabel, broadcastLive, personnelId, vehicleId, noDeduction, commissionAmount, stopajTutari, bagkurTutari, hammaliyeVal, nakliyeVal, cuvalVal, fireTutari, randiman, asit, nem, personnel, vehicles, amount, netKg, netPayment]);
+  }, [farmer, items, lineVariety, lineGradeName, lineKg, linePrice, lineDara, dateTimeLabel, broadcastLive, personnelId, vehicleId, hammaliyeVal, nakliyeVal, cuvalVal, fireTutari, randiman, asit, nem, personnel, vehicles, amount, netKg, netPayment]);
 
   const handlePhotoUpload = (file) => {
     if (!file) return;
@@ -263,15 +248,16 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
       vehiclePlaka: vehicle ? vehicle.plaka : '',
       items,
       netKg,
-      noDeduction,
-      commissionRate: noDeduction ? 0 : (parseFloat(commissionRate) || 0),
-      commissionAmount,
-      borsaTescilli,
-      stopajOrani: noDeduction ? 0 : stopajOrani,
-      stopajTutari,
-      applyBagkur: noDeduction ? false : applyBagkur,
-      bagkurRate: parseFloat(bagkurRate) || 0,
-      bagkurTutari,
+      // Raporlar ve makbuzlarla uyum için kesinti alanları sıfır olarak saklanır.
+      noDeduction: true,
+      commissionRate: 0,
+      commissionAmount: 0,
+      borsaTescilli: false,
+      stopajOrani: 0,
+      stopajTutari: 0,
+      applyBagkur: false,
+      bagkurRate: 0,
+      bagkurTutari: 0,
       randiman: parseFloat(randiman) || null,
       asit: parseFloat(asit) || null,
       nem: parseFloat(nem) || null,
@@ -485,38 +471,6 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
             </table>
           )}
 
-          <label className="zk-checkbox-row" style={{ background: COLORS.oliveSoft, padding: '9px 12px', borderRadius: 8, marginBottom: 12 }}>
-            <input type="checkbox" checked={noDeduction} onChange={(e) => setNoDeduction(e.target.checked)} />
-            Kesintisiz hesapla (komisyon / stopaj / BAĞ-KUR uygulanmasın, tutarın tamamı ödensin)
-          </label>
-
-          {!noDeduction && (
-            <div className="zk-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 12 }}>
-              <div>
-                <label className="zk-label">Komisyon (₺/kg)</label>
-                <input className="zk-input" type="text" inputMode="decimal" step="0.01" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value.replace(',', '.'))} placeholder="0.50" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 6 }}>
-                <label className="zk-checkbox-row">
-                  <input type="checkbox" checked={borsaTescilli} onChange={(e) => setBorsaTescilli(e.target.checked)} />
-                  Ticaret borsasına tescilli
-                </label>
-                <label className="zk-checkbox-row">
-                  <input type="checkbox" checked={applyBagkur} onChange={(e) => setApplyBagkur(e.target.checked)} />
-                  BAĞ-KUR kesintisi uygula (%)
-                  <input
-                    className="zk-input"
-                    type="text" inputMode="decimal"
-                    value={bagkurRate}
-                    onChange={(e) => setBagkurRate(e.target.value.replace(',', '.'))}
-                    style={{ width: 55, padding: '4px 6px' }}
-                    disabled={!applyBagkur}
-                  />
-                </label>
-              </div>
-            </div>
-          )}
-
           <div style={{ marginBottom: 12 }}>
             <label className="zk-label">Hazır notlar</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -592,13 +546,6 @@ export function PurchaseTab({ farmers, setFarmers, purchases, setPurchases, onPr
           <div style={{ background: COLORS.paper, borderRadius: 10, padding: 14, marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12.5 }}>
             <div>Ürün tutarı ({fmtKg(netKg)})</div><div style={{ textAlign: 'right', fontWeight: 600 }}>{fmtTL(amount)}</div>
             {fireTutari > 0 && (<><div style={{ color: COLORS.red }}>Fire/İskonto (%{firePercent})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.red }}>− {fmtTL(fireTutari)}</div></>)}
-            {!noDeduction && (
-              <>
-                <div style={{ color: COLORS.gold }}>Komisyon ({commissionRate || 0} ₺/kg)</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.gold }}>− {fmtTL(commissionAmount)}</div>
-                <div style={{ color: COLORS.blue }}>Stopaj (%{stopajOrani})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.blue }}>− {fmtTL(stopajTutari)}</div>
-                {applyBagkur && (<><div style={{ color: COLORS.red }}>BAĞ-KUR (%{bagkurRate || 0})</div><div style={{ textAlign: 'right', fontWeight: 600, color: COLORS.red }}>− {fmtTL(bagkurTutari)}</div></>)}
-              </>
-            )}
             {hammaliyeVal > 0 && (<><div>Hammaliye</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(hammaliyeVal)}</div></>)}
             {nakliyeVal > 0 && (<><div>Nakliye</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(nakliyeVal)}</div></>)}
             {cuvalVal > 0 && (<><div>Çuval/kasa</div><div style={{ textAlign: 'right', fontWeight: 600 }}>− {fmtTL(cuvalVal)}</div></>)}

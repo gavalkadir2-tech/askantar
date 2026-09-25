@@ -38,7 +38,7 @@ export function VoiceAssistant({ farmers, setFarmers, priceList, purchases, setP
   const [listening, setListening] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: 'Merhaba! Alım, satış, çiftçi ekleme, ödeme/avans, tahsilat, gider ve hatırlatma gibi işlemleri sesli veya yazarak yapabilirsiniz. Bakiye de sorabilirsiniz. Örnek: "Mehmet\'ten 50 kilo Tirilye 100 liradan al", "Ayşe\'ye 200 kilo 120 liradan sat", "Ahmet\'in bakiyesi ne kadar?". Tek cümlede iki işlem de yapabilirsiniz: "Ahmet\'ten 50 kilo al, 200 lira da avans ver". Bir kayıt onay beklerken sadece "evet" ya da "hayır" diyerek de cevap verebilirsiniz; "hayır 60 kilo" derseniz düzeltirim; "son işlemi iptal et" derseniz geri alırım. "Aynısından 30 kilo daha al" gibi bir önceki işleme atıfta bulunabilirsiniz. Kantar bağlıysa ağırlık sabitlenince size kendiliğinden sorarım.' },
+    { role: 'assistant', text: 'Merhaba! Alım, satış, çiftçi ekleme, ödeme/avans, tahsilat, gider ve hatırlatma gibi işlemleri sesli veya yazarak yapabilirsiniz. Bakiye de sorabilirsiniz. Örnek: "Mehmet\'ten 50 kilo buğday 100 liradan al", "Ayşe\'ye 200 kilo 120 liradan sat", "Ahmet\'in bakiyesi ne kadar?". Tek cümlede iki işlem de yapabilirsiniz: "Ahmet\'ten 50 kilo al, 200 lira da avans ver". Bir kayıt onay beklerken sadece "evet" ya da "hayır" diyerek de cevap verebilirsiniz; "hayır 60 kilo" derseniz düzeltirim; "son işlemi iptal et" derseniz geri alırım. "Aynısından 30 kilo daha al" gibi bir önceki işleme atıfta bulunabilirsiniz. Kantar bağlıysa ağırlık sabitlenince size kendiliğinden sorarım.' },
   ]);
   const [pending, setPending] = useState(null);
   const [pendingBatch, setPendingBatch] = useState(null);

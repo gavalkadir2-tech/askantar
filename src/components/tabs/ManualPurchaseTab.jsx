@@ -109,7 +109,7 @@ export function ManualPurchaseTab({ farmers, setFarmers, purchases, setPurchases
           </div>
           <div style={{ marginBottom: 10 }}>
             <label className="zk-label">Sınıf / tür</label>
-            <input className="zk-input" list="zk-grade-list" value={grade} onChange={(e) => setGrade(e.target.value)} placeholder="örn. Gemlik 1. Sınıf" />
+            <input className="zk-input" list="zk-grade-list" value={grade} onChange={(e) => setGrade(e.target.value)} placeholder="örn. Buğday 1. Sınıf" />
             <datalist id="zk-grade-list">
               {priceList.map((v) => <option key={v.id} value={v.name} />)}
             </datalist>
