@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { supabase } from './supabaseClient.js';
 import { currentUser } from './currentUser.js';
-import { printReceiptPdf, printSaleReceiptPdf, printPaymentReceiptPdf } from './pdfHelper.js';
 import { getPendingCount, flushQueue } from './offlineStorage.js';
 import {
   LayoutDashboard,
@@ -23,28 +22,35 @@ import {
   PackageCheck,
   Users,
 } from 'lucide-react';
-import AdminPanel from './AdminPanel.jsx';
 import { CustomerDisplayView } from './components/CustomerDisplayView';
 import { NotificationCenter } from './components/NotificationCenter';
 import { VoiceAssistant } from './components/VoiceAssistant';
 import { GlobalStyle } from './components/common/index';
 import { PaymentPrintArea, PrintArea, SalePrintArea } from './components/print/PrintComponents';
-import { AccountingTab } from './components/tabs/AccountingTab';
-import { AiAssistantTab } from './components/tabs/AiAssistantTab';
-import { AlisTab } from './components/tabs/AlisTab';
-import { CariTab } from './components/tabs/CariTab';
-import { CrateInventoryTab } from './components/tabs/CrateInventoryTab';
-import { DashboardTab } from './components/tabs/DashboardTab';
-import { FleetTab } from './components/tabs/FleetTab';
-import { LabTab } from './components/tabs/LabTab';
-import { KantarTab } from './components/tabs/KantarTab';
-import { ReportsTab } from './components/tabs/ReportsTab';
-import { SatisTab } from './components/tabs/SatisTab';
-import { SettingsTab } from './components/tabs/SettingsTab';
-import { ShipmentsTab } from './components/tabs/ShipmentsTab';
-import { ActivityLogTab } from './components/tabs/ActivityLogTab';
 import { applyAppearance, storageGet, storageSet, todayStr, uid } from './lib/format';
 import { COLORS } from './lib/theme';
+
+// Sekmeler ayrı parçalar (chunk) halinde, ilk açıldıklarında yüklenir;
+// böylece ilk açılışta indirilen ana JS dosyası küçük kalır.
+const lazyTab = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })));
+const AccountingTab = lazyTab(() => import('./components/tabs/AccountingTab'), 'AccountingTab');
+const AiAssistantTab = lazyTab(() => import('./components/tabs/AiAssistantTab'), 'AiAssistantTab');
+const AlisTab = lazyTab(() => import('./components/tabs/AlisTab'), 'AlisTab');
+const CariTab = lazyTab(() => import('./components/tabs/CariTab'), 'CariTab');
+const CrateInventoryTab = lazyTab(() => import('./components/tabs/CrateInventoryTab'), 'CrateInventoryTab');
+const DashboardTab = lazyTab(() => import('./components/tabs/DashboardTab'), 'DashboardTab');
+const FleetTab = lazyTab(() => import('./components/tabs/FleetTab'), 'FleetTab');
+const LabTab = lazyTab(() => import('./components/tabs/LabTab'), 'LabTab');
+const KantarTab = lazyTab(() => import('./components/tabs/KantarTab'), 'KantarTab');
+const ReportsTab = lazyTab(() => import('./components/tabs/ReportsTab'), 'ReportsTab');
+const SatisTab = lazyTab(() => import('./components/tabs/SatisTab'), 'SatisTab');
+const SettingsTab = lazyTab(() => import('./components/tabs/SettingsTab'), 'SettingsTab');
+const ShipmentsTab = lazyTab(() => import('./components/tabs/ShipmentsTab'), 'ShipmentsTab');
+const ActivityLogTab = lazyTab(() => import('./components/tabs/ActivityLogTab'), 'ActivityLogTab');
+const AdminPanel = lazy(() => import('./AdminPanel.jsx'));
+
+// jsPDF ve fontlar yalnızca makbuz yazdırılırken yüklenir.
+const loadPdfHelper = () => import('./pdfHelper.js');
 
 export default function ZeytinDefteri() {
   const [tab, setTab] = useState('dashboard');
@@ -183,16 +189,16 @@ export default function ZeytinDefteri() {
 
   const handlePrintReceipt = (purchase) => {
     const farmer = farmers.find((f) => f.id === purchase.farmerId);
-    printReceiptPdf(purchase, farmer, settings);
+    loadPdfHelper().then((m) => m.printReceiptPdf(purchase, farmer, settings));
   };
 
   const handlePrintSaleReceipt = (sale) => {
     const buyer = buyers.find((b) => b.id === sale.buyerId);
-    printSaleReceiptPdf(sale, buyer, settings);
+    loadPdfHelper().then((m) => m.printSaleReceiptPdf(sale, buyer, settings));
   };
 
   const handlePrintPayment = (row) => {
-    printPaymentReceiptPdf(row, settings);
+    loadPdfHelper().then((m) => m.printPaymentReceiptPdf(row, settings));
   };
 
   const buildBackupPayload = () => ({
@@ -453,6 +459,7 @@ export default function ZeytinDefteri() {
           </div>
         </div>
         <div className="zk-main">
+          <Suspense fallback={<div style={{ padding: 40, fontSize: 13, color: COLORS.inkSoft }}>Yükleniyor...</div>}>
           {tab === 'dashboard' && <DashboardTab farmers={farmers} purchases={purchases} payments={payments} sales={sales} buyers={buyers} buyerPayments={buyerPayments} setTab={setTab} />}
 
           {tab === 'kantar' && <KantarTab farmers={farmers} setFarmers={setFarmers} purchases={purchases} setPurchases={setPurchases} onPrintReceipt={handlePrintReceipt} settings={settings} priceList={priceList} personnel={personnel} setPersonnel={setPersonnel} vehicles={vehicles} setVehicles={setVehicles} broadcastLive={broadcastLive} openCustomerDisplay={openCustomerDisplay} customerDisplayUrl={customerDisplayUrl} buyers={buyers} setBuyers={setBuyers} sales={sales} setSales={setSales} onPrintSaleReceipt={handlePrintSaleReceipt} />}
@@ -473,6 +480,7 @@ export default function ZeytinDefteri() {
           {tab === 'log' && <ActivityLogTab activityLog={activityLog} />}
           {tab === 'users' && <AdminPanel />}
           {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} priceList={priceList} setPriceList={setPriceList} onBackup={backupData} onRestore={restoreData} restoreStatus={restoreStatus} farmers={farmers} setFarmers={setFarmers} autoBackups={autoBackups} onRestoreAutoBackup={restoreFromAutoBackup} allData={{ farmers, purchases, sales, buyers, expenses, payments, vehicles, personnel, maintenance, fuel, documents, insurance, fines, cashEntries, crateMovements, labResults, bankAccounts, checksNotes, shipments }} activityLog={activityLog} setActivityLog={setActivityLog} />}
+          </Suspense>
         </div>
       </div>
       {printTarget?.type === 'sale' && <SalePrintArea sale={printTarget.sale} buyer={printTarget.buyer} settings={settings} />}
