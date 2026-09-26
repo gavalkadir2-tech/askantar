@@ -27,6 +27,21 @@ export function offlineSet(email, key, value) {
   }
 }
 
+// prefix ile başlayan ve keepKeys içinde olmayan yerel önbellek kayıtlarını siler.
+export function offlineRemoveByPrefix(email, prefix, keepKeys) {
+  try {
+    const full = cacheKey(email, prefix);
+    const toRemove = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith(full) && !keepKeys.includes(k.slice(cacheKey(email, '').length))) toRemove.push(k);
+    }
+    toRemove.forEach((k) => window.localStorage.removeItem(k));
+  } catch (e) {
+    // önbellek temizliği başarısız olursa uygulama etkilenmemeli
+  }
+}
+
 function getQueue() {
   try {
     const raw = window.localStorage.getItem(QUEUE_KEY);

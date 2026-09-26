@@ -24,7 +24,9 @@ function ErrorFallback() {
   return (
     <div style={{ padding: 40, textAlign: 'center', fontFamily: 'sans-serif' }}>
       <h2>Beklenmeyen bir hata oluştu</h2>
-      <p style={{ color: '#666' }}>Hata otomatik olarak bildirildi. Sayfayı yenileyerek devam edebilirsiniz.</p>
+      <p style={{ color: '#666' }}>
+        {SENTRY_DSN ? 'Hata otomatik olarak bildirildi. ' : ''}Sayfayı yenileyerek devam edebilirsiniz.
+      </p>
       <button onClick={() => window.location.reload()} style={{ marginTop: 16, padding: '8px 16px' }}>
         Sayfayı yenile
       </button>

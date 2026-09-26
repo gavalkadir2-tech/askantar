@@ -26,7 +26,7 @@ import { NotificationCenter } from './components/NotificationCenter';
 import { VoiceAssistant } from './components/VoiceAssistant';
 import { GlobalStyle } from './components/common/index';
 import { PaymentPrintArea, PrintArea, SalePrintArea } from './components/print/PrintComponents';
-import { applyAppearance, storageGet, storageSet, todayStr, uid } from './lib/format';
+import { applyAppearance, storageDeleteByPrefix, storageGet, storageSet, todayStr, uid } from './lib/format';
 import { COLORS } from './lib/theme';
 
 // Sekmeler ayrı parçalar (chunk) halinde, ilk açıldıklarında yüklenir;
@@ -199,16 +199,11 @@ export default function KantarDefteri() {
       const payload = buildBackupPayload();
       const key = `zk:autobackup:${today}`;
       await storageSet(key, payload);
-      let nextIdx = [...idx, { date: today, key }];
-      if (nextIdx.length > 7) {
-        const removed = nextIdx.slice(0, nextIdx.length - 7);
-        nextIdx = nextIdx.slice(nextIdx.length - 7);
-        for (const r of removed) {
-          try { await window.storage.delete(r.key, false); } catch (e) { /* önemli değil */ }
-        }
-      }
+      const nextIdx = [...idx, { date: today, key }].slice(-7);
       await storageSet('zk:autobackupIndex', nextIdx);
       setAutoBackups(nextIdx);
+      // Son 7 günün dışında kalan yedekleri (daha önce birikmiş olanlar dahil) sil
+      await storageDeleteByPrefix('zk:autobackup:', nextIdx.map((b) => b.key));
     } catch (e) {
       // Otomatik yedekleme sessizce başarısız olabilir, uygulamayı etkilememeli
     }
