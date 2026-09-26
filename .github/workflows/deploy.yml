@@ -24,6 +24,10 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run build
+        env:
+          # Hata izleme: GitHub > Settings > Secrets and variables > Actions'a
+          # VITE_SENTRY_DSN adıyla Sentry DSN'i eklenirse etkinleşir.
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

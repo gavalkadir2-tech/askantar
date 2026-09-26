@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient.js';
 import { currentUser } from '../currentUser.js';
-import { offlineGet, offlineSet, queuePendingWrite } from '../offlineStorage.js';
+import { offlineGet, offlineRemoveByPrefix, offlineSet, queuePendingWrite } from '../offlineStorage.js';
 import { COLORS, THEME_PRESETS } from './theme';
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -73,6 +73,22 @@ export async function storageSet(key, value) {
     if (error) throw error;
   } catch (e) {
     queuePendingWrite(currentUser.email, key, value);
+  }
+}
+
+// prefix ile başlayan ve keepKeys içinde olmayan kayıtları hem yerel önbellekten
+// hem Supabase'den siler (ör. eski otomatik yedekler). Çevrimdışıyken yalnızca
+// yerel temizlik yapılır; Supabase tarafı bir sonraki çalıştırmada temizlenir.
+export async function storageDeleteByPrefix(prefix, keepKeys) {
+  offlineRemoveByPrefix(currentUser.email, prefix, keepKeys);
+  try {
+    const { data, error } = await supabase.from('app_data').select('key').eq('owner_email', currentUser.email).like('key', `${prefix}%`);
+    if (error) throw error;
+    const stale = (data || []).map((r) => r.key).filter((k) => !keepKeys.includes(k));
+    if (stale.length === 0) return;
+    await supabase.from('app_data').delete().eq('owner_email', currentUser.email).in('key', stale);
+  } catch (e) {
+    // bir sonraki çalıştırmada tekrar denenir
   }
 }
 
